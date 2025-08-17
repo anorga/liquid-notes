@@ -50,7 +50,7 @@ struct NoteCardView: View {
                 HStack {
                     Text(note.modifiedDate, style: .relative)
                         .font(.caption2)
-                        .foregroundColor(.tertiary)
+                        .foregroundStyle(.tertiary)
                     
                     Spacer()
                     
@@ -65,7 +65,7 @@ struct NoteCardView: View {
                             if note.tags.count > 2 {
                                 Text("+\(note.tags.count - 2)")
                                     .font(.caption2)
-                                    .foregroundColor(.tertiary)
+                                    .foregroundStyle(.tertiary)
                             }
                         }
                     }
@@ -95,7 +95,7 @@ struct NoteCardView: View {
                     isPressed = false
                     
                     // Check if dragged far enough to delete
-                    if abs(value.translation.x) > 100 || abs(value.translation.y) > 100 {
+                    if abs(value.translation.width) > 100 || abs(value.translation.height) > 100 {
                         HapticManager.shared.noteDeleted()
                         onDelete()
                     } else {

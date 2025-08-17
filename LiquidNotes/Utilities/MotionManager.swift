@@ -8,7 +8,6 @@
 import CoreMotion
 import SwiftUI
 
-@MainActor
 @Observable
 class MotionManager {
     private let motionManager = CMMotionManager()
@@ -33,7 +32,8 @@ class MotionManager {
     }
     
     deinit {
-        stopTracking()
+        motionManager.stopDeviceMotionUpdates()
+        isActive = false
     }
     
     private func setupMotionManager() {
