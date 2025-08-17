@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 
-@MainActor
 @Observable
 class NotesViewModel {
     private var modelContext: ModelContext

@@ -8,7 +8,6 @@
 import SwiftUI
 import CoreMotion
 
-@MainActor
 @Observable
 class GlassEffectsViewModel {
     private var motionManager = CMMotionManager()
@@ -27,7 +26,7 @@ class GlassEffectsViewModel {
     }
     
     deinit {
-        stopMotionTracking()
+        motionManager.stopDeviceMotionUpdates()
     }
     
     // MARK: - Motion Tracking
