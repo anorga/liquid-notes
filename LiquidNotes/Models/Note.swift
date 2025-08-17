@@ -23,7 +23,6 @@ final class Note {
     var isPinned: Bool
     var tags: [String]
     
-    @Relationship(deleteRule: .nullify, inverse: \NoteCategory.notes)
     var category: NoteCategory?
     
     init(title: String = "", content: String = "", glassThemeID: String = "clear") {

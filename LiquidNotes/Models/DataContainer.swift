@@ -21,8 +21,10 @@ actor DataContainer {
         ])
         
         let modelConfiguration = ModelConfiguration(
+            "LiquidNotes",
             schema: schema,
-            isCloudKitEnabled: true
+            isStoredInMemoryOnly: false,
+            cloudKitDatabase: .automatic
         )
         
         do {
@@ -43,6 +45,7 @@ actor DataContainer {
         ])
         
         let modelConfiguration = ModelConfiguration(
+            "LiquidNotesPreview",
             schema: schema,
             isStoredInMemoryOnly: true
         )

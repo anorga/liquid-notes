@@ -15,7 +15,7 @@ final class NoteCategory {
     var color: String
     var createdDate: Date
     
-    @Relationship(deleteRule: .cascade, inverse: \Note.category)
+    @Relationship(deleteRule: .cascade)
     var notes: [Note]
     
     init(name: String, color: String = "blue") {
