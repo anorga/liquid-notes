@@ -13,7 +13,7 @@ class NotesViewModel {
     private var modelContext: ModelContext
     
     var searchText = ""
-    var selectedThemeID = "clear"
+    // Removed selectedThemeID - no longer using themes
     var isEditMode = false
     var syncStatus: SyncStatus = .idle
     
@@ -28,7 +28,7 @@ class NotesViewModel {
     // MARK: - Note Operations
     
     func createNote(title: String = "", content: String = "") -> Note {
-        let note = Note(title: title, content: content, glassThemeID: selectedThemeID)
+        let note = Note(title: title, content: content)
         modelContext.insert(note)
         saveContext()
         return note
@@ -65,11 +65,7 @@ class NotesViewModel {
         saveContext()
     }
     
-    func updateNoteTheme(_ note: Note, themeID: String) {
-        note.glassThemeID = themeID
-        note.updateModifiedDate()
-        saveContext()
-    }
+    // Removed updateNoteTheme - no longer using themes
     
     // MARK: - Category Operations
     

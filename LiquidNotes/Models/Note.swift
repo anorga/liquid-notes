@@ -15,7 +15,7 @@ final class Note {
     var content: String
     var createdDate: Date
     var modifiedDate: Date
-    var glassThemeID: String
+    // Spatial properties for future Phase 2 features
     var positionX: Float
     var positionY: Float
     var zIndex: Int
@@ -25,13 +25,12 @@ final class Note {
     
     var category: NoteCategory?
     
-    init(title: String = "", content: String = "", glassThemeID: String = "clear") {
+    init(title: String = "", content: String = "") {
         self.id = UUID()
         self.title = title
         self.content = content
         self.createdDate = Date()
         self.modifiedDate = Date()
-        self.glassThemeID = glassThemeID
         self.positionX = 0
         self.positionY = 0
         self.zIndex = 0
