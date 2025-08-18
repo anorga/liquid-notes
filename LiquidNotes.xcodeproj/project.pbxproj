@@ -6,8 +6,41 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
+		83E6265F2E52FDAB005994F9 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265E2E52FDAB005994F9 /* SwiftUI.framework */; };
+		83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		83E6266C2E52FDAC005994F9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83E6261A2E528792005994F9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 83E626592E52FDAB005994F9;
+			remoteInfo = LiquidNotesWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		83E626732E52FDAC005994F9 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		83E626222E528792005994F9 /* LiquidNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiquidNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LiquidNotesWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		83E6265C2E52FDAB005994F9 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		83E6265E2E52FDAB005994F9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -17,6 +50,13 @@
 				Info.plist,
 			);
 			target = 83E626212E528792005994F9 /* LiquidNotes */;
+		};
+		83E626722E52FDAC005994F9 /* Exceptions for "LiquidNotesWidget" folder in "LiquidNotesWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 83E626592E52FDAB005994F9 /* LiquidNotesWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -29,6 +69,14 @@
 			path = LiquidNotes;
 			sourceTree = "<group>";
 		};
+		83E626602E52FDAB005994F9 /* LiquidNotesWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				83E626722E52FDAC005994F9 /* Exceptions for "LiquidNotesWidget" folder in "LiquidNotesWidgetExtension" target */,
+			);
+			path = LiquidNotesWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,6 +87,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		83E626572E52FDAB005994F9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				83E6265F2E52FDAB005994F9 /* SwiftUI.framework in Frameworks */,
+				83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -46,6 +103,8 @@
 			isa = PBXGroup;
 			children = (
 				83E626242E528792005994F9 /* LiquidNotes */,
+				83E626602E52FDAB005994F9 /* LiquidNotesWidget */,
+				83E6265B2E52FDAB005994F9 /* Frameworks */,
 				83E626232E528792005994F9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,8 +113,18 @@
 			isa = PBXGroup;
 			children = (
 				83E626222E528792005994F9 /* LiquidNotes.app */,
+				83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		83E6265B2E52FDAB005994F9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				83E6265C2E52FDAB005994F9 /* WidgetKit.framework */,
+				83E6265E2E52FDAB005994F9 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -68,10 +137,12 @@
 				83E6261E2E528792005994F9 /* Sources */,
 				83E6261F2E528792005994F9 /* Frameworks */,
 				83E626202E528792005994F9 /* Resources */,
+				83E626732E52FDAC005994F9 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				83E6266D2E52FDAC005994F9 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				83E626242E528792005994F9 /* LiquidNotes */,
@@ -82,6 +153,28 @@
 			productName = LiquidNotes;
 			productReference = 83E626222E528792005994F9 /* LiquidNotes.app */;
 			productType = "com.apple.product-type.application";
+		};
+		83E626592E52FDAB005994F9 /* LiquidNotesWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 83E6266F2E52FDAC005994F9 /* Build configuration list for PBXNativeTarget "LiquidNotesWidgetExtension" */;
+			buildPhases = (
+				83E626562E52FDAB005994F9 /* Sources */,
+				83E626572E52FDAB005994F9 /* Frameworks */,
+				83E626582E52FDAB005994F9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				83E626602E52FDAB005994F9 /* LiquidNotesWidget */,
+			);
+			name = LiquidNotesWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = LiquidNotesWidgetExtension;
+			productReference = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -94,6 +187,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					83E626212E528792005994F9 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					83E626592E52FDAB005994F9 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -113,12 +209,20 @@
 			projectRoot = "";
 			targets = (
 				83E626212E528792005994F9 /* LiquidNotes */,
+				83E626592E52FDAB005994F9 /* LiquidNotesWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		83E626202E528792005994F9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		83E626582E52FDAB005994F9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +239,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		83E626562E52FDAB005994F9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		83E6266D2E52FDAC005994F9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 83E626592E52FDAB005994F9 /* LiquidNotesWidgetExtension */;
+			targetProxy = 83E6266C2E52FDAC005994F9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		83E626342E528793005994F9 /* Debug */ = {
@@ -327,6 +446,66 @@
 			};
 			name = Release;
 		};
+		83E626702E52FDAC005994F9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3P6M963JAU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiquidNotesWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LiquidNotesWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FluidLabs.LiquidNotes.LiquidNotesWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		83E626712E52FDAC005994F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3P6M963JAU;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LiquidNotesWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LiquidNotesWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = FluidLabs.LiquidNotes.LiquidNotesWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -344,6 +523,15 @@
 			buildConfigurations = (
 				83E626342E528793005994F9 /* Debug */,
 				83E626352E528793005994F9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		83E6266F2E52FDAC005994F9 /* Build configuration list for PBXNativeTarget "LiquidNotesWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				83E626702E52FDAC005994F9 /* Debug */,
+				83E626712E52FDAC005994F9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

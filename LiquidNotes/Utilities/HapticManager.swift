@@ -74,4 +74,19 @@ class HapticManager {
     func warning() {
         notificationFeedback.notificationOccurred(.warning)
     }
+    
+    // MARK: - Static Convenience Methods
+    
+    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        switch style {
+        case .light:
+            HapticManager.shared.lightImpact.impactOccurred()
+        case .medium:
+            HapticManager.shared.mediumImpact.impactOccurred()
+        case .heavy:
+            HapticManager.shared.heavyImpact.impactOccurred()
+        @unknown default:
+            HapticManager.shared.lightImpact.impactOccurred()
+        }
+    }
 }

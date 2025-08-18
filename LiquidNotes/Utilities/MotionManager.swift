@@ -7,13 +7,18 @@
 
 import CoreMotion
 import SwiftUI
+import Combine
 
-@Observable
-class MotionManager {
+class MotionManager: ObservableObject {
     private let motionManager = CMMotionManager()
     
-    var data = MotionData()
-    var isActive = false
+    @Published var data = MotionData()
+    @Published var isActive = false
+    
+    // Convenience property for glass effects
+    var motionData: MotionData {
+        return data
+    }
     
     struct MotionData {
         var pitch: Double = 0
@@ -97,5 +102,15 @@ class MotionManager {
         let yawIntensity = abs(data.yaw) / .pi
         
         return min(1.0, (pitchIntensity + rollIntensity + yawIntensity) / 3.0)
+    }
+    
+    // MARK: - Alternative Method Names for Compatibility
+    
+    func startMotionUpdates() {
+        startTracking()
+    }
+    
+    func stopMotionUpdates() {
+        stopTracking()
     }
 }

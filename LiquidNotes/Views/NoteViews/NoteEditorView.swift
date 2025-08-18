@@ -20,6 +20,7 @@ struct NoteEditorView: View {
     
     var body: some View {
         NavigationStack {
+            // Using standard SwiftUI form components for automatic Liquid Glass
             VStack(spacing: 0) {
                 // Title Field
                 TextField("Note Title", text: $title)
@@ -57,6 +58,7 @@ struct NoteEditorView: View {
                 
                 Spacer()
             }
+            .background(.regularMaterial) // System material for Liquid Glass
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
