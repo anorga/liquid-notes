@@ -8,7 +8,7 @@
 import SwiftUI
 import SwiftData
 
-struct ContentView: View {
+struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Note.modifiedDate, order: .reverse) private var notes: [Note]
     
@@ -19,8 +19,8 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
-                Color.black.opacity(0.05)
+                // Transparent background to allow Liquid Glass light blending
+                Color.clear
                     .ignoresSafeArea()
                 
                 // Notes List
@@ -60,30 +60,23 @@ struct ContentView: View {
                     .scrollContentBackground(.hidden)
                 }
                 
-                // Floating Add Button
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        
-                        Button(action: createNewNote) {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(
-                                    Circle()
-                                        .fill(.blue.gradient)
-                                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                                )
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
-                    }
-                }
+                // Remove floating add button - moved to toolbar
             }
             .navigationTitle("Liquid Notes")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: createNewNote) {
+                        Image(systemName: "plus")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+                            .background(Color.clear)
+                    }
+                    .background(Color.clear)
+                    .interactiveGlassEffect(.regular, in: Circle())
+                }
+            }
             .onAppear {
                 setupViewModels()
             }
@@ -146,6 +139,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    HomeView()
         .modelContainer(DataContainer.previewContainer)
 }
