@@ -25,9 +25,20 @@ struct ContentView: View {
                 Color.black.opacity(0.05)
                     .ignoresSafeArea()
                 
-                // Notes Canvas
-                ScrollView([.horizontal, .vertical]) {
-                    LazyVStack(spacing: 20) {
+                // Notes List
+                if filteredNotes.isEmpty {
+                    VStack {
+                        Spacer()
+                        Text("No notes yet")
+                            .font(.title2)
+                            .foregroundStyle(.tertiary)
+                        Text("Tap + to create your first note")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                } else {
+                    List {
                         ForEach(filteredNotes, id: \.id) { note in
                             NoteCardView(
                                 note: note,
@@ -41,9 +52,13 @@ struct ContentView: View {
                                     deleteNote(note)
                                 }
                             )
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
+                        .onDelete(perform: deleteNotes)
                     }
-                    .padding()
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
                 
                 // Floating Add Button
@@ -74,6 +89,12 @@ struct ContentView: View {
             }
             .navigationTitle("Liquid Notes")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    // Remove automatic edit button since swipe-to-delete is simpler
+                    EmptyView()
+                }
+            }
             .onAppear {
                 setupViewModels()
                 motionManager.startTracking()
@@ -115,37 +136,17 @@ struct ContentView: View {
             viewModel.deleteNote(note)
         }
     }
-}
-
-// Temporary placeholder for NoteEditorView
-struct NoteEditorView: View {
-    let note: Note
-    @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
-        NavigationStack {
-            VStack {
-                Text("Note Editor")
-                    .font(.title)
-                Text("Editing: \(note.title.isEmpty ? "Untitled" : note.title)")
-                
-                Spacer()
-                
-                Button("Close") {
-                    dismiss()
-                }
-            }
-            .padding()
-            .navigationTitle("Edit Note")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
+    private func deleteNotes(offsets: IndexSet) {
+        guard let viewModel = notesViewModel else { return }
+        
+        withAnimation(.easeInOut(duration: 0.3)) {
+            for index in offsets {
+                let note = filteredNotes[index]
+                viewModel.deleteNote(note)
             }
         }
+        HapticManager.shared.noteDeleted()
     }
 }
 

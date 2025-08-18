@@ -14,8 +14,6 @@ struct NoteCardView: View {
     let onTap: () -> Void
     let onDelete: () -> Void
     
-    @State private var dragOffset = CGSize.zero
-    @State private var isPressed = false
     
     var body: some View {
         LiquidGlassView(theme: theme, motionData: motionData) {
@@ -74,41 +72,11 @@ struct NoteCardView: View {
             .padding()
         }
         .frame(width: 200, height: 150)
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .offset(dragOffset)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: dragOffset)
         .onTapGesture {
             HapticManager.shared.noteSelected()
             onTap()
         }
-        .simultaneousGesture(
-            DragGesture()
-                .onChanged { value in
-                    dragOffset = value.translation
-                    if !isPressed {
-                        isPressed = true
-                        HapticManager.shared.noteMoved()
-                    }
-                }
-                .onEnded { value in
-                    isPressed = false
-                    
-                    // Check if dragged far enough to delete
-                    if abs(value.translation.width) > 100 || abs(value.translation.height) > 100 {
-                        HapticManager.shared.noteDeleted()
-                        onDelete()
-                    } else {
-                        HapticManager.shared.noteDropped()
-                        dragOffset = .zero
-                    }
-                }
-        )
         .contextMenu {
-            Button(action: onTap) {
-                Label("Edit", systemImage: "pencil")
-            }
-            
             Button(action: {
                 // Toggle pin functionality would go here
             }) {
