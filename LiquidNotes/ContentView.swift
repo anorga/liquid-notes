@@ -13,8 +13,6 @@ struct ContentView: View {
     @Query(sort: \Note.modifiedDate, order: .reverse) private var notes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
-    @State private var glassEffectsViewModel = GlassEffectsViewModel()
-    @State private var motionManager = MotionManager()
     @State private var selectedNote: Note?
     @State private var showingNoteEditor = false
     
@@ -42,8 +40,6 @@ struct ContentView: View {
                         ForEach(filteredNotes, id: \.id) { note in
                             NoteCardView(
                                 note: note,
-                                theme: GlassTheme.theme(for: note.glassThemeID),
-                                motionData: motionManager.data,
                                 onTap: {
                                     selectedNote = note
                                     showingNoteEditor = true
@@ -73,13 +69,9 @@ struct ContentView: View {
                                 .foregroundColor(.white)
                                 .frame(width: 56, height: 56)
                                 .background(
-                                    LiquidGlassView(
-                                        theme: glassEffectsViewModel.currentTheme,
-                                        motionData: motionManager.data
-                                    ) {
-                                        Circle()
-                                            .fill(.blue.gradient)
-                                    }
+                                    Circle()
+                                        .fill(.blue.gradient)
+                                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
                                 )
                         }
                         .padding(.trailing, 20)
@@ -89,18 +81,8 @@ struct ContentView: View {
             }
             .navigationTitle("Liquid Notes")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    // Remove automatic edit button since swipe-to-delete is simpler
-                    EmptyView()
-                }
-            }
             .onAppear {
                 setupViewModels()
-                motionManager.startTracking()
-            }
-            .onDisappear {
-                motionManager.stopTracking()
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)

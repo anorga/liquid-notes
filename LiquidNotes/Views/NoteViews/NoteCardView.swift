@@ -9,68 +9,65 @@ import SwiftUI
 
 struct NoteCardView: View {
     let note: Note
-    let theme: GlassTheme
-    let motionData: MotionManager.MotionData
     let onTap: () -> Void
     let onDelete: () -> Void
     
-    
     var body: some View {
-        LiquidGlassView(theme: theme, motionData: motionData) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    if !note.title.isEmpty {
-                        Text(note.title)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                    }
-                    
-                    Spacer()
-                    
-                    if note.isPinned {
-                        Image(systemName: "pin.fill")
-                            .foregroundColor(.yellow)
-                            .font(.caption)
-                    }
-                }
-                
-                if !note.content.isEmpty {
-                    Text(note.content)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .lineLimit(4)
-                        .multilineTextAlignment(.leading)
+        // Using standard SwiftUI components for automatic Liquid Glass
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if !note.title.isEmpty {
+                    Text(note.title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
                 }
                 
                 Spacer()
                 
-                HStack {
-                    Text(note.modifiedDate, style: .relative)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    
-                    Spacer()
-                    
-                    if !note.tags.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(note.tags.prefix(2), id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            if note.tags.count > 2 {
-                                Text("+\(note.tags.count - 2)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
+                if note.isPinned {
+                    Image(systemName: "pin.fill")
+                        .foregroundColor(.yellow)
+                        .font(.caption)
+                }
+            }
+            
+            if !note.content.isEmpty {
+                Text(note.content)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .lineLimit(4)
+                    .multilineTextAlignment(.leading)
+            }
+            
+            Spacer()
+            
+            HStack {
+                Text(note.modifiedDate, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                
+                Spacer()
+                
+                if !note.tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(note.tags.prefix(2), id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        if note.tags.count > 2 {
+                            Text("+\(note.tags.count - 2)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
             }
-            .padding()
         }
+        .padding()
+        .liquidGlassCard() // Use system materials
         .frame(width: 200, height: 150)
         .onTapGesture {
             HapticManager.shared.noteSelected()
@@ -104,8 +101,6 @@ struct NoteCardView: View {
     
     return NoteCardView(
         note: sampleNote,
-        theme: GlassTheme.defaultThemes[0],
-        motionData: MotionManager.MotionData(),
         onTap: {},
         onDelete: {}
     )
