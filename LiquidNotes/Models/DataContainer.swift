@@ -64,16 +64,14 @@ actor DataContainer {
             
             let sampleNote1 = Note(
                 title: "Meeting Notes",
-                content: "Discuss Q4 roadmap and feature priorities",
-                glassThemeID: "clear"
+                content: "Discuss Q4 roadmap and feature priorities"
             )
             sampleNote1.category = sampleCategory
             context.insert(sampleNote1)
             
             let sampleNote2 = Note(
                 title: "Grocery List",
-                content: "Milk, Bread, Eggs, Coffee",
-                glassThemeID: "frosted"
+                content: "Milk, Bread, Eggs, Coffee"
             )
             context.insert(sampleNote2)
             

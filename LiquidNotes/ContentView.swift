@@ -46,6 +46,9 @@ struct ContentView: View {
                                 },
                                 onDelete: {
                                     deleteNote(note)
+                                },
+                                onPin: {
+                                    togglePin(note)
                                 }
                             )
                             .listRowBackground(Color.clear)
@@ -129,6 +132,16 @@ struct ContentView: View {
             }
         }
         HapticManager.shared.noteDeleted()
+    }
+    
+    private func togglePin(_ note: Note) {
+        guard let viewModel = notesViewModel else { return }
+        
+        withAnimation(.easeInOut(duration: 0.2)) {
+            viewModel.toggleNotePin(note)
+        }
+        
+        HapticManager.shared.buttonTapped()
     }
 }
 

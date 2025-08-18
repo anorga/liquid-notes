@@ -11,6 +11,7 @@ struct NoteCardView: View {
     let note: Note
     let onTap: () -> Void
     let onDelete: () -> Void
+    let onPin: () -> Void
     
     var body: some View {
         // Using standard SwiftUI components for automatic Liquid Glass
@@ -75,7 +76,8 @@ struct NoteCardView: View {
         }
         .contextMenu {
             Button(action: {
-                // Toggle pin functionality would go here
+                HapticManager.shared.buttonTapped()
+                onPin()
             }) {
                 Label(note.isPinned ? "Unpin" : "Pin", 
                       systemImage: note.isPinned ? "pin.slash" : "pin")
@@ -93,8 +95,7 @@ struct NoteCardView: View {
 #Preview {
     let sampleNote = Note(
         title: "Sample Note",
-        content: "This is a sample note with some content to show how it looks in the card view.",
-        glassThemeID: "clear"
+        content: "This is a sample note with some content to show how it looks in the card view."
     )
     sampleNote.tags = ["work", "important"]
     sampleNote.isPinned = true
@@ -102,7 +103,8 @@ struct NoteCardView: View {
     return NoteCardView(
         note: sampleNote,
         onTap: {},
-        onDelete: {}
+        onDelete: {},
+        onPin: {}
     )
     .padding()
     .background(.gray.opacity(0.1))
