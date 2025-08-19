@@ -29,6 +29,16 @@ class NotesViewModel {
     
     func createNote(title: String = "", content: String = "") -> Note {
         let note = Note(title: title, content: content)
+        
+        // Ensure new notes get the highest z-index (NEVER modifies existing notes)
+        let descriptor = FetchDescriptor<Note>()
+        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+        let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
+        note.zIndex = maxZIndex + 1
+        
+        // Note starts with positionX=0, positionY=0 and will be positioned by canvas initialization
+        // This NEVER moves existing notes
+        
         modelContext.insert(note)
         saveContext()
         return note

@@ -69,7 +69,7 @@ struct NoteCardView: View {
         }
         .padding()
         .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-        .frame(width: 200, height: 150)
+        .frame(width: 160, height: 120)
         .onTapGesture {
             HapticManager.shared.noteSelected()
             onTap()
