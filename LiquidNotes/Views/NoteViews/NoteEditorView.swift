@@ -65,6 +65,8 @@ struct NoteEditorView: View {
                     Button("Cancel") {
                         cancelEdit()
                     }
+                    .background(Color.clear)
+                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -74,6 +76,8 @@ struct NoteEditorView: View {
                     }
                     .fontWeight(.semibold)
                     .disabled(!hasChanges)
+                    .background(Color.clear)
+                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             .onAppear {

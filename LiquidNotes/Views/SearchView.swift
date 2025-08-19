@@ -18,9 +18,17 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Transparent background to allow Liquid Glass light blending
-                Color.clear
-                    .ignoresSafeArea()
+                // Very dark blue and orange gradient
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.0, green: 0.4, blue: 0.8).opacity(0.8), location: 0.0),
+                        .init(color: Color.orange.opacity(0.6), location: 0.5),
+                        .init(color: Color(red: 0.0, green: 0.35, blue: 0.7).opacity(0.85), location: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                 // Search field - starts unfocused for discovery
@@ -63,17 +71,6 @@ struct SearchView: View {
             }
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        isSearching = false
-                        searchText = ""
-                    }
-                    .background(Color.clear)
-                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
-                    .opacity(isSearching ? 1 : 0)
-                }
-            }
         }
     }
 }
