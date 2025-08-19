@@ -12,7 +12,7 @@ import SwiftData
 struct LiquidNotesApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
         .modelContainer(DataContainer.modelContainer)
     }

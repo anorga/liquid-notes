@@ -85,6 +85,10 @@ class HapticManager {
             HapticManager.shared.mediumImpact.impactOccurred()
         case .heavy:
             HapticManager.shared.heavyImpact.impactOccurred()
+        case .soft:
+            HapticManager.shared.lightImpact.impactOccurred() // Fallback to light for soft
+        case .rigid:
+            HapticManager.shared.heavyImpact.impactOccurred() // Fallback to heavy for rigid
         @unknown default:
             HapticManager.shared.lightImpact.impactOccurred()
         }

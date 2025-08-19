@@ -17,6 +17,7 @@ struct NoteEditorView: View {
     @State private var title: String = ""
     @State private var content: String = ""
     @State private var hasChanges = false
+    @State private var isNewNote = false
     
     var body: some View {
         NavigationStack {
@@ -58,12 +59,14 @@ struct NoteEditorView: View {
                 
                 Spacer()
             }
-            .background(.regularMaterial) // System material for Liquid Glass
+            // No background - let Liquid Glass handle transparency
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
-                        dismiss()
+                        cancelEdit()
                     }
+                    .background(Color.clear)
+                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -73,6 +76,8 @@ struct NoteEditorView: View {
                     }
                     .fontWeight(.semibold)
                     .disabled(!hasChanges)
+                    .background(Color.clear)
+                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             .onAppear {
@@ -84,6 +89,8 @@ struct NoteEditorView: View {
     private func loadNoteData() {
         title = note.title
         content = note.content
+        // Check if this is a new note (empty title and content)
+        isNewNote = note.title.isEmpty && note.content.isEmpty
     }
     
     private func saveNote() {
@@ -99,15 +106,23 @@ struct NoteEditorView: View {
             HapticManager.shared.error()
         }
     }
+    
+    private func cancelEdit() {
+        // If it's a new note with no content, delete it
+        if isNewNote && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            modelContext.delete(note)
+            try? modelContext.save()
+        }
+        dismiss()
+    }
 }
 
 #Preview {
     let sampleNote = Note(
         title: "Sample Note",
-        content: "This is a sample note for preview",
-        glassThemeID: "clear"
+        content: "This is a sample note for preview"
     )
     
-    return NoteEditorView(note: sampleNote)
+    NoteEditorView(note: sampleNote)
         .modelContainer(DataContainer.previewContainer)
 }
