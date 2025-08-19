@@ -16,6 +16,11 @@ struct MainTabView: View {
                 HomeView()
             }
             
+            // Spatial Canvas Tab
+            Tab("Canvas", systemImage: "rectangle.grid.1x2") {
+                SpatialTabView()
+            }
+            
             // Pins Tab  
             Tab("Pins", systemImage: "pin.fill") {
                 PinnedNotesView()
