@@ -68,7 +68,7 @@ struct NoteCardView: View {
             }
         }
         .padding()
-        .liquidGlassCard() // Use system materials
+        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         .frame(width: 200, height: 150)
         .onTapGesture {
             HapticManager.shared.noteSelected()
@@ -107,5 +107,5 @@ struct NoteCardView: View {
         onPin: {}
     )
     .padding()
-    .background(.gray.opacity(0.1))
+    // No preview background - allow Liquid Glass transparency
 }

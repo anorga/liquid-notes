@@ -1,16 +1,17 @@
 //
-//  ContentView.swift
+//  PinnedNotesView.swift
 //  LiquidNotes
 //
-//  Created by Christian Anorga on 8/17/25.
+//  Created by Christian Anorga on 8/18/25.
 //
 
 import SwiftUI
 import SwiftData
 
-struct ContentView: View {
+struct PinnedNotesView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Note.modifiedDate, order: .reverse) private var notes: [Note]
+    @Query(filter: #Predicate<Note> { $0.isPinned == true }, sort: \Note.modifiedDate, order: .reverse) 
+    private var pinnedNotes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
@@ -19,25 +20,38 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
-                Color.black.opacity(0.05)
-                    .ignoresSafeArea()
+                // Very dark blue and orange gradient
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.0, green: 0.4, blue: 0.8).opacity(0.8), location: 0.0),
+                        .init(color: Color.orange.opacity(0.6), location: 0.5),
+                        .init(color: Color(red: 0.0, green: 0.35, blue: 0.7).opacity(0.85), location: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
-                // Notes List
-                if filteredNotes.isEmpty {
+                // Pinned Notes List
+                if pinnedNotes.isEmpty {
                     VStack {
                         Spacer()
-                        Text("No notes yet")
+                        Image(systemName: "pin.slash")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.tertiary)
+                        Text("No pinned notes")
                             .font(.title2)
                             .foregroundStyle(.tertiary)
-                        Text("Tap + to create your first note")
+                        Text("Pin notes to keep them at your fingertips")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                         Spacer()
                     }
+                    .padding()
                 } else {
                     List {
-                        ForEach(filteredNotes, id: \.id) { note in
+                        ForEach(pinnedNotes, id: \.id) { note in
                             NoteCardView(
                                 note: note,
                                 onTap: {
@@ -59,31 +73,26 @@ struct ContentView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                 }
-                
-                // Floating Add Button
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        
-                        Button(action: createNewNote) {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(
-                                    Circle()
-                                        .fill(.blue.gradient)
-                                        .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-                                )
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
+            }
+            .navigationTitle("Pinned")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: createNewNote) {
+                        Image(systemName: "plus")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .symbolEffect(.bounce, value: false)
+                            .symbolRenderingMode(.monochrome)
+                            .background(Color.clear)
+                            .clipShape(Circle())
+                            .contentShape(Circle())
                     }
+                    .buttonStyle(.plain)
+                    .background(Color.clear)
                 }
             }
-            .navigationTitle("Liquid Notes")
-            .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 setupViewModels()
             }
@@ -92,11 +101,6 @@ struct ContentView: View {
                     .presentationDetents([.medium, .large])
             }
         }
-    }
-    
-    private var filteredNotes: [Note] {
-        guard let viewModel = notesViewModel else { return notes }
-        return viewModel.filteredNotes(from: notes)
     }
     
     private func setupViewModels() {
@@ -110,6 +114,7 @@ struct ContentView: View {
         
         guard let viewModel = notesViewModel else { return }
         let newNote = viewModel.createNote()
+        newNote.isPinned = true // Auto-pin new notes created from Pins tab
         selectedNote = newNote
         showingNoteEditor = true
     }
@@ -127,7 +132,7 @@ struct ContentView: View {
         
         withAnimation(.easeInOut(duration: 0.3)) {
             for index in offsets {
-                let note = filteredNotes[index]
+                let note = pinnedNotes[index]
                 viewModel.deleteNote(note)
             }
         }
@@ -146,6 +151,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    PinnedNotesView()
         .modelContainer(DataContainer.previewContainer)
 }

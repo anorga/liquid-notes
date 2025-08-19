@@ -104,3 +104,6 @@ iOSInjectionProject/
 
 # Log files
 *.log
+
+# Internal tracking documents
+PHASES_TRACKING.md
