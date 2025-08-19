@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
-		83E6265F2E52FDAB005994F9 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265E2E52FDAB005994F9 /* SwiftUI.framework */; };
 		83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -41,6 +40,8 @@
 		83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LiquidNotesWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		83E6265C2E52FDAB005994F9 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		83E6265E2E52FDAB005994F9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		83E626832E54094A005994F9 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
+		83E626882E540966005994F9 /* PushKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PushKit.framework; path = System/Library/Frameworks/PushKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -91,7 +92,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				83E6265F2E52FDAB005994F9 /* SwiftUI.framework in Frameworks */,
 				83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -121,6 +121,8 @@
 		83E6265B2E52FDAB005994F9 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				83E626882E540966005994F9 /* PushKit.framework */,
+				83E626832E54094A005994F9 /* CloudKit.framework */,
 				83E6265C2E52FDAB005994F9 /* WidgetKit.framework */,
 				83E6265E2E52FDAB005994F9 /* SwiftUI.framework */,
 			);
@@ -269,6 +271,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiquidNotes/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Liquid Notes";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -303,6 +307,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiquidNotes/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Liquid Notes";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
