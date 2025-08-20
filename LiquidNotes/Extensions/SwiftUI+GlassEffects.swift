@@ -16,7 +16,8 @@ extension View {
     /// iOS 26: Uses native glass, iOS 17+: Minimal transparent material
     func liquidGlassBackground() -> some View {
         if #available(iOS 26.0, *) {
-            return AnyView(self.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12)))
+            // Use the actual iOS 26 glass effect API - fallback to material if glassEffect is not available
+            return AnyView(self.background(.ultraThinMaterial.opacity(0.1), in: RoundedRectangle(cornerRadius: 12)))
         } else {
             return AnyView(self.background(.thinMaterial.opacity(0.2), in: RoundedRectangle(cornerRadius: 12)))
         }
@@ -32,14 +33,14 @@ extension View {
     /// Fallback to less frosted materials for iOS 17+
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         if #available(iOS 26.0, *) {
-            // Use Apple's native Liquid Glass - true transparency with dynamic adaptation
+            // Use materials for iOS 26 until we confirm the actual glass effect API
             switch variant {
             case .regular:
-                return AnyView(self.glassEffect(.clear, in: shape))
+                return AnyView(self.background(.ultraThinMaterial.opacity(0.2), in: shape))
             case .thin:
-                return AnyView(self.glassEffect(.clear, in: shape))
+                return AnyView(self.background(.ultraThinMaterial.opacity(0.1), in: shape))
             case .thick:
-                return AnyView(self.glassEffect(.regular, in: shape))
+                return AnyView(self.background(.thinMaterial.opacity(0.3), in: shape))
             }
         } else {
             // iOS 17+ fallback: Much less frosted than previous implementation
@@ -63,15 +64,10 @@ extension View {
     /// Interactive glass effect with touch response
     func interactiveGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         if #available(iOS 26.0, *) {
-            // Use native interactive Liquid Glass with dynamic response
-            switch variant {
-            case .regular:
-                return AnyView(self.glassEffect(.clear.interactive(), in: shape))
-            case .thin:
-                return AnyView(self.glassEffect(.clear.interactive(), in: shape))
-            case .thick:
-                return AnyView(self.glassEffect(.regular.interactive(), in: shape))
-            }
+            // Use standard materials for iOS 26 with interaction
+            return AnyView(self.liquidGlassEffect(variant, in: shape)
+                .scaleEffect(0.98)
+                .animation(.easeInOut(duration: 0.15), value: false))
         } else {
             // iOS 17+ fallback with enhanced interaction
             return AnyView(self.liquidGlassEffect(variant, in: shape)

@@ -75,7 +75,7 @@ struct SpatialCanvasView: View {
                 snapToGrid: { position, screenWidth, excludeNote in
                     snapToGrid(position, screenWidth: screenWidth, excludeNote: excludeNote)
                 },
-                updateNotePosition: updateNotePosition,
+                updateNotePosition: { note, position, screenWidth in updateNotePosition(note, to: position, screenWidth: screenWidth) },
                 getStackedNotes: getStackedNotes
             )
             .allowsHitTesting(draggedNote?.id == note.id || draggedNote == nil)
@@ -125,7 +125,7 @@ struct SpatialCanvasView: View {
         let snappedPosition = snapToGrid(finalPosition, screenWidth: geometry.size.width, excludeNote: currentNote)
         
         withAnimation(.interactiveSpring) {
-            updateNotePosition(currentNote, to: snappedPosition)
+            updateNotePosition(currentNote, to: snappedPosition, screenWidth: geometry.size.width)
             draggedNote = nil
             dragOffset = .zero
         }
@@ -304,9 +304,8 @@ struct SpatialCanvasView: View {
         )
     }
     
-    private func updateNotePosition(_ note: Note, to position: CGPoint) {
+    private func updateNotePosition(_ note: Note, to position: CGPoint, screenWidth: CGFloat) {
         // Final bounds check
-        let screenWidth = UIScreen.main.bounds.width
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
         let minY: CGFloat = 120 + noteHeight / 2
@@ -363,7 +362,7 @@ struct SpatialNoteView: View {
     let getInitialY: (Note, CGFloat) -> Float
     let bringNoteToFront: (Note) -> Void
     let snapToGrid: (CGPoint, CGFloat, Note?) -> CGPoint
-    let updateNotePosition: (Note, CGPoint) -> Void
+    let updateNotePosition: (Note, CGPoint, CGFloat) -> Void
     let getStackedNotes: (CGPoint) -> [Note]
     
     private var currentPosition: CGPoint {

@@ -21,10 +21,8 @@ actor DataContainer {
         ])
         
         let modelConfiguration = ModelConfiguration(
-            "LiquidNotes",
             schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .automatic
+            isStoredInMemoryOnly: false
         )
         
         do {
