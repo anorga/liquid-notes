@@ -65,8 +65,7 @@ struct NoteEditorView: View {
                     Button("Cancel") {
                         cancelEdit()
                     }
-                    .background(Color.clear)
-                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -75,9 +74,9 @@ struct NoteEditorView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                    .disabled(!hasChanges)
-                    .background(Color.clear)
-                    .interactiveGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 8))
+                    .disabled(!hasChanges && !isNewNote)
+                    .foregroundStyle(.primary)
+                    .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
                 }
             }
             .onAppear {
@@ -87,31 +86,55 @@ struct NoteEditorView: View {
     }
     
     private func loadNoteData() {
+        // Store the initial state before setting values that might trigger onChange
+        let wasEmpty = note.title.isEmpty && note.content.isEmpty
+        
         title = note.title
         content = note.content
-        // Check if this is a new note (empty title and content)
-        isNewNote = note.title.isEmpty && note.content.isEmpty
+        isNewNote = wasEmpty
+        
+        // Set hasChanges AFTER setting the title/content to avoid onChange interference
+        if !isNewNote {
+            hasChanges = false
+        } else {
+            // For new notes, initially allow saving
+            hasChanges = true
+        }
     }
     
     private func saveNote() {
-        note.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        note.content = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Always save the note when user explicitly chooses to save
+        note.title = trimmedTitle
+        note.content = trimmedContent
         note.updateModifiedDate()
         
         do {
             try modelContext.save()
             HapticManager.shared.success()
+            
+            // Reset hasChanges after successful save
+            hasChanges = false
         } catch {
-            print("Failed to save note: \(error)")
+            print("❌ Failed to save note: \(error)")
             HapticManager.shared.error()
         }
     }
     
     private func cancelEdit() {
-        // If it's a new note with no content, delete it
-        if isNewNote && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Only delete new notes that are completely empty (user never typed anything)
+        if isNewNote && trimmedTitle.isEmpty && trimmedContent.isEmpty {
             modelContext.delete(note)
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                print("❌ Failed to delete empty note: \(error)")
+            }
         }
         dismiss()
     }
@@ -124,5 +147,5 @@ struct NoteEditorView: View {
     )
     
     NoteEditorView(note: sampleNote)
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }

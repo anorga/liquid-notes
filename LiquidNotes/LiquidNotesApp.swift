@@ -14,6 +14,6 @@ struct LiquidNotesApp: App {
         WindowGroup {
             MainTabView()
         }
-        .modelContainer(DataContainer.modelContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self])
     }
 }
