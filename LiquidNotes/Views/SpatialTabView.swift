@@ -19,17 +19,7 @@ struct SpatialTabView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Enhanced gradient background with Apple system materials
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(red: 0.0, green: 0.4, blue: 0.8).opacity(0.8), location: 0.0),
-                        .init(color: Color.orange.opacity(0.6), location: 0.5),
-                        .init(color: Color(red: 0.0, green: 0.35, blue: 0.7).opacity(0.85), location: 1.0)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                LiquidNotesBackground()
                 
                 // Spatial Canvas Content
                 if filteredNotes.isEmpty {
@@ -59,19 +49,7 @@ struct SpatialTabView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: createNewNote) {
-                        Image(systemName: "plus")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .symbolEffect(.bounce, value: false)
-                            .symbolRenderingMode(.monochrome)
-                            .background(Color.clear)
-                            .clipShape(Circle())
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.clear)
+                    AddNoteButton(action: createNewNote)
                 }
             }
             .onAppear {
@@ -126,5 +104,5 @@ struct SpatialTabView: View {
 
 #Preview {
     SpatialTabView()
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }

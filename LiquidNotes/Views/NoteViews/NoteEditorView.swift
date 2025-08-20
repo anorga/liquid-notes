@@ -124,5 +124,5 @@ struct NoteEditorView: View {
     )
     
     NoteEditorView(note: sampleNote)
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }

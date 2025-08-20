@@ -596,5 +596,5 @@ struct StackIndicatorView: View {
         onDelete: { _ in },
         onPin: { _ in }
     )
-    .modelContainer(DataContainer.previewContainer)
+    .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }
