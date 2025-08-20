@@ -23,6 +23,8 @@ struct SpatialCanvasView: View {
     @State private var draggedNote: Note?
     @State private var draggedFolder: Folder?
     @State private var dragOffset: CGSize = .zero
+    @State private var showingContextMenu: Note?
+    @State private var contextMenuPosition: CGPoint = .zero
     
     // Grid snapping - more flexible with fractional positioning
     private let gridSize: CGFloat = 80 // Smaller grid for more flexibility
@@ -50,6 +52,26 @@ struct SpatialCanvasView: View {
         ZStack {
             canvasBackground(geometry: geometry)
             notesLayer(geometry: geometry)
+            
+            // Custom context menu overlay
+            if let menuNote = showingContextMenu {
+                CustomContextMenuView(
+                    note: menuNote,
+                    position: contextMenuPosition,
+                    onFavorite: {
+                        onFavorite(menuNote)
+                        showingContextMenu = nil
+                    },
+                    onDelete: {
+                        onDelete(menuNote)
+                        showingContextMenu = nil
+                    },
+                    onDismiss: {
+                        showingContextMenu = nil
+                    }
+                )
+                .zIndex(2000) // Above all notes
+            }
         }
         .gesture(canvasDragGesture(geometry: geometry))
         .onTapGesture { location in
@@ -71,6 +93,8 @@ struct SpatialCanvasView: View {
                 geometry: geometry,
                 draggedNote: $draggedNote,
                 dragOffset: $dragOffset,
+                showingContextMenu: $showingContextMenu,
+                contextMenuPosition: $contextMenuPosition,
                 onTap: onTap,
                 onDelete: onDelete,
                 onFavorite: onFavorite,
@@ -105,10 +129,14 @@ struct SpatialCanvasView: View {
     }
     
     private func handleDragChanged(value: DragGesture.Value, geometry: GeometryProxy) {
-        if draggedNote == nil {
+        // Only start dragging if we have significant movement to avoid conflicts with context menu
+        let dragThreshold: CGFloat = 8
+        let dragDistance = sqrt(pow(value.translation.width, 2) + pow(value.translation.height, 2))
+        
+        if draggedNote == nil && dragDistance > dragThreshold {
             if let touchedNote = findNoteAtPosition(value.startLocation, in: geometry) {
                 draggedNote = touchedNote
-                dragOffset = .zero
+                dragOffset = value.translation
                 bringNoteToFront(touchedNote)
             }
         }
@@ -355,6 +383,8 @@ struct SpatialNoteView: View {
     let geometry: GeometryProxy
     @Binding var draggedNote: Note?
     @Binding var dragOffset: CGSize
+    @Binding var showingContextMenu: Note?
+    @Binding var contextMenuPosition: CGPoint
     
     // Note dimensions
     private let noteWidth: CGFloat = 160
@@ -442,119 +472,246 @@ struct SpatialNoteView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Stack indicator for multiple notes
-            if getStackedNotes(currentPosition).count > 1 {
-                StackIndicatorView(stackCount: getStackedNotes(currentPosition).count)
-                    .offset(stackIndicatorOffset)
-                    .opacity(draggedNote?.id == note.id ? 0.3 : 0.6)
-            }
-            
-            // Use a plain note view without competing gestures
-            NoteContentView(note: note)
-                .shadow(
-                    color: .black.opacity(shadowConfiguration.opacity),
-                    radius: shadowConfiguration.radius,
-                    x: shadowConfiguration.offset.width,
-                    y: shadowConfiguration.offset.height
-                )
-        }
-        .frame(width: noteWidth, height: noteHeight)
-        .scaleEffect(scaleValue)
-        .position(displayPosition)
-        .zIndex(zIndexValue)
-        .animation(.bouncy(duration: 0.6), value: draggedNote?.id == note.id)
-        .animation(.easeInOut(duration: 0.3), value: getStackedNotes(currentPosition).count)
-        .contextMenu {
-            // Only show context menu if not currently being dragged
-            if draggedNote?.id != note.id {
-                Button(action: {
+        // Force exact dimensions with Rectangle constraint
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: noteWidth, height: noteHeight)
+            .overlay(
+                ZStack {
+                    // Stack indicator for multiple notes
+                    if getStackedNotes(currentPosition).count > 1 {
+                        StackIndicatorView(stackCount: getStackedNotes(currentPosition).count)
+                            .offset(stackIndicatorOffset)
+                            .opacity(draggedNote?.id == note.id ? 0.3 : 0.6)
+                    }
+                    
+                    // Use a plain note view without competing gestures
+                    NoteContentView(note: note)
+                        .shadow(
+                            color: .black.opacity(shadowConfiguration.opacity),
+                            radius: shadowConfiguration.radius,
+                            x: shadowConfiguration.offset.width,
+                            y: shadowConfiguration.offset.height
+                        )
+                }
+                .frame(width: noteWidth, height: noteHeight)
+                .clipped()
+            )
+            .scaleEffect(scaleValue)
+            .position(displayPosition)
+            .zIndex(zIndexValue)
+            .animation(.bouncy(duration: 0.6), value: draggedNote?.id == note.id)
+            .animation(.easeInOut(duration: 0.3), value: getStackedNotes(currentPosition).count)
+            .onLongPressGesture {
+                if draggedNote?.id != note.id {
                     HapticManager.shared.buttonTapped()
-                    onFavorite(note)
-                }) {
-                    Label(note.isFavorited ? "Remove from Favorites" : "Add to Favorites", 
-                          systemImage: note.isFavorited ? "star.slash" : "star")
-                }
-                
-                Divider()
-                
-                Button(role: .destructive, action: { onDelete(note) }) {
-                    Label("Delete", systemImage: "trash")
+                    showingContextMenu = note
+                    contextMenuPosition = displayPosition
                 }
             }
-        }
     }
 }
+
 
 // Note content view without competing gestures
 struct NoteContentView: View {
     let note: Note
     
     var body: some View {
-        ZStack {
-            // Background to ensure entire area is interactive
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.clear)
-                .contentShape(Rectangle()) // Make entire area touchable
-            
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    if !note.title.isEmpty {
-                        Text(note.title)
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    if note.isFavorited {
-                        Image(systemName: "star.fill")
-                            .foregroundColor(.yellow)
-                            .font(.caption)
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                if !note.title.isEmpty {
+                    Text(note.title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                        .layoutPriority(1)
                 }
                 
-                if !note.content.isEmpty {
-                    Text(note.content)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                Spacer(minLength: 4)
                 
-                Spacer(minLength: 0)
-                
-                HStack {
-                    Text(note.modifiedDate, style: .relative)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    
-                    Spacer(minLength: 0)
-                    
-                    if !note.tags.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(note.tags.prefix(2), id: \.self) { tag in
-                                Text("#\(tag)")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            if note.tags.count > 2 {
-                                Text("+\(note.tags.count - 2)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
+                if note.isFavorited {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(.yellow)
+                        .font(.caption)
+                        .layoutPriority(2)
                 }
             }
-            .padding(8)
+            .frame(height: 30)
+            
+            if !note.content.isEmpty {
+                Text(note.content)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxHeight: 50, alignment: .top)
+                    .layoutPriority(1)
+            }
+            
+            Spacer(minLength: 0)
+            
+            HStack(alignment: .bottom) {
+                Text(note.modifiedDate, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .layoutPriority(1)
+                
+                Spacer(minLength: 4)
+                
+                if !note.tags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(note.tags.prefix(2), id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        if note.tags.count > 2 {
+                            Text("+\(note.tags.count - 2)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .layoutPriority(2)
+                }
+            }
+            .frame(height: 16)
         }
-        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)  // Apple-style subtle shadow
+        .padding(8)
         .frame(width: 160, height: 120)
+        .fixedSize()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.clear)
+                .frame(width: 160, height: 120)
+        )
+        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .contentShape(Rectangle())
+        .clipped()
+    }
+}
+
+// Custom Context Menu that doesn't interfere with note layout
+struct CustomContextMenuView: View {
+    let note: Note
+    let position: CGPoint
+    let onFavorite: () -> Void
+    let onDelete: () -> Void
+    let onDismiss: () -> Void
+    
+    // Calculate smart positioning to respect screen boundaries using geometry
+    private func menuPosition(in geometry: GeometryProxy) -> CGPoint {
+        let menuWidth: CGFloat = 200
+        let menuHeight: CGFloat = 100
+        let padding: CGFloat = 20
+        
+        // Use geometry bounds instead of deprecated UIScreen.main
+        let screenWidth = geometry.size.width
+        let screenHeight = geometry.size.height
+        
+        var x = position.x + 100 // Default offset to right
+        var y = position.y - 50  // Default offset above
+        
+        // Adjust if menu would go off right edge
+        if x + menuWidth > screenWidth - padding {
+            x = position.x - menuWidth - 20 // Move to left of note
+        }
+        
+        // Adjust if menu would go off left edge
+        if x < padding {
+            x = padding
+        }
+        
+        // Adjust if menu would go off top edge
+        if y < padding + 100 { // Account for status bar and safe area
+            y = position.y + 60 // Move below note
+        }
+        
+        // Adjust if menu would go off bottom edge
+        if y + menuHeight > screenHeight - padding - 100 {
+            y = screenHeight - menuHeight - padding - 100
+        }
+        
+        return CGPoint(x: x, y: y)
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Full-screen invisible background for dismissal
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onDismiss()
+                    }
+                    .ignoresSafeArea(.all)
+                
+                // The actual context menu
+                VStack(alignment: .leading, spacing: 0) {
+                    Button(action: {
+                        HapticManager.shared.buttonTapped()
+                        onFavorite()
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: note.isFavorited ? "star.slash" : "star")
+                                .foregroundColor(note.isFavorited ? .secondary : .yellow)
+                                .font(.system(size: 16, weight: .medium))
+                                .frame(width: 20)
+                            
+                            Text(note.isFavorited ? "Remove from Favorites" : "Add to Favorites")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Divider()
+                        .padding(.horizontal, 12)
+                    
+                    Button(action: {
+                        HapticManager.shared.buttonTapped()
+                        onDelete()
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                                .font(.system(size: 16, weight: .medium))
+                                .frame(width: 20)
+                            
+                            Text("Delete")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.red)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .frame(width: 200)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.clear) // Let liquid glass handle the fill
+                )
+                .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 6)
+                .position(menuPosition(in: geometry))
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: menuPosition(in: geometry))
+                .onTapGesture {
+                    // Prevent menu tap from dismissing
+                }
+            }
+        }
     }
 }
 
