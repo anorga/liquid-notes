@@ -9,14 +9,29 @@ import SwiftUI
 
 struct AddNoteButton: View {
     let action: () -> Void
+    let onCreateFolder: (() -> Void)?
+    
+    @State private var showingActionSheet = false
+    
+    init(action: @escaping () -> Void, onCreateFolder: (() -> Void)? = nil) {
+        self.action = action
+        self.onCreateFolder = onCreateFolder
+    }
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            if onCreateFolder != nil {
+                HapticManager.shared.buttonTapped()
+                showingActionSheet = true
+            } else {
+                action()
+            }
+        }) {
             Image(systemName: "plus")
                 .font(.title3)
                 .fontWeight(.medium)
                 .foregroundStyle(.primary)
-                .symbolEffect(.bounce, value: false)
+                .symbolEffect(.bounce, value: showingActionSheet)
                 .symbolRenderingMode(.monochrome)
                 .background(Color.clear)
                 .clipShape(Circle())
@@ -24,6 +39,13 @@ struct AddNoteButton: View {
         }
         .buttonStyle(.plain)
         .background(Color.clear)
+        .confirmationDialog("Create New", isPresented: $showingActionSheet, titleVisibility: .hidden) {
+            Button("Note", action: action)
+            if let createFolder = onCreateFolder {
+                Button("Folder", action: createFolder)
+            }
+            Button("Cancel", role: .cancel) { }
+        }
     }
 }
 

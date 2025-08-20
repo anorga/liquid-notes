@@ -20,7 +20,20 @@ struct SearchView: View {
             ZStack {
                 LiquidNotesBackground()
                 
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Custom large left-aligned title
+                    HStack {
+                        Text("Search")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 5)
+                    
+                    VStack(spacing: 0) {
                 // Search field - starts unfocused for discovery
                 VStack(spacing: 16) {
                     HStack {
@@ -58,9 +71,9 @@ struct SearchView: View {
                 
                 Spacer()
                 }
+                }
             }
-            .navigationTitle("Search")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarHidden(true)
         }
     }
 }
@@ -83,7 +96,7 @@ struct DiscoveryContent: View {
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 12) {
-                    SearchSuggestionCard(icon: "pin.fill", title: "Pinned", subtitle: "Your pinned notes")
+                    SearchSuggestionCard(icon: "star.fill", title: "Favorites", subtitle: "Your favorite notes")
                     SearchSuggestionCard(icon: "calendar", title: "Recent", subtitle: "Last 7 days")
                     SearchSuggestionCard(icon: "tag", title: "Tags", subtitle: "Browse by tag")
                     SearchSuggestionCard(icon: "archivebox", title: "Archived", subtitle: "Old notes")
@@ -218,8 +231,8 @@ struct SearchResultRow: View {
                 
                 Spacer()
                 
-                if note.isPinned {
-                    Image(systemName: "pin.fill")
+                if note.isFavorited {
+                    Image(systemName: "star.fill")
                         .foregroundStyle(.yellow)
                         .font(.caption)
                 }

@@ -11,6 +11,7 @@ import SwiftData
 struct SpatialTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Note.modifiedDate, order: .reverse) private var notes: [Note]
+    @Query(sort: \Folder.modifiedDate, order: .reverse) private var folders: [Folder]
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
@@ -21,7 +22,20 @@ struct SpatialTabView: View {
             ZStack {
                 LiquidNotesBackground()
                 
-                // Spatial Canvas Content
+                VStack(alignment: .leading, spacing: 0) {
+                    // Custom large left-aligned title
+                    HStack {
+                        Text("Notes")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 5)
+                    
+                    // Spatial Canvas Content
                 if filteredNotes.isEmpty {
                     VStack {
                         Spacer()
@@ -36,22 +50,21 @@ struct SpatialTabView: View {
                 } else {
                     SpatialCanvasView(
                         notes: filteredNotes,
+                        folders: folders,
                         onTap: { note in
                             selectedNote = note
                             showingNoteEditor = true
                         },
                         onDelete: deleteNote,
-                        onPin: togglePin
+                        onFavorite: toggleFavorite,
+                        onFolderTap: nil, // TODO: Implement folder opening
+                        onFolderDelete: deleteFolder,
+                        onFolderFavorite: toggleFolderFavorite
                     )
                 }
-            }
-            .navigationTitle("Canvas")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AddNoteButton(action: createNewNote)
                 }
             }
+            .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
                 print("🖼️ SpatialTabView appeared with \(notes.count) notes")
@@ -86,6 +99,13 @@ struct SpatialTabView: View {
         showingNoteEditor = true
     }
     
+    private func createNewFolder() {
+        HapticManager.shared.buttonTapped()
+        
+        guard let viewModel = notesViewModel else { return }
+        let _ = viewModel.createFolder()
+    }
+    
     private func deleteNote(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
         
@@ -94,11 +114,29 @@ struct SpatialTabView: View {
         }
     }
     
-    private func togglePin(_ note: Note) {
+    private func toggleFavorite(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
         
         withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel.toggleNotePin(note)
+            viewModel.toggleNoteFavorite(note)
+        }
+        
+        HapticManager.shared.buttonTapped()
+    }
+    
+    private func deleteFolder(_ folder: Folder) {
+        guard let viewModel = notesViewModel else { return }
+        
+        withAnimation(.easeInOut(duration: 0.3)) {
+            viewModel.deleteFolder(folder)
+        }
+    }
+    
+    private func toggleFolderFavorite(_ folder: Folder) {
+        guard let viewModel = notesViewModel else { return }
+        
+        withAnimation(.easeInOut(duration: 0.2)) {
+            viewModel.toggleFolderFavorite(folder)
         }
         
         HapticManager.shared.buttonTapped()
@@ -107,5 +145,5 @@ struct SpatialTabView: View {
 
 #Preview {
     SpatialTabView()
-        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
+        .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
 }

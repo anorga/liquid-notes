@@ -11,7 +11,7 @@ struct NoteCardView: View {
     let note: Note
     let onTap: () -> Void
     let onDelete: () -> Void
-    let onPin: () -> Void
+    let onFavorite: () -> Void
     
     var body: some View {
         // Using standard SwiftUI components for automatic Liquid Glass
@@ -26,8 +26,8 @@ struct NoteCardView: View {
                 
                 Spacer()
                 
-                if note.isPinned {
-                    Image(systemName: "pin.fill")
+                if note.isFavorited {
+                    Image(systemName: "star.fill")
                         .foregroundColor(.yellow)
                         .font(.caption)
                 }
@@ -78,10 +78,10 @@ struct NoteCardView: View {
         .contextMenu {
             Button(action: {
                 HapticManager.shared.buttonTapped()
-                onPin()
+                onFavorite()
             }) {
-                Label(note.isPinned ? "Unpin" : "Pin", 
-                      systemImage: note.isPinned ? "pin.slash" : "pin")
+                Label(note.isFavorited ? "Remove from Favorites" : "Add to Favorites", 
+                      systemImage: note.isFavorited ? "star.slash" : "star")
             }
             
             Divider()
@@ -99,13 +99,13 @@ struct NoteCardView: View {
         content: "This is a sample note with some content to show how it looks in the card view."
     )
     sampleNote.tags = ["work", "important"]
-    sampleNote.isPinned = true
+    sampleNote.isFavorited = true
     
     return NoteCardView(
         note: sampleNote,
         onTap: {},
         onDelete: {},
-        onPin: {}
+        onFavorite: {}
     )
     .padding()
     // No preview background - allow Liquid Glass transparency

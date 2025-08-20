@@ -20,10 +20,11 @@ final class Note {
     var positionY: Float = 0
     var zIndex: Int = 0
     var isArchived: Bool = false
-    var isPinned: Bool = false
+    var isFavorited: Bool = false
     var tags: [String] = []
     
     var category: NoteCategory?
+    var folder: Folder?
     
     init(title: String = "", content: String = "") {
         self.id = UUID()
@@ -35,7 +36,7 @@ final class Note {
         self.positionY = 0
         self.zIndex = 0
         self.isArchived = false
-        self.isPinned = false
+        self.isFavorited = false
         self.tags = []
     }
     
