@@ -59,8 +59,8 @@ class NotesViewModel {
         saveContext()
     }
     
-    func toggleNotePin(_ note: Note) {
-        note.isPinned.toggle()
+    func toggleNoteFavorite(_ note: Note) {
+        note.isFavorited.toggle()
         note.updateModifiedDate()
         saveContext()
     }
@@ -75,6 +75,42 @@ class NotesViewModel {
         note.positionX = x
         note.positionY = y
         note.updateModifiedDate()
+        saveContext()
+    }
+    
+    // MARK: - Folder Operations
+    
+    func createFolder(name: String = "New Folder") -> Folder {
+        let folder = Folder(name: name)
+        
+        // Ensure new folders get the highest z-index
+        let descriptor = FetchDescriptor<Folder>()
+        let existingFolders = (try? modelContext.fetch(descriptor)) ?? []
+        let maxZIndex = existingFolders.lazy.map(\.zIndex).max() ?? 0
+        folder.zIndex = maxZIndex + 1
+        
+        print("📁 Creating new folder with ID: \(folder.id)")
+        modelContext.insert(folder)
+        saveContext()
+        print("✅ Folder inserted and saved to context")
+        return folder
+    }
+    
+    func deleteFolder(_ folder: Folder) {
+        print("🗑️ Deleting folder: '\(folder.name)' with ID: \(folder.id)")
+        // Move all notes in folder to root - handle optional notes array
+        if let notes = folder.notes {
+            for note in notes {
+                note.folder = nil
+            }
+        }
+        modelContext.delete(folder)
+        saveContext()
+    }
+    
+    func toggleFolderFavorite(_ folder: Folder) {
+        folder.isFavorited.toggle()
+        folder.updateModifiedDate()
         saveContext()
     }
     

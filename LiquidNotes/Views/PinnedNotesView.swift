@@ -10,8 +10,8 @@ import SwiftData
 
 struct PinnedNotesView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Note> { $0.isPinned == true }, sort: \Note.modifiedDate, order: .reverse) 
-    private var pinnedNotes: [Note]
+    @Query(filter: #Predicate<Note> { $0.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse) 
+    private var favoritedNotes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
@@ -22,17 +22,30 @@ struct PinnedNotesView: View {
             ZStack {
                 LiquidNotesBackground()
                 
-                // Pinned Notes List
-                if pinnedNotes.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Custom large left-aligned title
+                    HStack {
+                        Text("Favorites")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 5)
+                    
+                    // Favorited Notes List
+                if favoritedNotes.isEmpty {
                     VStack {
                         Spacer()
-                        Image(systemName: "pin.slash")
+                        Image(systemName: "star.slash")
                             .font(.system(size: 64))
                             .foregroundStyle(.tertiary)
-                        Text("No pinned notes")
+                        Text("No favorited notes")
                             .font(.title2)
                             .foregroundStyle(.tertiary)
-                        Text("Pin notes to keep them at your fingertips")
+                        Text("Add notes to favorites to keep them at your fingertips")
                             .font(.body)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -41,7 +54,7 @@ struct PinnedNotesView: View {
                     .padding()
                 } else {
                     List {
-                        ForEach(pinnedNotes, id: \.id) { note in
+                        ForEach(favoritedNotes, id: \.id) { note in
                             NoteCardView(
                                 note: note,
                                 onTap: {
@@ -51,8 +64,8 @@ struct PinnedNotesView: View {
                                 onDelete: {
                                     deleteNote(note)
                                 },
-                                onPin: {
-                                    togglePin(note)
+                                onFavorite: {
+                                    toggleFavorite(note)
                                 }
                             )
                             .listRowBackground(Color.clear)
@@ -63,14 +76,9 @@ struct PinnedNotesView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                 }
-            }
-            .navigationTitle("Pinned")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    AddNoteButton(action: createNewNote)
                 }
             }
+            .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
             }
@@ -87,15 +95,6 @@ struct PinnedNotesView: View {
         }
     }
     
-    private func createNewNote() {
-        HapticManager.shared.noteCreated()
-        
-        guard let viewModel = notesViewModel else { return }
-        let newNote = viewModel.createNote()
-        newNote.isPinned = true // Auto-pin new notes created from Pins tab
-        selectedNote = newNote
-        showingNoteEditor = true
-    }
     
     private func deleteNote(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
@@ -110,18 +109,18 @@ struct PinnedNotesView: View {
         
         withAnimation(.easeInOut(duration: 0.3)) {
             for index in offsets {
-                let note = pinnedNotes[index]
+                let note = favoritedNotes[index]
                 viewModel.deleteNote(note)
             }
         }
         HapticManager.shared.noteDeleted()
     }
     
-    private func togglePin(_ note: Note) {
+    private func toggleFavorite(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
         
         withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel.toggleNotePin(note)
+            viewModel.toggleNoteFavorite(note)
         }
         
         HapticManager.shared.buttonTapped()

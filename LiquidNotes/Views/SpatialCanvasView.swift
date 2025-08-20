@@ -11,12 +11,17 @@ import SwiftData
 struct SpatialCanvasView: View {
     @Environment(\.modelContext) private var modelContext
     let notes: [Note]
+    let folders: [Folder]
     let onTap: (Note) -> Void
     let onDelete: (Note) -> Void
-    let onPin: (Note) -> Void
+    let onFavorite: (Note) -> Void
+    let onFolderTap: ((Folder) -> Void)?
+    let onFolderDelete: ((Folder) -> Void)?
+    let onFolderFavorite: ((Folder) -> Void)?
     
     private let canvasHeight: CGFloat = 3000
     @State private var draggedNote: Note?
+    @State private var draggedFolder: Folder?
     @State private var dragOffset: CGSize = .zero
     
     // Grid snapping - more flexible with fractional positioning
@@ -68,7 +73,7 @@ struct SpatialCanvasView: View {
                 dragOffset: $dragOffset,
                 onTap: onTap,
                 onDelete: onDelete,
-                onPin: onPin,
+                onFavorite: onFavorite,
                 getInitialX: getInitialX,
                 getInitialY: getInitialY,
                 bringNoteToFront: bringNoteToFront,
@@ -210,7 +215,7 @@ struct SpatialCanvasView: View {
         let columns = Int(screenWidth / spacing)
         let row = noteIndex / max(columns, 1)
         
-        let y = 150 + CGFloat(row) * 180 // Start from top with spacing
+        let y = 80 + CGFloat(row) * 180 // Start from top with spacing
         print("🆕 Initial Y for new note '\(note.title.prefix(10))': \(y)")
         return Float(y)
     }
@@ -281,7 +286,7 @@ struct SpatialCanvasView: View {
         // Clamp to bounds
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
-        let minY: CGFloat = 120 + noteHeight / 2
+        let minY: CGFloat = 70
         
         return CGPoint(
             x: min(max(minX, snapPos.x), maxX),
@@ -290,7 +295,7 @@ struct SpatialCanvasView: View {
     }
     
     private func snapToGridPosition(_ position: CGPoint, screenWidth: CGFloat) -> CGPoint {
-        let topPadding: CGFloat = 120
+        let topPadding: CGFloat = 70
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
         
@@ -308,7 +313,7 @@ struct SpatialCanvasView: View {
         // Final bounds check
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
-        let minY: CGFloat = 120 + noteHeight / 2
+        let minY: CGFloat = 70
         
         let safeX = min(max(minX, position.x), maxX)
         let safeY = max(minY, position.y)
@@ -357,7 +362,7 @@ struct SpatialNoteView: View {
     
     let onTap: (Note) -> Void
     let onDelete: (Note) -> Void
-    let onPin: (Note) -> Void
+    let onFavorite: (Note) -> Void
     let getInitialX: (Note, CGFloat) -> Float
     let getInitialY: (Note, CGFloat) -> Float
     let bringNoteToFront: (Note) -> Void
@@ -465,10 +470,10 @@ struct SpatialNoteView: View {
             if draggedNote?.id != note.id {
                 Button(action: {
                     HapticManager.shared.buttonTapped()
-                    onPin(note)
+                    onFavorite(note)
                 }) {
-                    Label(note.isPinned ? "Unpin" : "Pin", 
-                          systemImage: note.isPinned ? "pin.slash" : "pin")
+                    Label(note.isFavorited ? "Remove from Favorites" : "Add to Favorites", 
+                          systemImage: note.isFavorited ? "star.slash" : "star")
                 }
                 
                 Divider()
@@ -503,8 +508,8 @@ struct NoteContentView: View {
                     
                     Spacer(minLength: 0)
                     
-                    if note.isPinned {
-                        Image(systemName: "pin.fill")
+                    if note.isFavorited {
+                        Image(systemName: "star.fill")
                             .foregroundColor(.yellow)
                             .font(.caption)
                     }
@@ -593,9 +598,13 @@ struct StackIndicatorView: View {
     
     return SpatialCanvasView(
         notes: sampleNotes,
+        folders: [],
         onTap: { _ in },
         onDelete: { _ in },
-        onPin: { _ in }
+        onFavorite: { _ in },
+        onFolderTap: nil,
+        onFolderDelete: nil,
+        onFolderFavorite: nil
     )
-    .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
+    .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
 }

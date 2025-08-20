@@ -1,46 +1,48 @@
 //
-//  Note.swift
+//  Folder.swift
 //  LiquidNotes
 //
-//  Created by Christian Anorga on 8/17/25.
+//  Created by Christian Anorga on 8/20/25.
 //
 
 import SwiftData
 import Foundation
 
 @Model
-final class Note {
+final class Folder {
     var id: UUID = UUID()
-    var title: String = ""
-    var content: String = ""
+    var name: String = ""
     var createdDate: Date = Date()
     var modifiedDate: Date = Date()
-    // Spatial properties for future Phase 2 features
+    // Spatial properties for canvas positioning
     var positionX: Float = 0
     var positionY: Float = 0
     var zIndex: Int = 0
-    var isArchived: Bool = false
     var isFavorited: Bool = false
-    var tags: [String] = []
+    var color: String = "blue"
     
-    var category: NoteCategory?
-    var folder: Folder?
+    // Relationship to notes contained in this folder - MUST be optional for CloudKit
+    @Relationship(deleteRule: .nullify, inverse: \Note.folder)
+    var notes: [Note]?
     
-    init(title: String = "", content: String = "") {
+    init(name: String = "New Folder") {
         self.id = UUID()
-        self.title = title
-        self.content = content
+        self.name = name
         self.createdDate = Date()
         self.modifiedDate = Date()
         self.positionX = 0
         self.positionY = 0
         self.zIndex = 0
-        self.isArchived = false
         self.isFavorited = false
-        self.tags = []
+        self.color = "blue"
+        self.notes = nil
     }
     
     func updateModifiedDate() {
         modifiedDate = Date()
+    }
+    
+    var noteCount: Int {
+        notes?.count ?? 0
     }
 }
