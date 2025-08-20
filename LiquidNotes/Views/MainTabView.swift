@@ -16,32 +16,38 @@ struct MainTabView: View {
     @State private var selectedNote: Note?
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // Add Tab with action role - Leading placement (mimicking search)
-            Tab("Add", systemImage: "plus", value: 3) {
-                EmptyView() // Action tab doesn't need content
+        ZStack {
+            TabView(selection: $selectedTab) {
+                // Notes Tab (spatial canvas view) - Default view
+                Tab("Notes", systemImage: "note.text", value: 0) {
+                    SpatialTabView()
+                }
+                
+                // Favorites Tab  
+                Tab("Favorites", systemImage: "star.fill", value: 1) {
+                    PinnedNotesView()
+                }
+                
+                // Search Tab with native trailing placement
+                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) {
+                    SearchView()
+                }
             }
             
-            // Notes Tab (spatial canvas view) - Default view
-            Tab("Notes", systemImage: "note.text", value: 0) {
-                SpatialTabView()
-            }
-            
-            // Favorites Tab  
-            Tab("Favorites", systemImage: "star.fill", value: 1) {
-                PinnedNotesView()
-            }
-            
-            // Search Tab with native trailing placement
-            Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) {
-                SearchView()
-            }
-        }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            // Handle add button tap - exactly like you want
-            if newValue == 3 {
-                handleAddAction()
-                selectedTab = oldValue // Return to previous tab
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: handleAddAction) {
+                        Image(systemName: "plus")
+                            .font(.title2)
+                            .foregroundColor(.primary)
+                            .padding(12)
+                    }
+                    .liquidGlassEffect(.regular, in: Circle())
+                    .padding(.trailing, 16)
+                    .padding(.top, 16)
+                }
+                Spacer()
             }
         }
         .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .hidden) {

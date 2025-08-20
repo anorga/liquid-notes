@@ -22,20 +22,7 @@ struct SpatialTabView: View {
             ZStack {
                 LiquidNotesBackground()
                 
-                VStack(alignment: .leading, spacing: 0) {
-                    // Custom large left-aligned title
-                    HStack {
-                        Text("Notes")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 5)
-                    
-                    // Spatial Canvas Content
+                // Full-height canvas that allows dragging behind the header
                 if filteredNotes.isEmpty {
                     VStack {
                         Spacer()
@@ -62,7 +49,23 @@ struct SpatialTabView: View {
                         onFolderFavorite: toggleFolderFavorite
                     )
                 }
+                
+                // Floating header on top
+                VStack {
+                    HStack {
+                        Text("Notes")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 5)
+                    
+                    Spacer()
                 }
+                .allowsHitTesting(false) // Allow touches to pass through to canvas
             }
             .navigationBarHidden(true)
             .onAppear {
