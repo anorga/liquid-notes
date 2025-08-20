@@ -37,5 +37,5 @@ struct MainTabView: View {
 
 #Preview {
     MainTabView()
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }

@@ -10,18 +10,18 @@ import Foundation
 
 @Model
 final class Note {
-    var id: UUID
-    var title: String
-    var content: String
-    var createdDate: Date
-    var modifiedDate: Date
+    var id: UUID = UUID()
+    var title: String = ""
+    var content: String = ""
+    var createdDate: Date = Date()
+    var modifiedDate: Date = Date()
     // Spatial properties for future Phase 2 features
-    var positionX: Float
-    var positionY: Float
-    var zIndex: Int
-    var isArchived: Bool
-    var isPinned: Bool
-    var tags: [String]
+    var positionX: Float = 0
+    var positionY: Float = 0
+    var zIndex: Int = 0
+    var isArchived: Bool = false
+    var isPinned: Bool = false
+    var tags: [String] = []
     
     var category: NoteCategory?
     

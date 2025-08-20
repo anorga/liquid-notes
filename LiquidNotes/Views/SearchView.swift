@@ -18,17 +18,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Very dark blue and orange gradient
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(red: 0.0, green: 0.4, blue: 0.8).opacity(0.8), location: 0.0),
-                        .init(color: Color.orange.opacity(0.6), location: 0.5),
-                        .init(color: Color(red: 0.0, green: 0.35, blue: 0.7).opacity(0.85), location: 1.0)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                LiquidNotesBackground()
                 
                 VStack(spacing: 0) {
                 // Search field - starts unfocused for discovery
@@ -268,5 +258,5 @@ struct SearchResultRow: View {
 
 #Preview {
     SearchView()
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }

@@ -1,5 +1,5 @@
 //
-//  ContentView.swift
+//  HomeView.swift
 //  LiquidNotes
 //
 //  Created by Christian Anorga on 8/17/25.
@@ -19,17 +19,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Very dark blue and orange gradient
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(red: 0.0, green: 0.4, blue: 0.8).opacity(0.8), location: 0.0),
-                        .init(color: Color.orange.opacity(0.6), location: 0.5),
-                        .init(color: Color(red: 0.0, green: 0.35, blue: 0.7).opacity(0.85), location: 1.0)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                LiquidNotesBackground()
                 
                 // Notes List
                 if filteredNotes.isEmpty {
@@ -74,23 +64,15 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: createNewNote) {
-                        Image(systemName: "plus")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .symbolEffect(.bounce, value: false)
-                            .symbolRenderingMode(.monochrome)
-                            .background(Color.clear)
-                            .clipShape(Circle())
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.clear)
+                    AddNoteButton(action: createNewNote)
                 }
             }
             .onAppear {
                 setupViewModels()
+                print("🏠 HomeView appeared with \(notes.count) notes")
+            }
+            .onChange(of: notes.count) { oldCount, newCount in
+                print("🏠 HomeView notes count changed: \(oldCount) → \(newCount)")
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -113,10 +95,18 @@ struct HomeView: View {
     private func createNewNote() {
         HapticManager.shared.noteCreated()
         
-        guard let viewModel = notesViewModel else { return }
+        guard let viewModel = notesViewModel else { 
+            print("❌ No viewModel available!")
+            return 
+        }
+        
+        print("🆕 Creating new note...")
         let newNote = viewModel.createNote()
+        print("🆕 Created note with ID: \(newNote.id)")
+        
         selectedNote = newNote
         showingNoteEditor = true
+        print("🆕 Set selectedNote and showing editor")
     }
     
     private func deleteNote(_ note: Note) {
@@ -152,5 +142,5 @@ struct HomeView: View {
 
 #Preview {
     HomeView()
-        .modelContainer(DataContainer.previewContainer)
+        .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }
