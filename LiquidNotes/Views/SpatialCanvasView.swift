@@ -548,6 +548,7 @@ struct NoteContentView: View {
             .padding(8)
         }
         .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)  // Apple-style subtle shadow
         .frame(width: 160, height: 120)
     }
 }

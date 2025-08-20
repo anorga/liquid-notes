@@ -10,27 +10,27 @@ import Foundation
 
 @Model
 final class NoteCategory {
-    var id: UUID
-    var name: String
-    var color: String
-    var createdDate: Date
+    var id: UUID = UUID()
+    var name: String = ""
+    var color: String = "blue"
+    var createdDate: Date = Date()
     
     @Relationship(deleteRule: .nullify, inverse: \Note.category)
-    var notes: [Note]
+    var notes: [Note]?
     
     init(name: String, color: String = "blue") {
         self.id = UUID()
         self.name = name
         self.color = color
         self.createdDate = Date()
-        self.notes = []
+        self.notes = nil
     }
     
     var noteCount: Int {
-        notes.count
+        notes?.count ?? 0
     }
     
     var activeNoteCount: Int {
-        notes.filter { !$0.isArchived }.count
+        notes?.filter { !$0.isArchived }.count ?? 0
     }
 }

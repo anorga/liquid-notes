@@ -54,7 +54,10 @@ struct SpatialTabView: View {
             }
             .onAppear {
                 setupViewModels()
-                print("SpatialTabView appeared with \(notes.count) notes")
+                print("🖼️ SpatialTabView appeared with \(notes.count) notes")
+            }
+            .onChange(of: notes.count) { oldCount, newCount in
+                print("🖼️ SpatialTabView notes count changed: \(oldCount) → \(newCount)")
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)

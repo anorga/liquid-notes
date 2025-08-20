@@ -39,8 +39,10 @@ class NotesViewModel {
         // Note starts with positionX=0, positionY=0 and will be positioned by canvas initialization
         // This NEVER moves existing notes
         
+        print("📝 Creating new note with ID: \(note.id)")
         modelContext.insert(note)
         saveContext()
+        print("✅ Note inserted and saved to context")
         return note
     }
     
@@ -52,6 +54,7 @@ class NotesViewModel {
     }
     
     func deleteNote(_ note: Note) {
+        print("🗑️ Deleting note: '\(note.title.isEmpty ? "(untitled)" : note.title)' with ID: \(note.id)")
         modelContext.delete(note)
         saveContext()
     }
@@ -128,8 +131,9 @@ class NotesViewModel {
     private func saveContext() {
         do {
             try modelContext.save()
+            print("💾 Context saved successfully")
         } catch {
-            print("Failed to save context: \(error)")
+            print("❌ Failed to save context: \(error)")
             syncStatus = .error(error.localizedDescription)
         }
     }

@@ -69,6 +69,10 @@ struct HomeView: View {
             }
             .onAppear {
                 setupViewModels()
+                print("🏠 HomeView appeared with \(notes.count) notes")
+            }
+            .onChange(of: notes.count) { oldCount, newCount in
+                print("🏠 HomeView notes count changed: \(oldCount) → \(newCount)")
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -91,10 +95,18 @@ struct HomeView: View {
     private func createNewNote() {
         HapticManager.shared.noteCreated()
         
-        guard let viewModel = notesViewModel else { return }
+        guard let viewModel = notesViewModel else { 
+            print("❌ No viewModel available!")
+            return 
+        }
+        
+        print("🆕 Creating new note...")
         let newNote = viewModel.createNote()
+        print("🆕 Created note with ID: \(newNote.id)")
+        
         selectedNote = newNote
         showingNoteEditor = true
+        print("🆕 Set selectedNote and showing editor")
     }
     
     private func deleteNote(_ note: Note) {
