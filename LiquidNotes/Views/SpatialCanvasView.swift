@@ -88,7 +88,7 @@ struct SpatialCanvasView: View {
     }
     
     private func canvasDragGesture(geometry: GeometryProxy) -> some Gesture {
-        DragGesture(coordinateSpace: .named("canvas"))
+        DragGesture()
             .onChanged { value in
                 handleDragChanged(value: value, geometry: geometry)
             }
@@ -215,7 +215,7 @@ struct SpatialCanvasView: View {
         let columns = Int(screenWidth / spacing)
         let row = noteIndex / max(columns, 1)
         
-        let y = 80 + CGFloat(row) * 180 // Start from top with spacing
+        let y = 140 + CGFloat(row) * 180 // Start below header/add button with spacing
         print("🆕 Initial Y for new note '\(note.title.prefix(10))': \(y)")
         return Float(y)
     }
@@ -283,10 +283,10 @@ struct SpatialCanvasView: View {
             )
         }
         
-        // Clamp to bounds
+        // Clamp to bounds - only enforce minimum Y for final placement
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
-        let minY: CGFloat = 70
+        let minY: CGFloat = 120 // Increased to account for header + add button
         
         return CGPoint(
             x: min(max(minX, snapPos.x), maxX),
@@ -295,7 +295,7 @@ struct SpatialCanvasView: View {
     }
     
     private func snapToGridPosition(_ position: CGPoint, screenWidth: CGFloat) -> CGPoint {
-        let topPadding: CGFloat = 70
+        let topPadding: CGFloat = 120 // Increased to account for header + add button
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
         
@@ -310,10 +310,10 @@ struct SpatialCanvasView: View {
     }
     
     private func updateNotePosition(_ note: Note, to position: CGPoint, screenWidth: CGFloat) {
-        // Final bounds check
+        // Final bounds check - enforce minimum Y to prevent placement in header area
         let minX = noteWidth / 2 + 10
         let maxX = screenWidth - noteWidth / 2 - 10
-        let minY: CGFloat = 70
+        let minY: CGFloat = 120 // Increased to account for header + add button
         
         let safeX = min(max(minX, position.x), maxX)
         let safeY = max(minY, position.y)
