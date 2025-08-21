@@ -84,9 +84,19 @@ struct NoteCardView: View {
                       systemImage: note.isFavorited ? "star.slash" : "star")
             }
             
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                // Add share functionality if needed
+            }) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            
             Divider()
             
-            Button(role: .destructive, action: onDelete) {
+            Button(role: .destructive, action: {
+                HapticManager.shared.buttonTapped()
+                onDelete()
+            }) {
                 Label("Delete", systemImage: "trash")
             }
         }
