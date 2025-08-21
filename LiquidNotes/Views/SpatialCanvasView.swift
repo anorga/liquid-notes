@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct SpatialCanvasView: View {
     @Environment(\.modelContext) private var modelContext
@@ -505,7 +506,6 @@ struct SpatialNoteView: View {
                     
                     // Use a plain note view without competing gestures
                     NoteContentView(note: note, width: noteWidth, height: noteHeight)
-                        .allowsHitTesting(false) // Prevent images from blocking note movement
                         .shadow(
                             color: .black.opacity(shadowConfiguration.opacity),
                             radius: shadowConfiguration.radius,
@@ -537,24 +537,18 @@ struct SpatialNoteView: View {
             .animation(.easeInOut(duration: 0.3), value: getStackedNotes(currentPosition).count)
             .contentShape(Rectangle())
             .allowsWindowActivationEvents(true)
-            .simultaneousGesture(
-                TapGesture()
-                    .onEnded { _ in
-                        guard draggedNote == nil && showingContextMenu == nil else { return }
-                        HapticManager.shared.noteSelected()
-                        onTap(note)
-                    }
-            )
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.5, maximumDistance: 10)
-                    .onEnded { _ in
-                        guard draggedNote?.id != note.id && showingContextMenu == nil else { return }
-                        HapticManager.shared.buttonTapped()
-                        showingContextMenu = note
-                        contextMenuPosition = displayPosition
-                    }
-            )
-            .highPriorityGesture(
+            .onTapGesture {
+                guard draggedNote == nil && showingContextMenu == nil else { return }
+                HapticManager.shared.noteSelected()
+                onTap(note)
+            }
+            .onLongPressGesture(minimumDuration: 0.5, maximumDistance: 10) {
+                guard draggedNote?.id != note.id && showingContextMenu == nil else { return }
+                HapticManager.shared.buttonTapped()
+                showingContextMenu = note
+                contextMenuPosition = displayPosition
+            }
+            .gesture(
                 DragGesture(coordinateSpace: .named("canvas"))
                     .onChanged { value in
                         guard showingContextMenu == nil else { return }
@@ -626,18 +620,24 @@ struct NoteContentView: View {
                     .layoutPriority(1)
             }
             
-            // Show first attachment if available
+            // Show first attachment if available - iOS 26 enhanced with explicit touch blocking prevention
             if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
                let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
                let uiImage = UIImage(data: firstAttachment) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
-                    .frame(maxHeight: min(30, height * 0.25))
-                    .clipped()
-                    .cornerRadius(4)
-                    .opacity(0.8)
-                    .allowsHitTesting(false)
+                ZStack {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                        .frame(maxHeight: min(35, height * 0.3)) // Slightly larger for better visibility
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .opacity(0.85)
+                        .allowsHitTesting(false) // Critical: prevent blocking note touches
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(.quaternary, lineWidth: 0.5)
+                        )
+                }
+                .allowsHitTesting(false) // Double protection against touch blocking
             }
             
             Spacer(minLength: 0)
@@ -934,7 +934,7 @@ struct CustomContextMenuView: View {
     }
 }
 
-// Resize handle for notes
+// iOS 26 compatible resize handle using native approach
 struct ResizeHandle: View {
     let note: Note
     @Binding var isResizing: Bool
@@ -946,7 +946,6 @@ struct ResizeHandle: View {
             .fill(.ultraThinMaterial)
             .frame(width: 20, height: 20)
             .contentShape(Rectangle())
-            .allowsHitTesting(true)
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(.quaternary, lineWidth: 0.5)
@@ -966,65 +965,67 @@ struct ResizeHandle: View {
             .scaleEffect(isResizing ? 1.15 : 1.0)
             .opacity(isResizing ? 0.8 : 0.6)
             .animation(.easeInOut(duration: 0.2), value: isResizing)
-            .highPriorityGesture(
-                DragGesture(coordinateSpace: .local)
-                    .onChanged { value in
-                        // Only start resizing if drag started within the resize handle bounds
-                        let handleRect = CGRect(x: 0, y: 0, width: 20, height: 20)
-                        if !isResizing && handleRect.contains(value.startLocation) {
-                            isResizing = true
-                            HapticManager.shared.buttonTapped()
-                        }
-                        
-                        // Only continue if we're actually resizing
-                        guard isResizing else { return }
-                        
-                        // Calculate new size with bounds checking
-                        let minWidth: Float = 120
-                        let maxWidth: Float = 400 // Reasonable maximum
-                        let minHeight: Float = 80
-                        let maxHeight: Float = 600 // Reasonable maximum
-                        
-                        let newWidth = max(minWidth, min(maxWidth, Float(CGFloat(note.width) + value.translation.width)))
-                        let newHeight = max(minHeight, min(maxHeight, Float(CGFloat(note.height) + value.translation.height)))
-                        
-                        // Only update if values actually changed to prevent unnecessary saves
-                        if note.width != newWidth || note.height != newHeight {
-                            note.width = newWidth
-                            note.height = newHeight
-                            note.updateModifiedDate()
-                        }
-                    }
-                    .onEnded { _ in
-                        guard isResizing else { return }
-                        isResizing = false
+            .onTapGesture {
+                // Show resize options menu
+                HapticManager.shared.buttonTapped()
+                showResizeOptions()
+            }
+    }
+    
+    private func showResizeOptions() {
+        // Create a menu with predefined sizes
+        let alert = UIAlertController(title: "Resize Note", message: nil, preferredStyle: .actionSheet)
+        
+        let sizes: [(String, CGSize)] = [
+            ("Small", CGSize(width: 140, height: 100)),
+            ("Medium", CGSize(width: 180, height: 140)),
+            ("Large", CGSize(width: 220, height: 180)),
+            ("Extra Large", CGSize(width: 280, height: 220))
+        ]
+        
+        for (name, size) in sizes {
+            alert.addAction(UIAlertAction(title: name, style: .default) { _ in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    note.width = Float(size.width)
+                    note.height = Float(size.height)
+                    note.updateModifiedDate()
+                    
+                    // Validate position after resize
+                    validateNotePosition()
+                    
+                    do {
+                        try modelContext.save()
                         HapticManager.shared.noteDropped()
-                        
-                        // Validate note position after resize to prevent going off-screen
-                        let notePos = CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
-                        let screenWidth = geometry.size.width
-                        let actualWidth = CGFloat(note.width)
-                        // Check if note is now outside bounds
-                        let minX = actualWidth / 2 + 10
-                        let maxX = screenWidth - actualWidth / 2 - 10
-                        let minY: CGFloat = 120
-                        
-                        if notePos.x < minX || notePos.x > maxX || notePos.y < minY {
-                            // Adjust position to keep note on screen
-                            let safeX = min(max(minX, notePos.x), maxX)
-                            let safeY = max(minY, notePos.y)
-                            note.positionX = Float(safeX)
-                            note.positionY = Float(safeY)
-                        }
-                        
-                        // Save once at the end
-                        do {
-                            try modelContext.save()
-                        } catch {
-                            print("Failed to save resize: \(error)")
-                        }
+                    } catch {
+                        print("Failed to save resize: \(error)")
                     }
-            )
+                }
+            })
+        }
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            window.rootViewController?.present(alert, animated: true)
+        }
+    }
+    
+    private func validateNotePosition() {
+        let notePos = CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
+        let screenWidth = geometry.size.width
+        let actualWidth = CGFloat(note.width)
+        
+        let minX = actualWidth / 2 + 10
+        let maxX = screenWidth - actualWidth / 2 - 10
+        let minY: CGFloat = 120
+        
+        if notePos.x < minX || notePos.x > maxX || notePos.y < minY {
+            let safeX = min(max(minX, notePos.x), maxX)
+            let safeY = max(minY, notePos.y)
+            note.positionX = Float(safeX)
+            note.positionY = Float(safeY)
+        }
     }
 }
 
