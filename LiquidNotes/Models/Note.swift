@@ -60,7 +60,7 @@ final class Note {
     }
     
     func removeAttachment(at index: Int) {
-        guard index < attachments.count else { return }
+        guard index < attachments.count && index < attachmentTypes.count else { return }
         attachments.remove(at: index)
         attachmentTypes.remove(at: index)
         updateModifiedDate()
