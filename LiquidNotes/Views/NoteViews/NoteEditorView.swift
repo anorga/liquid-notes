@@ -59,7 +59,7 @@ struct NoteEditorView: View {
                 if !note.attachments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(0..<note.attachments.count, id: \.self) { index in
+                            ForEach(0..<min(note.attachments.count, note.attachmentTypes.count), id: \.self) { index in
                                 AttachmentView(
                                     data: note.attachments[index],
                                     type: note.attachmentTypes[index],
@@ -228,7 +228,7 @@ struct AttachmentView: View {
                 if type == "image/gif" {
                     // Animated GIF support
                     AnimatedImageView(data: data)
-                        .frame(maxWidth: 80, maxHeight: 80)
+                        .frame(maxWidth: 200, maxHeight: 150)
                         .clipped()
                         .cornerRadius(8)
                         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
@@ -237,7 +237,7 @@ struct AttachmentView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
-                        .frame(maxWidth: 80, maxHeight: 80)
+                        .frame(maxWidth: 200, maxHeight: 150)
                         .clipped()
                         .cornerRadius(8)
                         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
