@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct NoteEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -18,6 +20,8 @@ struct NoteEditorView: View {
     @State private var content: String = ""
     @State private var hasChanges = false
     @State private var isNewNote = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showingPhotoPicker = false
     
     var body: some View {
         NavigationStack {
@@ -57,6 +61,26 @@ struct NoteEditorView: View {
                         }
                 }
                 
+                // Attachments Section
+                if !note.attachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(0..<note.attachments.count, id: \.self) { index in
+                                AttachmentView(
+                                    data: note.attachments[index],
+                                    type: note.attachmentTypes[index],
+                                    onDelete: {
+                                        note.removeAttachment(at: index)
+                                        hasChanges = true
+                                    }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .padding(.vertical, 10)
+                }
+                
                 Spacer()
             }
             // No background - let Liquid Glass handle transparency
@@ -69,18 +93,33 @@ struct NoteEditorView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveNote()
-                        dismiss()
+                    HStack {
+                        // Photo/Sticker picker button
+                        PhotosPicker(
+                            selection: $selectedPhoto,
+                            matching: .any(of: [.images, .livePhotos])
+                        ) {
+                            Image(systemName: "photo.badge.plus")
+                                .foregroundStyle(.blue)
+                        }
+                        
+                        Button("Save") {
+                            saveNote()
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(!hasChanges && !isNewNote)
+                        .foregroundStyle(.primary)
+                        .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(!hasChanges && !isNewNote)
-                    .foregroundStyle(.primary)
-                    .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
                 }
             }
             .onAppear {
                 loadNoteData()
+            }
+            .onChange(of: selectedPhoto) { _, newPhoto in
+                guard let newPhoto = newPhoto else { return }
+                loadPhotoData(from: newPhoto)
             }
         }
     }
@@ -138,6 +177,20 @@ struct NoteEditorView: View {
         }
         dismiss()
     }
+    
+    private func loadPhotoData(from item: PhotosPickerItem) {
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                await MainActor.run {
+                    let mimeType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
+                    note.addAttachment(data: data, type: mimeType)
+                    hasChanges = true
+                    selectedPhoto = nil
+                    HapticManager.shared.buttonTapped()
+                }
+            }
+        }
+    }
 }
 
 #Preview {
@@ -148,4 +201,49 @@ struct NoteEditorView: View {
     
     NoteEditorView(note: sampleNote)
         .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
+}
+
+// Attachment view for displaying images and GIFs
+struct AttachmentView: View {
+    let data: Data
+    let type: String
+    let onDelete: () -> Void
+    
+    @State private var showingDeleteConfirmation = false
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if type.hasPrefix("image/") {
+                if let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                }
+            }
+            
+            // Delete button
+            Button(action: {
+                showingDeleteConfirmation = true
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.red)
+                    .background(Color.white, in: Circle())
+                    .font(.system(size: 16))
+            }
+            .offset(x: 8, y: -8)
+        }
+        .alert("Delete Attachment", isPresented: $showingDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                onDelete()
+                HapticManager.shared.buttonTapped()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete this attachment?")
+        }
+    }
 }

@@ -397,9 +397,13 @@ struct SpatialNoteView: View {
     @Binding var showingContextMenu: Note?
     @Binding var contextMenuPosition: CGPoint
     
-    // Note dimensions
-    private let noteWidth: CGFloat = 160
-    private let noteHeight: CGFloat = 120
+    // Resize state
+    @State private var isResizing: Bool = false
+    @State private var resizeStartSize: CGSize = .zero
+    
+    // Note dimensions - now dynamic based on note properties
+    private var noteWidth: CGFloat { CGFloat(note.width) }
+    private var noteHeight: CGFloat { CGFloat(note.height) }
     
     let onTap: (Note) -> Void
     let onDelete: (Note) -> Void
@@ -497,13 +501,25 @@ struct SpatialNoteView: View {
                     }
                     
                     // Use a plain note view without competing gestures
-                    NoteContentView(note: note)
+                    NoteContentView(note: note, width: noteWidth, height: noteHeight)
                         .shadow(
                             color: .black.opacity(shadowConfiguration.opacity),
                             radius: shadowConfiguration.radius,
                             x: shadowConfiguration.offset.width,
                             y: shadowConfiguration.offset.height
                         )
+                    
+                    // Resize handle in bottom-right corner
+                    if draggedNote?.id != note.id && showingContextMenu == nil {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                ResizeHandle(note: note, isResizing: $isResizing)
+                            }
+                        }
+                        .frame(width: noteWidth, height: noteHeight)
+                    }
                 }
                 .frame(width: noteWidth, height: noteHeight)
                 .clipped()
@@ -527,6 +543,8 @@ struct SpatialNoteView: View {
 // Note content view without competing gestures
 struct NoteContentView: View {
     let note: Note
+    let width: CGFloat
+    let height: CGFloat
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -560,6 +578,19 @@ struct NoteContentView: View {
                     .layoutPriority(1)
             }
             
+            // Show first attachment if available
+            if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
+               let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
+               let uiImage = UIImage(data: firstAttachment) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 30)
+                    .clipped()
+                    .cornerRadius(4)
+                    .opacity(0.8)
+            }
+            
             Spacer(minLength: 0)
             
             HStack(alignment: .bottom) {
@@ -590,12 +621,12 @@ struct NoteContentView: View {
             .frame(height: 16)
         }
         .padding(8)
-        .frame(width: 160, height: 120)
+        .frame(width: width, height: height)
         .fixedSize()
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.clear)
-                .frame(width: 160, height: 120)
+                .frame(width: width, height: height)
         )
         .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
@@ -851,6 +882,53 @@ struct CustomContextMenuView: View {
                 }
             }
         }
+    }
+}
+
+// Resize handle for notes
+struct ResizeHandle: View {
+    let note: Note
+    @Binding var isResizing: Bool
+    @Environment(\.modelContext) private var modelContext
+    
+    var body: some View {
+        Circle()
+            .fill(.regularMaterial)
+            .frame(width: 16, height: 16)
+            .overlay(
+                Circle()
+                    .stroke(.quaternary, lineWidth: 1)
+            )
+            .overlay(
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(.secondary)
+            )
+            .scaleEffect(isResizing ? 1.2 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isResizing)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if !isResizing {
+                            isResizing = true
+                            HapticManager.shared.buttonTapped()
+                        }
+                        
+                        // Calculate new size based on drag
+                        let newWidth = max(120, Float(CGFloat(note.width) + value.translation.width))
+                        let newHeight = max(80, Float(CGFloat(note.height) + value.translation.height))
+                        
+                        // Update note size
+                        note.width = newWidth
+                        note.height = newHeight
+                        note.updateModifiedDate()
+                    }
+                    .onEnded { _ in
+                        isResizing = false
+                        HapticManager.shared.noteDropped()
+                        try? modelContext.save()
+                    }
+            )
     }
 }
 

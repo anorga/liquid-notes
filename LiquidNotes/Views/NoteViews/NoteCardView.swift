@@ -41,6 +41,19 @@ struct NoteCardView: View {
                     .multilineTextAlignment(.leading)
             }
             
+            // Show first attachment if available
+            if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
+               let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
+               let uiImage = UIImage(data: firstAttachment) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 40)
+                    .clipped()
+                    .cornerRadius(6)
+                    .opacity(0.9)
+            }
+            
             Spacer()
             
             HStack {
