@@ -19,6 +19,7 @@ struct RichTextEditor: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.font = UIFont.systemFont(ofSize: 17)
         textView.backgroundColor = .clear
+        textView.textColor = .label // iOS 26: Adaptive color for dark/light mode
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
         textView.autocapitalizationType = .sentences
         textView.autocorrectionType = .default
@@ -30,8 +31,11 @@ struct RichTextEditor: UIViewRepresentable {
         textView.smartQuotesType = .yes
         textView.smartDashesType = .yes
         
-        // Enable native font selection from keyboard
-        textView.typingAttributes = [.font: UIFont.systemFont(ofSize: 17)]
+        // Enable native font selection from keyboard with iOS 26 dark mode support
+        textView.typingAttributes = [
+            .font: UIFont.systemFont(ofSize: 17),
+            .foregroundColor: UIColor.label // Adaptive text color
+        ]
         
         // Allow text formatting from keyboard (Bold, Italic, etc.)
         if #available(iOS 16.0, *) {

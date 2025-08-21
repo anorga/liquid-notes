@@ -59,15 +59,22 @@ struct NoteEditorView: View {
                 if !note.attachments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
-                            ForEach(0..<min(note.attachments.count, note.attachmentTypes.count), id: \.self) { index in
-                                AttachmentView(
-                                    data: note.attachments[index],
-                                    type: note.attachmentTypes[index],
-                                    onDelete: {
-                                        note.removeAttachment(at: index)
-                                        hasChanges = true
-                                    }
-                                )
+                            ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                if index < note.attachmentTypes.count {
+                                    AttachmentView(
+                                        data: data,
+                                        type: note.attachmentTypes[index],
+                                        onDelete: {
+                                            // iOS 26: Safe attachment removal with bounds checking
+                                            if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    note.removeAttachment(at: index)
+                                                    hasChanges = true
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                         .padding(.horizontal, 30) // More padding to ensure delete buttons are never cut off

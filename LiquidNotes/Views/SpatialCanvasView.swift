@@ -620,24 +620,51 @@ struct NoteContentView: View {
                     .layoutPriority(1)
             }
             
-            // Show first attachment if available - iOS 26 enhanced with explicit touch blocking prevention
-            if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
-               let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
-               let uiImage = UIImage(data: firstAttachment) {
-                ZStack {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
-                        .frame(maxHeight: min(35, height * 0.3)) // Slightly larger for better visibility
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .opacity(0.85)
-                        .allowsHitTesting(false) // Critical: prevent blocking note touches
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(.quaternary, lineWidth: 0.5)
-                        )
+            // iOS 26: Enhanced attachment previews - show multiple images for larger notes
+            if !note.attachments.isEmpty {
+                let imageAttachments = Array(zip(note.attachments, note.attachmentTypes))
+                    .enumerated()
+                    .compactMap { index, pair in
+                        pair.1.hasPrefix("image/") && UIImage(data: pair.0) != nil ? (index, pair.0, pair.1) : nil
+                    }
+                
+                if !imageAttachments.isEmpty {
+                    let maxPreviews = width > 200 ? min(3, imageAttachments.count) : 1 // Show more images for larger notes
+                    let previewHeight = max(25, min(40, height * 0.25)) // Dynamic height based on note size
+                    
+                    HStack(spacing: 4) {
+                        ForEach(0..<maxPreviews, id: \.self) { previewIndex in
+                            if previewIndex < imageAttachments.count,
+                               let uiImage = UIImage(data: imageAttachments[previewIndex].1) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fill)
+                                    .frame(width: previewHeight, height: previewHeight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .opacity(0.85)
+                                    .allowsHitTesting(false) // Critical: prevent blocking note touches
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .stroke(.quaternary, lineWidth: 0.3)
+                                    )
+                            }
+                        }
+                        
+                        // Show count indicator if there are more images
+                        if imageAttachments.count > maxPreviews {
+                            Text("+\(imageAttachments.count - maxPreviews)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                .allowsHitTesting(false)
+                        }
+                        
+                        Spacer()
+                    }
+                    .allowsHitTesting(false) // Double protection against touch blocking
                 }
-                .allowsHitTesting(false) // Double protection against touch blocking
             }
             
             Spacer(minLength: 0)
