@@ -626,8 +626,6 @@ struct CustomContextMenuView: View {
         let safeAreaLeading = geometry.safeAreaInsets.leading
         let safeAreaTrailing = geometry.safeAreaInsets.trailing
         
-        // Available screen area
-        let availableWidth = geometry.size.width - safeAreaLeading - safeAreaTrailing
         
         var x = position.x
         var y = position.y
