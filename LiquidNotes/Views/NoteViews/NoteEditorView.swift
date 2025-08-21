@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
 
 struct NoteEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -16,8 +18,12 @@ struct NoteEditorView: View {
     
     @State private var title: String = ""
     @State private var content: String = ""
+    @State private var attributedContent: NSAttributedString = NSAttributedString()
     @State private var hasChanges = false
     @State private var isNewNote = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showingPhotoPicker = false
+    @State private var showingGiphyPicker = false
     
     var body: some View {
         NavigationStack {
@@ -39,22 +45,34 @@ struct NoteEditorView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                 
-                // Content Field
-                ZStack(alignment: .topLeading) {
-                    if content.isEmpty {
-                        Text("Start typing your note...")
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 8)
-                    }
-                    
-                    TextEditor(text: $content)
-                        .padding(.horizontal, 16)
-                        .textInputAutocapitalization(.sentences)
-                        .disableAutocorrection(false)
-                        .onChange(of: content) { _, _ in
-                            hasChanges = true
+                // Rich Content Field with native keyboard font support
+                RichTextEditor(
+                    text: $content,
+                    attributedText: $attributedContent,
+                    placeholder: "Start typing your note..."
+                )
+                .onChange(of: attributedContent) { _, _ in
+                    hasChanges = true
+                }
+                
+                // Attachments Section
+                if !note.attachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(0..<note.attachments.count, id: \.self) { index in
+                                AttachmentView(
+                                    data: note.attachments[index],
+                                    type: note.attachmentTypes[index],
+                                    onDelete: {
+                                        note.removeAttachment(at: index)
+                                        hasChanges = true
+                                    }
+                                )
+                            }
                         }
+                        .padding(.horizontal, 20)
+                    }
+                    .padding(.vertical, 10)
                 }
                 
                 Spacer()
@@ -69,18 +87,49 @@ struct NoteEditorView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        saveNote()
-                        dismiss()
+                    HStack {
+                        // GIF picker button
+                        Button(action: {
+                            showingGiphyPicker = true
+                        }) {
+                            Image(systemName: "face.smiling")
+                                .foregroundStyle(.blue)
+                        }
+                        
+                        // Photo/Sticker picker button
+                        PhotosPicker(
+                            selection: $selectedPhoto,
+                            matching: .any(of: [.images, .livePhotos]),
+                            photoLibrary: .shared()
+                        ) {
+                            Image(systemName: "photo.badge.plus")
+                                .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.borderless)
+                        
+                        Button("Save") {
+                            saveNote()
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(!hasChanges && !isNewNote)
+                        .foregroundStyle(.primary)
+                        .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
                     }
-                    .fontWeight(.semibold)
-                    .disabled(!hasChanges && !isNewNote)
-                    .foregroundStyle(.primary)
-                    .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
                 }
             }
             .onAppear {
                 loadNoteData()
+            }
+            .onChange(of: selectedPhoto) { _, newPhoto in
+                guard let newPhoto = newPhoto else { return }
+                loadPhotoData(from: newPhoto)
+            }
+            .sheet(isPresented: $showingGiphyPicker) {
+                GiphyPicker(isPresented: $showingGiphyPicker) { gifData in
+                    note.addAttachment(data: gifData, type: "image/gif")
+                    hasChanges = true
+                }
             }
         }
     }
@@ -138,6 +187,21 @@ struct NoteEditorView: View {
         }
         dismiss()
     }
+    
+    private func loadPhotoData(from item: PhotosPickerItem) {
+        Task {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                await MainActor.run {
+                    let mimeType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
+                    note.addAttachment(data: data, type: mimeType)
+                    hasChanges = true
+                    selectedPhoto = nil
+                    HapticManager.shared.buttonTapped()
+                }
+            }
+        }
+    }
+    
 }
 
 #Preview {
@@ -148,4 +212,111 @@ struct NoteEditorView: View {
     
     NoteEditorView(note: sampleNote)
         .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
+}
+
+// Attachment view for displaying images and GIFs
+struct AttachmentView: View {
+    let data: Data
+    let type: String
+    let onDelete: () -> Void
+    
+    @State private var showingDeleteConfirmation = false
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if type.hasPrefix("image/") {
+                if type == "image/gif" {
+                    // Animated GIF support
+                    AnimatedImageView(data: data)
+                        .frame(maxWidth: 80, maxHeight: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .contentShape(Rectangle())
+                } else if let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                        .frame(maxWidth: 80, maxHeight: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .contentShape(Rectangle())
+                }
+            }
+            
+            // Delete button
+            Button(action: {
+                showingDeleteConfirmation = true
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.red)
+                    .background(Color.white, in: Circle())
+                    .font(.system(size: 16))
+            }
+            .offset(x: 8, y: -8)
+        }
+        .alert("Delete Attachment", isPresented: $showingDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                onDelete()
+                HapticManager.shared.buttonTapped()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete this attachment?")
+        }
+    }
+}
+
+// Animated GIF view using UIImageView
+struct AnimatedImageView: UIViewRepresentable {
+    let data: Data
+    
+    func makeUIView(context: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 8
+        imageView.isUserInteractionEnabled = false
+        
+        if let image = UIImage.animatedImageWithData(data) {
+            imageView.image = image
+        }
+        
+        return imageView
+    }
+    
+    func updateUIView(_ uiView: UIImageView, context: Context) {
+        if let image = UIImage.animatedImageWithData(data) {
+            uiView.image = image
+        }
+    }
+}
+
+extension UIImage {
+    static func animatedImageWithData(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+        
+        let count = CGImageSourceGetCount(source)
+        var images: [UIImage] = []
+        var duration: TimeInterval = 0
+        
+        for i in 0..<count {
+            if let cgImage = CGImageSourceCreateImageAtIndex(source, i, nil) {
+                let image = UIImage(cgImage: cgImage)
+                images.append(image)
+                
+                // Get frame duration
+                if let properties = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [String: Any],
+                   let gifProperties = properties[kCGImagePropertyGIFDictionary as String] as? [String: Any],
+                   let frameDuration = gifProperties[kCGImagePropertyGIFDelayTime as String] as? Double {
+                    duration += frameDuration
+                }
+            }
+        }
+        
+        return UIImage.animatedImage(with: images, duration: duration)
+    }
 }

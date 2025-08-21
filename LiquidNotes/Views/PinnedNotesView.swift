@@ -53,28 +53,47 @@ struct PinnedNotesView: View {
                     }
                     .padding()
                 } else {
-                    List {
-                        ForEach(favoritedNotes, id: \.id) { note in
-                            NoteCardView(
-                                note: note,
-                                onTap: {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(favoritedNotes, id: \.id) { note in
+                                Button(action: {
                                     selectedNote = note
                                     showingNoteEditor = true
-                                },
-                                onDelete: {
-                                    deleteNote(note)
-                                },
-                                onFavorite: {
-                                    toggleFavorite(note)
+                                    HapticManager.shared.noteSelected()
+                                }) {
+                                    NoteCardView(
+                                        note: note,
+                                        onTap: {
+                                            selectedNote = note
+                                            showingNoteEditor = true
+                                        },
+                                        onDelete: {
+                                            deleteNote(note)
+                                        },
+                                        onFavorite: {
+                                            toggleFavorite(note)
+                                        }
+                                    )
                                 }
-                            )
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        deleteNote(note)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    
+                                    Button {
+                                        toggleFavorite(note)
+                                    } label: {
+                                        Label("Unfavorite", systemImage: "star.slash")
+                                    }
+                                    .tint(.orange)
+                                }
+                            }
                         }
-                        .onDelete(perform: deleteNotes)
+                        .padding(.horizontal, 16)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
                 }
             }

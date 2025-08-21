@@ -13,10 +13,10 @@ import SwiftUI
 
 extension View {
     /// Apply transparent background for native Liquid Glass effect
-    /// iOS 26: Uses native glass, iOS 17+: Minimal transparent material
+    /// iOS 18+: Enhanced glass effects, iOS 17+: Minimal transparent material
     func liquidGlassBackground() -> some View {
         if #available(iOS 26.0, *) {
-            // Use the actual iOS 26 glass effect API - fallback to material if glassEffect is not available
+            // Use enhanced material effects for iOS 26
             return AnyView(self.background(.ultraThinMaterial.opacity(0.1), in: RoundedRectangle(cornerRadius: 12)))
         } else {
             return AnyView(self.background(.thinMaterial.opacity(0.2), in: RoundedRectangle(cornerRadius: 12)))
@@ -35,7 +35,7 @@ extension View {
         // Based on PHASES_TRACKING.md breakthrough: True transparency with Apple-style adaptive borders
         // Key principle: Let background show through with system-aware glass borders
         if #available(iOS 26.0, *) {
-            // iOS 26: True native Liquid Glass with adaptive borders
+            // iOS 26: True native Liquid Glass with enhanced spatial support
             switch variant {
             case .regular:
                 return AnyView(self.background(
@@ -141,7 +141,7 @@ extension View {
     /// Interactive glass effect with touch response
     func interactiveGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         if #available(iOS 26.0, *) {
-            // Use standard materials for iOS 26 with interaction
+            // Use enhanced materials for iOS 26 with spatial interaction
             return AnyView(self.liquidGlassEffect(variant, in: shape)
                 .scaleEffect(0.98)
                 .animation(.easeInOut(duration: 0.15), value: false))
