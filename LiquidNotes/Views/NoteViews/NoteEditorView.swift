@@ -55,10 +55,10 @@ struct NoteEditorView: View {
                     hasChanges = true
                 }
                 
-                // Attachments Section
+                // Attachments Section - Enhanced for iOS 26 with better spacing
                 if !note.attachments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 16) {
                             ForEach(0..<min(note.attachments.count, note.attachmentTypes.count), id: \.self) { index in
                                 AttachmentView(
                                     data: note.attachments[index],
@@ -70,9 +70,11 @@ struct NoteEditorView: View {
                                 )
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 30) // More padding to ensure delete buttons are never cut off
+                        .padding(.vertical, 20) // More vertical padding for delete button
                     }
                     .padding(.vertical, 10)
+                    .frame(minHeight: 200) // Ensure enough height for attachments and delete buttons
                 }
                 
                 Spacer()
@@ -140,6 +142,12 @@ struct NoteEditorView: View {
         
         title = note.title
         content = note.content
+        
+        // Load attributed text if content exists
+        if !note.content.isEmpty {
+            attributedContent = NSAttributedString(string: note.content)
+        }
+        
         isNewNote = wasEmpty
         
         // Set hasChanges AFTER setting the title/content to avoid onChange interference
@@ -214,47 +222,103 @@ struct NoteEditorView: View {
         .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }
 
-// Attachment view for displaying images and GIFs
+// iOS 26 Enhanced Attachment view for displaying images and GIFs
 struct AttachmentView: View {
     let data: Data
     let type: String
     let onDelete: () -> Void
     
     @State private var showingDeleteConfirmation = false
+    @State private var sizeScale: CGFloat = 1.0
+    @State private var showingResizeOptions = false
+    
+    // Dynamic sizing that adapts to content and user scale
+    private var adaptiveSize: CGSize {
+        if let uiImage = UIImage(data: data) {
+            let originalSize = uiImage.size
+            let baseMaxWidth: CGFloat = 280 // Base size
+            let baseMaxHeight: CGFloat = 200 // Base size
+            
+            let maxWidth = baseMaxWidth * sizeScale
+            let maxHeight = baseMaxHeight * sizeScale
+            
+            let ratio = min(maxWidth / originalSize.width, maxHeight / originalSize.height)
+            return CGSize(width: originalSize.width * ratio, height: originalSize.height * ratio)
+        }
+        return CGSize(width: 280 * sizeScale, height: 200 * sizeScale)
+    }
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if type.hasPrefix("image/") {
                 if type == "image/gif" {
-                    // Animated GIF support
+                    // Animated GIF support with proper sizing
                     AnimatedImageView(data: data)
-                        .frame(maxWidth: 200, maxHeight: 150)
-                        .clipped()
-                        .cornerRadius(8)
-                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        .contentShape(Rectangle())
+                        .frame(width: adaptiveSize.width, height: adaptiveSize.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        .allowsHitTesting(false) // Ensure this doesn't block touches
                 } else if let uiImage = UIImage(data: data) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
-                        .frame(maxWidth: 200, maxHeight: 150)
-                        .clipped()
-                        .cornerRadius(8)
-                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        .contentShape(Rectangle())
+                        .frame(width: adaptiveSize.width, height: adaptiveSize.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        .allowsHitTesting(false) // Ensure this doesn't block touches
                 }
             }
             
-            // Delete button
+            // Delete button with better positioning
             Button(action: {
                 showingDeleteConfirmation = true
             }) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.red)
                     .background(Color.white, in: Circle())
-                    .font(.system(size: 16))
+                    .font(.system(size: 18, weight: .medium))
+                    .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
             }
-            .offset(x: 8, y: -8)
+            .offset(x: 6, y: -6) // Reduced offset to stay within bounds
+            .zIndex(10) // Ensure delete button is always on top
+        }
+        .frame(width: adaptiveSize.width + 12, height: adaptiveSize.height + 12) // Account for delete button
+        .contextMenu {
+            // Resize options
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    sizeScale = 0.7
+                }
+                HapticManager.shared.buttonTapped()
+            }) {
+                Label("Small", systemImage: "photo")
+            }
+            
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    sizeScale = 1.0
+                }
+                HapticManager.shared.buttonTapped()
+            }) {
+                Label("Medium", systemImage: "photo")
+            }
+            
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    sizeScale = 1.3
+                }
+                HapticManager.shared.buttonTapped()
+            }) {
+                Label("Large", systemImage: "photo")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive, action: {
+                showingDeleteConfirmation = true
+            }) {
+                Label("Delete", systemImage: "trash")
+            }
         }
         .alert("Delete Attachment", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -268,7 +332,7 @@ struct AttachmentView: View {
     }
 }
 
-// Animated GIF view using UIImageView
+// iOS 26 Enhanced Animated GIF view using UIImageView
 struct AnimatedImageView: UIViewRepresentable {
     let data: Data
     
@@ -276,8 +340,9 @@ struct AnimatedImageView: UIViewRepresentable {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 8
-        imageView.isUserInteractionEnabled = false
+        imageView.layer.cornerRadius = 12
+        imageView.isUserInteractionEnabled = false // Critical: prevent blocking touches
+        imageView.backgroundColor = UIColor.clear
         
         if let image = UIImage.animatedImageWithData(data) {
             imageView.image = image
