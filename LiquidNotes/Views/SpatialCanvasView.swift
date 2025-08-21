@@ -73,10 +73,6 @@ struct SpatialCanvasView: View {
                 .zIndex(2000) // Above all notes
             }
         }
-        .gesture(canvasDragGesture(geometry: geometry))
-        .onTapGesture { location in
-            handleCanvasTap(location: location, geometry: geometry)
-        }
         .coordinateSpace(.named("canvas"))
     }
     
@@ -101,13 +97,13 @@ struct SpatialCanvasView: View {
                 getInitialX: getInitialX,
                 getInitialY: getInitialY,
                 bringNoteToFront: bringNoteToFront,
-                snapToGrid: { position, screenWidth, excludeNote in
-                    snapToGrid(position, screenWidth: screenWidth, excludeNote: excludeNote)
+                snapToGrid: { position, screenWidth, excludeNote, draggedNote in
+                    snapToGrid(position, screenWidth: screenWidth, excludeNote: excludeNote, draggedNote: draggedNote)
                 },
                 updateNotePosition: { note, position, screenWidth in updateNotePosition(note, to: position, screenWidth: screenWidth) },
                 getStackedNotes: getStackedNotes
             )
-            .allowsHitTesting(draggedNote?.id == note.id || (draggedNote == nil && showingContextMenu == nil))
+            .allowsHitTesting(showingContextMenu == nil)
         }
     }
     
@@ -166,7 +162,7 @@ struct SpatialCanvasView: View {
             y: currentPos.y + value.translation.height
         )
         
-        let snappedPosition = snapToGrid(finalPosition, screenWidth: geometry.size.width, excludeNote: currentNote)
+        let snappedPosition = snapToGrid(finalPosition, screenWidth: geometry.size.width, excludeNote: currentNote, draggedNote: currentNote)
         
         withAnimation(.interactiveSpring) {
             updateNotePosition(currentNote, to: snappedPosition, screenWidth: geometry.size.width)
@@ -232,18 +228,19 @@ struct SpatialCanvasView: View {
     }
     
     private func getInitialX(for note: Note, screenWidth: CGFloat) -> Float {
-        // SIMPLE initial positioning - just place notes in a basic grid
+        // Dynamic positioning based on actual note width
         let noteIndex = notes.firstIndex(where: { $0.id == note.id }) ?? 0
-        let spacing: CGFloat = 160 // Simple spacing
-        let columns = Int(screenWidth / spacing)
-        let column = noteIndex % max(columns, 1)
+        let actualNoteWidth = CGFloat(note.width)
+        let spacing = actualNoteWidth + 20 // Dynamic spacing based on note width
+        let columns = max(1, Int(screenWidth / spacing))
+        let column = noteIndex % columns
         
-        let minX = noteWidth / 2 + 20
-        let maxX = screenWidth - noteWidth / 2 - 20
+        let minX = actualNoteWidth / 2 + 20
+        let maxX = screenWidth - actualNoteWidth / 2 - 20
         let x = minX + CGFloat(column) * spacing
         
         let clampedX = min(max(minX, x), maxX)
-        print("🆕 Initial X for new note '\(note.title.prefix(10))': \(clampedX)")
+        print("🆕 Initial X for note '\(note.title.prefix(10))': \(clampedX) (width: \(actualNoteWidth))")
         return Float(clampedX)
     }
     
@@ -259,7 +256,7 @@ struct SpatialCanvasView: View {
         return Float(y)
     }
     
-    private func snapToGrid(_ position: CGPoint, screenWidth: CGFloat, excludeNote: Note? = nil) -> CGPoint {
+    private func snapToGrid(_ position: CGPoint, screenWidth: CGFloat, excludeNote: Note? = nil, draggedNote: Note? = nil) -> CGPoint {
         // SIMPLE CLEAN APPROACH - find closest note and decide what to do
         
         var closestNote: Note?
@@ -291,19 +288,21 @@ struct SpatialCanvasView: View {
             
             // POSITION: If moderately close (80-120pts), snap to edge/corner
             if closestDistance < 120 {
-                return getSnapPosition(dragPos: position, targetPos: targetPos, screenWidth: screenWidth)
+                return getSnapPosition(dragPos: position, targetPos: targetPos, screenWidth: screenWidth, draggedNote: draggedNote)
             }
         }
         
         // GRID: Default grid snapping
-        return snapToGridPosition(position, screenWidth: screenWidth)
+        return snapToGridPosition(position, screenWidth: screenWidth, draggedNote: draggedNote)
     }
     
-    private func getSnapPosition(dragPos: CGPoint, targetPos: CGPoint, screenWidth: CGFloat) -> CGPoint {
+    private func getSnapPosition(dragPos: CGPoint, targetPos: CGPoint, screenWidth: CGFloat, draggedNote: Note?) -> CGPoint {
         let deltaX = dragPos.x - targetPos.x
         let deltaY = dragPos.y - targetPos.y
-        let halfWidth = noteWidth * 0.5
-        let halfHeight = noteHeight * 0.5
+        let actualWidth = draggedNote != nil ? CGFloat(draggedNote!.width) : noteWidth
+        let actualHeight = draggedNote != nil ? CGFloat(draggedNote!.height) : noteHeight
+        let halfWidth = actualWidth * 0.5
+        let halfHeight = actualHeight * 0.5
         
         // Simple direction-based snapping
         var snapPos: CGPoint
@@ -323,8 +322,8 @@ struct SpatialCanvasView: View {
         }
         
         // Clamp to bounds - only enforce minimum Y for final placement
-        let minX = noteWidth / 2 + 10
-        let maxX = screenWidth - noteWidth / 2 - 10
+        let minX = actualWidth / 2 + 10
+        let maxX = screenWidth - actualWidth / 2 - 10
         let minY: CGFloat = 120 // Increased to account for header + add button
         
         return CGPoint(
@@ -333,10 +332,11 @@ struct SpatialCanvasView: View {
         )
     }
     
-    private func snapToGridPosition(_ position: CGPoint, screenWidth: CGFloat) -> CGPoint {
+    private func snapToGridPosition(_ position: CGPoint, screenWidth: CGFloat, draggedNote: Note?) -> CGPoint {
         let topPadding: CGFloat = 120 // Increased to account for header + add button
-        let minX = noteWidth / 2 + 10
-        let maxX = screenWidth - noteWidth / 2 - 10
+        let actualWidth = draggedNote != nil ? CGFloat(draggedNote!.width) : noteWidth
+        let minX = actualWidth / 2 + 10
+        let maxX = screenWidth - actualWidth / 2 - 10
         
         let snapX = round(position.x / gridSize) * gridSize
         let adjustedY = max(topPadding, position.y)
@@ -350,8 +350,9 @@ struct SpatialCanvasView: View {
     
     private func updateNotePosition(_ note: Note, to position: CGPoint, screenWidth: CGFloat) {
         // Final bounds check - enforce minimum Y to prevent placement in header area
-        let minX = noteWidth / 2 + 10
-        let maxX = screenWidth - noteWidth / 2 - 10
+        let actualWidth = CGFloat(note.width)
+        let minX = actualWidth / 2 + 10
+        let maxX = screenWidth - actualWidth / 2 - 10
         let minY: CGFloat = 120 // Increased to account for header + add button
         
         let safeX = min(max(minX, position.x), maxX)
@@ -369,11 +370,13 @@ struct SpatialCanvasView: View {
         // Find all notes that contain this point, sorted by z-index (highest first)
         let candidateNotes = notes.filter { note in
             let notePos = getCurrentPosition(for: note, geometry: geometry)
+            let actualWidth = CGFloat(note.width)
+            let actualHeight = CGFloat(note.height)
             let noteRect = CGRect(
-                x: notePos.x - noteWidth/2,
-                y: notePos.y - noteHeight/2,
-                width: noteWidth,
-                height: noteHeight
+                x: notePos.x - actualWidth/2,
+                y: notePos.y - actualHeight/2,
+                width: actualWidth,
+                height: actualHeight
             )
             return noteRect.contains(location)
         }.sorted { $0.zIndex > $1.zIndex } // Highest z-index first
@@ -411,7 +414,7 @@ struct SpatialNoteView: View {
     let getInitialX: (Note, CGFloat) -> Float
     let getInitialY: (Note, CGFloat) -> Float
     let bringNoteToFront: (Note) -> Void
-    let snapToGrid: (CGPoint, CGFloat, Note?) -> CGPoint
+    let snapToGrid: (CGPoint, CGFloat, Note?, Note?) -> CGPoint
     let updateNotePosition: (Note, CGPoint, CGFloat) -> Void
     let getStackedNotes: (CGPoint) -> [Note]
     
@@ -502,6 +505,7 @@ struct SpatialNoteView: View {
                     
                     // Use a plain note view without competing gestures
                     NoteContentView(note: note, width: noteWidth, height: noteHeight)
+                        .allowsHitTesting(false) // Prevent images from blocking note movement
                         .shadow(
                             color: .black.opacity(shadowConfiguration.opacity),
                             radius: shadowConfiguration.radius,
@@ -510,15 +514,17 @@ struct SpatialNoteView: View {
                         )
                     
                     // Resize handle in bottom-right corner
-                    if draggedNote?.id != note.id && showingContextMenu == nil {
+                    if draggedNote?.id != note.id && showingContextMenu == nil && !isResizing {
                         VStack {
                             Spacer()
                             HStack {
                                 Spacer()
-                                ResizeHandle(note: note, isResizing: $isResizing)
+                                ResizeHandle(note: note, isResizing: $isResizing, geometry: geometry)
+                                    .allowsHitTesting(!isResizing)
                             }
                         }
                         .frame(width: noteWidth, height: noteHeight)
+                        .allowsHitTesting(true) // Allow resize handle to be hittable
                     }
                 }
                 .frame(width: noteWidth, height: noteHeight)
@@ -529,13 +535,55 @@ struct SpatialNoteView: View {
             .zIndex(zIndexValue)
             .animation(.bouncy(duration: 0.6), value: draggedNote?.id == note.id)
             .animation(.easeInOut(duration: 0.3), value: getStackedNotes(currentPosition).count)
-            .onLongPressGesture(minimumDuration: 0.5) {
-                if draggedNote?.id != note.id && showingContextMenu == nil {
-                    HapticManager.shared.buttonTapped()
-                    showingContextMenu = note
-                    contextMenuPosition = displayPosition
-                }
-            }
+            .contentShape(Rectangle())
+            .allowsWindowActivationEvents(true)
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded { _ in
+                        guard draggedNote == nil && showingContextMenu == nil else { return }
+                        HapticManager.shared.noteSelected()
+                        onTap(note)
+                    }
+            )
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5, maximumDistance: 10)
+                    .onEnded { _ in
+                        guard draggedNote?.id != note.id && showingContextMenu == nil else { return }
+                        HapticManager.shared.buttonTapped()
+                        showingContextMenu = note
+                        contextMenuPosition = displayPosition
+                    }
+            )
+            .highPriorityGesture(
+                DragGesture(coordinateSpace: .named("canvas"))
+                    .onChanged { value in
+                        guard showingContextMenu == nil else { return }
+                        
+                        if draggedNote == nil {
+                            draggedNote = note
+                            bringNoteToFront(note)
+                        }
+                        
+                        if draggedNote?.id == note.id {
+                            dragOffset = value.translation
+                        }
+                    }
+                    .onEnded { value in
+                        guard draggedNote?.id == note.id else { return }
+                        
+                        let currentPos = CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
+                        let finalPosition = CGPoint(
+                            x: currentPos.x + value.translation.width,
+                            y: currentPos.y + value.translation.height
+                        )
+                        
+                        let snappedPosition = snapToGrid(finalPosition, geometry.size.width, note, note)
+                        updateNotePosition(note, snappedPosition, geometry.size.width)
+                        
+                        draggedNote = nil
+                        dragOffset = .zero
+                    }
+            )
     }
 }
 
@@ -584,11 +632,12 @@ struct NoteContentView: View {
                let uiImage = UIImage(data: firstAttachment) {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 30)
+                    .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                    .frame(maxHeight: min(30, height * 0.25))
                     .clipped()
                     .cornerRadius(4)
                     .opacity(0.8)
+                    .allowsHitTesting(false)
             }
             
             Spacer(minLength: 0)
@@ -889,44 +938,91 @@ struct CustomContextMenuView: View {
 struct ResizeHandle: View {
     let note: Note
     @Binding var isResizing: Bool
+    let geometry: GeometryProxy
     @Environment(\.modelContext) private var modelContext
     
     var body: some View {
-        Circle()
-            .fill(.regularMaterial)
-            .frame(width: 16, height: 16)
+        RoundedRectangle(cornerRadius: 6)
+            .fill(.ultraThinMaterial)
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+            .allowsHitTesting(true)
             .overlay(
-                Circle()
-                    .stroke(.quaternary, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(.quaternary, lineWidth: 0.5)
             )
             .overlay(
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundColor(.secondary)
+                VStack(spacing: 2) {
+                    HStack(spacing: 2) {
+                        Circle().fill(.tertiary).frame(width: 2, height: 2)
+                        Circle().fill(.tertiary).frame(width: 2, height: 2)
+                    }
+                    HStack(spacing: 2) {
+                        Circle().fill(.tertiary).frame(width: 2, height: 2)
+                        Circle().fill(.tertiary).frame(width: 2, height: 2)
+                    }
+                }
             )
-            .scaleEffect(isResizing ? 1.2 : 1.0)
+            .scaleEffect(isResizing ? 1.15 : 1.0)
+            .opacity(isResizing ? 0.8 : 0.6)
             .animation(.easeInOut(duration: 0.2), value: isResizing)
-            .gesture(
-                DragGesture()
+            .highPriorityGesture(
+                DragGesture(coordinateSpace: .local)
                     .onChanged { value in
-                        if !isResizing {
+                        // Only start resizing if drag started within the resize handle bounds
+                        let handleRect = CGRect(x: 0, y: 0, width: 20, height: 20)
+                        if !isResizing && handleRect.contains(value.startLocation) {
                             isResizing = true
                             HapticManager.shared.buttonTapped()
                         }
                         
-                        // Calculate new size based on drag
-                        let newWidth = max(120, Float(CGFloat(note.width) + value.translation.width))
-                        let newHeight = max(80, Float(CGFloat(note.height) + value.translation.height))
+                        // Only continue if we're actually resizing
+                        guard isResizing else { return }
                         
-                        // Update note size
-                        note.width = newWidth
-                        note.height = newHeight
-                        note.updateModifiedDate()
+                        // Calculate new size with bounds checking
+                        let minWidth: Float = 120
+                        let maxWidth: Float = 400 // Reasonable maximum
+                        let minHeight: Float = 80
+                        let maxHeight: Float = 600 // Reasonable maximum
+                        
+                        let newWidth = max(minWidth, min(maxWidth, Float(CGFloat(note.width) + value.translation.width)))
+                        let newHeight = max(minHeight, min(maxHeight, Float(CGFloat(note.height) + value.translation.height)))
+                        
+                        // Only update if values actually changed to prevent unnecessary saves
+                        if note.width != newWidth || note.height != newHeight {
+                            note.width = newWidth
+                            note.height = newHeight
+                            note.updateModifiedDate()
+                        }
                     }
                     .onEnded { _ in
+                        guard isResizing else { return }
                         isResizing = false
                         HapticManager.shared.noteDropped()
-                        try? modelContext.save()
+                        
+                        // Validate note position after resize to prevent going off-screen
+                        let notePos = CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
+                        let screenWidth = geometry.size.width
+                        let actualWidth = CGFloat(note.width)
+                        // Check if note is now outside bounds
+                        let minX = actualWidth / 2 + 10
+                        let maxX = screenWidth - actualWidth / 2 - 10
+                        let minY: CGFloat = 120
+                        
+                        if notePos.x < minX || notePos.x > maxX || notePos.y < minY {
+                            // Adjust position to keep note on screen
+                            let safeX = min(max(minX, notePos.x), maxX)
+                            let safeY = max(minY, notePos.y)
+                            note.positionX = Float(safeX)
+                            note.positionY = Float(safeY)
+                        }
+                        
+                        // Save once at the end
+                        do {
+                            try modelContext.save()
+                        } catch {
+                            print("Failed to save resize: \(error)")
+                        }
                     }
             )
     }

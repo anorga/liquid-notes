@@ -18,10 +18,12 @@ struct NoteEditorView: View {
     
     @State private var title: String = ""
     @State private var content: String = ""
+    @State private var attributedContent: NSAttributedString = NSAttributedString()
     @State private var hasChanges = false
     @State private var isNewNote = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingPhotoPicker = false
+    @State private var showingGiphyPicker = false
     
     var body: some View {
         NavigationStack {
@@ -43,22 +45,14 @@ struct NoteEditorView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                 
-                // Content Field
-                ZStack(alignment: .topLeading) {
-                    if content.isEmpty {
-                        Text("Start typing your note...")
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 8)
-                    }
-                    
-                    TextEditor(text: $content)
-                        .padding(.horizontal, 16)
-                        .textInputAutocapitalization(.sentences)
-                        .disableAutocorrection(false)
-                        .onChange(of: content) { _, _ in
-                            hasChanges = true
-                        }
+                // Rich Content Field with native keyboard font support
+                RichTextEditor(
+                    text: $content,
+                    attributedText: $attributedContent,
+                    placeholder: "Start typing your note..."
+                )
+                .onChange(of: attributedContent) { _, _ in
+                    hasChanges = true
                 }
                 
                 // Attachments Section
@@ -94,14 +88,24 @@ struct NoteEditorView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
+                        // GIF picker button
+                        Button(action: {
+                            showingGiphyPicker = true
+                        }) {
+                            Image(systemName: "face.smiling")
+                                .foregroundStyle(.blue)
+                        }
+                        
                         // Photo/Sticker picker button
                         PhotosPicker(
                             selection: $selectedPhoto,
-                            matching: .any(of: [.images, .livePhotos])
+                            matching: .any(of: [.images, .livePhotos]),
+                            photoLibrary: .shared()
                         ) {
                             Image(systemName: "photo.badge.plus")
                                 .foregroundStyle(.blue)
                         }
+                        .buttonStyle(.borderless)
                         
                         Button("Save") {
                             saveNote()
@@ -120,6 +124,12 @@ struct NoteEditorView: View {
             .onChange(of: selectedPhoto) { _, newPhoto in
                 guard let newPhoto = newPhoto else { return }
                 loadPhotoData(from: newPhoto)
+            }
+            .sheet(isPresented: $showingGiphyPicker) {
+                GiphyPicker(isPresented: $showingGiphyPicker) { gifData in
+                    note.addAttachment(data: gifData, type: "image/gif")
+                    hasChanges = true
+                }
             }
         }
     }
@@ -191,6 +201,7 @@ struct NoteEditorView: View {
             }
         }
     }
+    
 }
 
 #Preview {
@@ -214,14 +225,23 @@ struct AttachmentView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if type.hasPrefix("image/") {
-                if let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 80, height: 80)
+                if type == "image/gif" {
+                    // Animated GIF support
+                    AnimatedImageView(data: data)
+                        .frame(maxWidth: 80, maxHeight: 80)
                         .clipped()
                         .cornerRadius(8)
                         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .contentShape(Rectangle())
+                } else if let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                        .frame(maxWidth: 80, maxHeight: 80)
+                        .clipped()
+                        .cornerRadius(8)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        .contentShape(Rectangle())
                 }
             }
             
@@ -245,5 +265,58 @@ struct AttachmentView: View {
         } message: {
             Text("Are you sure you want to delete this attachment?")
         }
+    }
+}
+
+// Animated GIF view using UIImageView
+struct AnimatedImageView: UIViewRepresentable {
+    let data: Data
+    
+    func makeUIView(context: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 8
+        imageView.isUserInteractionEnabled = false
+        
+        if let image = UIImage.animatedImageWithData(data) {
+            imageView.image = image
+        }
+        
+        return imageView
+    }
+    
+    func updateUIView(_ uiView: UIImageView, context: Context) {
+        if let image = UIImage.animatedImageWithData(data) {
+            uiView.image = image
+        }
+    }
+}
+
+extension UIImage {
+    static func animatedImageWithData(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return nil
+        }
+        
+        let count = CGImageSourceGetCount(source)
+        var images: [UIImage] = []
+        var duration: TimeInterval = 0
+        
+        for i in 0..<count {
+            if let cgImage = CGImageSourceCreateImageAtIndex(source, i, nil) {
+                let image = UIImage(cgImage: cgImage)
+                images.append(image)
+                
+                // Get frame duration
+                if let properties = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [String: Any],
+                   let gifProperties = properties[kCGImagePropertyGIFDictionary as String] as? [String: Any],
+                   let frameDuration = gifProperties[kCGImagePropertyGIFDelayTime as String] as? Double {
+                    duration += frameDuration
+                }
+            }
+        }
+        
+        return UIImage.animatedImage(with: images, duration: duration)
     }
 }
