@@ -42,7 +42,7 @@ struct SearchView: View {
                         
                         TextField("Search notes...", text: $searchText)
                             .textFieldStyle(.plain)
-                            .onTapGesture {
+                            .compatibleTapGesture {
                                 isSearching = true
                             }
                         

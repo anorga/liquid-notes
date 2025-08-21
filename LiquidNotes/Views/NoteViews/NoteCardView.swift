@@ -41,6 +41,20 @@ struct NoteCardView: View {
                     .multilineTextAlignment(.leading)
             }
             
+            // Show first attachment if available
+            if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
+               let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
+               let uiImage = UIImage(data: firstAttachment) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                    .frame(maxHeight: 40)
+                    .clipped()
+                    .cornerRadius(6)
+                    .opacity(0.9)
+                    .allowsHitTesting(false)
+            }
+            
             Spacer()
             
             HStack {
@@ -71,10 +85,7 @@ struct NoteCardView: View {
         .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)  // Apple-style subtle shadow
         .frame(width: 160, height: 120)
-        .onTapGesture {
-            HapticManager.shared.noteSelected()
-            onTap()
-        }
+        .contentShape(Rectangle())
         .contextMenu {
             Button(action: {
                 HapticManager.shared.buttonTapped()
@@ -84,9 +95,19 @@ struct NoteCardView: View {
                       systemImage: note.isFavorited ? "star.slash" : "star")
             }
             
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                // Add share functionality if needed
+            }) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            
             Divider()
             
-            Button(role: .destructive, action: onDelete) {
+            Button(role: .destructive, action: {
+                HapticManager.shared.buttonTapped()
+                onDelete()
+            }) {
                 Label("Delete", systemImage: "trash")
             }
         }
