@@ -35,7 +35,7 @@ struct PinnedNotesView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                    // Favorited Notes List
+                    // Spatial Canvas for Favorited Notes
                 if favoritedNotes.isEmpty {
                     VStack {
                         Spacer()
@@ -53,47 +53,25 @@ struct PinnedNotesView: View {
                     }
                     .padding()
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(favoritedNotes, id: \.id) { note in
-                                Button(action: {
-                                    selectedNote = note
-                                    showingNoteEditor = true
-                                    HapticManager.shared.noteSelected()
-                                }) {
-                                    NoteCardView(
-                                        note: note,
-                                        onTap: {
-                                            selectedNote = note
-                                            showingNoteEditor = true
-                                        },
-                                        onDelete: {
-                                            deleteNote(note)
-                                        },
-                                        onFavorite: {
-                                            toggleFavorite(note)
-                                        }
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        deleteNote(note)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                    
-                                    Button {
-                                        toggleFavorite(note)
-                                    } label: {
-                                        Label("Unfavorite", systemImage: "star.slash")
-                                    }
-                                    .tint(.orange)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                    }
+                    // Use SpatialCanvasView for favorites with moveable notes
+                    SpatialCanvasView(
+                        notes: favoritedNotes,
+                        folders: [], // No folders in favorites view
+                        onTap: { note in
+                            selectedNote = note
+                            showingNoteEditor = true
+                            HapticManager.shared.noteSelected()
+                        },
+                        onDelete: { note in
+                            deleteNote(note)
+                        },
+                        onFavorite: { note in
+                            toggleFavorite(note)
+                        },
+                        onFolderTap: nil,
+                        onFolderDelete: nil,
+                        onFolderFavorite: nil
+                    )
                 }
                 }
             }

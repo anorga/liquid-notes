@@ -33,6 +33,18 @@ struct MainTabView: View {
                     SearchView()
                 }
             }
+            .tabViewStyle(.sidebarAdaptable) // iOS 26: Enhanced tab bar with Liquid Glass
+            .toolbarBackgroundVisibility(.hidden, for: .tabBar) // Let Liquid Glass handle background
+            .onAppear {
+                // iOS 26: Enable native Liquid Glass for tab bar
+                if #available(iOS 26.0, *) {
+                    let appearance = UITabBarAppearance()
+                    appearance.configureWithTransparentBackground()
+                    appearance.backgroundColor = .clear
+                    UITabBar.appearance().standardAppearance = appearance
+                    UITabBar.appearance().scrollEdgeAppearance = appearance
+                }
+            }
             
             VStack {
                 HStack {
