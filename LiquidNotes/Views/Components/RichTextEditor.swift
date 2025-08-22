@@ -13,6 +13,7 @@ struct RichTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var attributedText: NSAttributedString
     let placeholder: String
+    var onTextChanged: (() -> Void)? = nil // iOS 26: Direct callback for changes
     
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -31,11 +32,16 @@ struct RichTextEditor: UIViewRepresentable {
         textView.smartQuotesType = .yes
         textView.smartDashesType = .yes
         
-        // Enable native font selection from keyboard with iOS 26 dark mode support
+        // iOS 26: Enhanced typing attributes with adaptive colors
         textView.typingAttributes = [
             .font: UIFont.systemFont(ofSize: 17),
-            .foregroundColor: UIColor.label // Adaptive text color
+            .foregroundColor: UIColor.label // Adaptive text color for dark/light mode
         ]
+        
+        // iOS 26: Force adaptive color mode support
+        if #available(iOS 26.0, *) {
+            textView.overrideUserInterfaceStyle = .unspecified // Allow automatic adaptation
+        }
         
         // Allow text formatting from keyboard (Bold, Italic, etc.)
         if #available(iOS 16.0, *) {
@@ -58,18 +64,33 @@ struct RichTextEditor: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UITextView, context: Context) {
+        // iOS 26: Normalize attributed text to ensure consistent font and color
         if uiView.attributedText != attributedText {
-            uiView.attributedText = attributedText
+            let normalizedAttributedText = normalizeAttributedText(attributedText)
+            uiView.attributedText = normalizedAttributedText
         }
         
-        // Update placeholder
+        // iOS 26: Ensure proper text color adaptation for dark/light mode
         if attributedText.length == 0 {
             uiView.text = placeholder
             uiView.textColor = .placeholderText
-        } else if uiView.textColor == .placeholderText {
-            uiView.text = ""
+        } else {
+            if uiView.textColor == .placeholderText {
+                uiView.text = ""
+            }
+            // Always enforce adaptive text color and consistent font for dark/light mode
             uiView.textColor = .label
+            uiView.font = UIFont.systemFont(ofSize: 17) // Ensure consistent font size
+            uiView.typingAttributes = [
+                .font: UIFont.systemFont(ofSize: 17),
+                .foregroundColor: UIColor.label // iOS 26: Adaptive text color
+            ]
         }
+    }
+    
+    // iOS 26: Normalize attributed text to maintain consistent formatting
+    private func normalizeAttributedText(_ attributedText: NSAttributedString) -> NSAttributedString {
+        return Coordinator.normalizeAttributedText(attributedText)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -90,10 +111,30 @@ struct RichTextEditor: UIViewRepresentable {
                 textView.textColor = .label
             }
             
+            // iOS 26: Ensure text color and font stay consistent during typing
+            if textView.textColor != .placeholderText {
+                textView.textColor = .label
+                textView.font = UIFont.systemFont(ofSize: 17) // Maintain consistent font size
+                textView.typingAttributes = [
+                    .font: UIFont.systemFont(ofSize: 17),
+                    .foregroundColor: UIColor.label
+                ]
+                
+                // iOS 26: Normalize any new attributed text to maintain consistency
+                if textView.attributedText.length > 0 {
+                    let normalizedText = Self.normalizeAttributedText(textView.attributedText)
+                    if !normalizedText.isEqual(to: textView.attributedText) {
+                        textView.attributedText = normalizedText
+                    }
+                }
+            }
+            
             // Update parent bindings on main thread
             DispatchQueue.main.async {
                 self.parent.text = textView.text
                 self.parent.attributedText = textView.attributedText
+                // iOS 26: Trigger direct callback to ensure change detection
+                self.parent.onTextChanged?()
             }
         }
         
@@ -102,6 +143,11 @@ struct RichTextEditor: UIViewRepresentable {
                 textView.text = ""
                 textView.textColor = .label
             }
+            // iOS 26: Ensure adaptive typing attributes when editing begins
+            textView.typingAttributes = [
+                .font: UIFont.systemFont(ofSize: 17),
+                .foregroundColor: UIColor.label
+            ]
         }
         
         func textViewDidEndEditing(_ textView: UITextView) {
@@ -184,6 +230,20 @@ struct RichTextEditor: UIViewRepresentable {
             
             // Move cursor after inserted content
             textView.selectedRange = NSRange(location: selectedRange.location + 3, length: 0)
+        }
+        
+        // iOS 26: Static method to normalize attributed text for consistent formatting
+        static func normalizeAttributedText(_ attributedText: NSAttributedString) -> NSAttributedString {
+            let mutableAttributedText = NSMutableAttributedString(attributedString: attributedText)
+            let range = NSRange(location: 0, length: mutableAttributedText.length)
+            
+            // Apply consistent font and adaptive color throughout the text
+            mutableAttributedText.addAttributes([
+                .font: UIFont.systemFont(ofSize: 17),
+                .foregroundColor: UIColor.label
+            ], range: range)
+            
+            return mutableAttributedText
         }
     }
 }
