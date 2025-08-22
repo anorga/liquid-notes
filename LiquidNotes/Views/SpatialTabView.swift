@@ -22,36 +22,8 @@ struct SpatialTabView: View {
             ZStack {
                 LiquidNotesBackground()
                 
-                // Full-height canvas that allows dragging behind the header
-                if filteredNotes.isEmpty {
-                    VStack {
-                        Spacer()
-                        Text("No notes yet")
-                            .font(.title2)
-                            .foregroundStyle(.tertiary)
-                        Text("Tap + to create your first note")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                } else {
-                    SpatialCanvasView(
-                        notes: filteredNotes,
-                        folders: folders,
-                        onTap: { note in
-                            selectedNote = note
-                            showingNoteEditor = true
-                        },
-                        onDelete: deleteNote,
-                        onFavorite: toggleFavorite,
-                        onFolderTap: nil, // TODO: Implement folder opening
-                        onFolderDelete: deleteFolder,
-                        onFolderFavorite: toggleFolderFavorite
-                    )
-                }
-                
-                // Floating header on top
-                VStack {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header section - same layout as PinnedNotesView
                     HStack {
                         Text("Notes")
                             .font(.largeTitle)
@@ -63,9 +35,35 @@ struct SpatialTabView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                    Spacer()
+                    // Canvas section
+                    if filteredNotes.isEmpty {
+                        VStack {
+                            Spacer()
+                            Text("No notes yet")
+                                .font(.title2)
+                                .foregroundStyle(.tertiary)
+                            Text("Tap + to create your first note")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding()
+                    } else {
+                        SpatialCanvasView(
+                            notes: filteredNotes,
+                            folders: folders,
+                            onTap: { note in
+                                selectedNote = note
+                                showingNoteEditor = true
+                            },
+                            onDelete: deleteNote,
+                            onFavorite: toggleFavorite,
+                            onFolderTap: nil, // TODO: Implement folder opening
+                            onFolderDelete: deleteFolder,
+                            onFolderFavorite: toggleFolderFavorite
+                        )
+                    }
                 }
-                .allowsHitTesting(false) // Allow touches to pass through to canvas
             }
             .navigationBarHidden(true)
             .onAppear {

@@ -37,7 +37,7 @@ struct NoteEditorView: View {
                     .padding(.top, 20)
                     .textInputAutocapitalization(.sentences)
                     .disableAutocorrection(false)
-                    .onChange(of: title) { _, _ in
+                    .onChange(of: title) { oldValue, newValue in
                         hasChanges = true
                     }
                 
@@ -49,9 +49,17 @@ struct NoteEditorView: View {
                 RichTextEditor(
                     text: $content,
                     attributedText: $attributedContent,
-                    placeholder: "Start typing your note..."
+                    placeholder: "Start typing your note...",
+                    onTextChanged: {
+                        // iOS 26: Direct callback ensures hasChanges is always triggered
+                        hasChanges = true
+                    }
                 )
-                .onChange(of: attributedContent) { _, _ in
+                .onChange(of: attributedContent) { oldValue, newValue in
+                    hasChanges = true
+                }
+                .onChange(of: content) { oldValue, newValue in
+                    // iOS 26: Additional change detection for plain text changes
                     hasChanges = true
                 }
                 
@@ -59,15 +67,22 @@ struct NoteEditorView: View {
                 if !note.attachments.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 16) {
-                            ForEach(0..<min(note.attachments.count, note.attachmentTypes.count), id: \.self) { index in
-                                AttachmentView(
-                                    data: note.attachments[index],
-                                    type: note.attachmentTypes[index],
-                                    onDelete: {
-                                        note.removeAttachment(at: index)
-                                        hasChanges = true
-                                    }
-                                )
+                            ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                if index < note.attachmentTypes.count {
+                                    AttachmentView(
+                                        data: data,
+                                        type: note.attachmentTypes[index],
+                                        onDelete: {
+                                            // iOS 26: Safe attachment removal with bounds checking
+                                            if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                withAnimation(.easeInOut(duration: 0.3)) {
+                                                    note.removeAttachment(at: index)
+                                                    hasChanges = true
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                         .padding(.horizontal, 30) // More padding to ensure delete buttons are never cut off
@@ -85,6 +100,7 @@ struct NoteEditorView: View {
                     Button("Cancel") {
                         cancelEdit()
                     }
+                    .fontWeight(.semibold) // iOS 26: Match Save button font weight
                     .foregroundStyle(.primary)
                 }
                 
@@ -115,8 +131,8 @@ struct NoteEditorView: View {
                         }
                         .fontWeight(.semibold)
                         .disabled(!hasChanges && !isNewNote)
-                        .foregroundStyle(.primary)
-                        .opacity((hasChanges || isNewNote) ? 1.0 : 0.5)
+                        .foregroundStyle((hasChanges || isNewNote) ? Color.accentColor : Color.secondary)
+                        .animation(.easeInOut(duration: 0.2), value: hasChanges)
                     }
                 }
             }
@@ -150,12 +166,14 @@ struct NoteEditorView: View {
         
         isNewNote = wasEmpty
         
-        // Set hasChanges AFTER setting the title/content to avoid onChange interference
-        if !isNewNote {
-            hasChanges = false
-        } else {
-            // For new notes, initially allow saving
-            hasChanges = true
+        // iOS 26: Delay hasChanges reset to ensure onChange handlers are properly set
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if !self.isNewNote {
+                self.hasChanges = false
+            } else {
+                // For new notes, initially allow saving
+                self.hasChanges = true
+            }
         }
     }
     
