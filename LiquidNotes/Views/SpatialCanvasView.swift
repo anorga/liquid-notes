@@ -77,6 +77,36 @@ struct SpatialCanvasView: View {
         .coordinateSpace(.named("canvas"))
     }
     
+    // Add button constraint area - prevent notes from being dragged above this
+    private let addButtonAreaHeight: CGFloat = 100
+    
+    private func constrainDragOffset(_ translation: CGSize, for note: Note, geometry: GeometryProxy) -> CGSize {
+        let currentPos = getCurrentPosition(for: note, geometry: geometry)
+        let proposedY = currentPos.y + translation.height
+        
+        // If trying to drag above the add button area, apply resistance
+        if proposedY < addButtonAreaHeight {
+            let resistance = calculateBounceResistance(proposedY: proposedY, minY: addButtonAreaHeight)
+            print("🚫 Constraining drag: proposedY=\(proposedY), constraint=\(addButtonAreaHeight), resistance=\(resistance)")
+            return CGSize(width: translation.width, height: translation.height * resistance)
+        }
+        
+        return translation
+    }
+    
+    private func calculateBounceResistance(proposedY: CGFloat, minY: CGFloat) -> CGFloat {
+        let overshoot = minY - proposedY
+        if overshoot <= 0 { return 1.0 }
+        
+        // Create exponential resistance - the further you try to drag, the more resistance
+        let resistanceStrength: CGFloat = 0.3
+        let maxOvershoot: CGFloat = 50 // Maximum allowed overshoot before full stop
+        let normalizedOvershoot = min(overshoot / maxOvershoot, 1.0)
+        
+        // Exponential decay for smooth resistance
+        return max(0.1, 1.0 - (normalizedOvershoot * normalizedOvershoot * resistanceStrength))
+    }
+    
     private func canvasBackground(geometry: GeometryProxy) -> some View {
         Rectangle()
             .fill(Color.clear)
@@ -147,8 +177,9 @@ struct SpatialCanvasView: View {
             }
         }
         
-        if draggedNote != nil {
-            dragOffset = value.translation
+        if let currentNote = draggedNote {
+            let constrainedOffset = constrainDragOffset(value.translation, for: currentNote, geometry: geometry)
+            dragOffset = constrainedOffset
         }
     }
     
@@ -165,10 +196,21 @@ struct SpatialCanvasView: View {
         
         let snappedPosition = snapToGrid(finalPosition, screenWidth: geometry.size.width, excludeNote: currentNote, draggedNote: currentNote)
         
-        withAnimation(.interactiveSpring) {
+        // Check if note was constrained and needs bounce animation
+        let wasConstrained = finalPosition.y < addButtonAreaHeight
+        let animationType: Animation = wasConstrained ? 
+            .bouncy(duration: 0.8, extraBounce: 0.3) : 
+            .interactiveSpring()
+        
+        withAnimation(animationType) {
             updateNotePosition(currentNote, to: snappedPosition, screenWidth: geometry.size.width)
             draggedNote = nil
             dragOffset = .zero
+        }
+        
+        // Add haptic feedback for constraint bounce
+        if wasConstrained {
+            HapticManager.shared.noteDropped()
         }
     }
     
@@ -252,7 +294,7 @@ struct SpatialCanvasView: View {
         let columns = Int(screenWidth / spacing)
         let row = noteIndex / max(columns, 1)
         
-        let y = 140 + CGFloat(row) * 180 // Start below header/add button with spacing
+        let y = 180 + CGFloat(row) * 180 // Lower placement grid - more space below add button
         print("🆕 Initial Y for new note '\(note.title.prefix(10))': \(y)")
         return Float(y)
     }
@@ -325,7 +367,7 @@ struct SpatialCanvasView: View {
         // Clamp to bounds - only enforce minimum Y for final placement
         let minX = actualWidth / 2 + 10
         let maxX = screenWidth - actualWidth / 2 - 10
-        let minY: CGFloat = 120 // Increased to account for header + add button
+        let minY: CGFloat = addButtonAreaHeight // Use consistent constraint height
         
         return CGPoint(
             x: min(max(minX, snapPos.x), maxX),
@@ -334,7 +376,7 @@ struct SpatialCanvasView: View {
     }
     
     private func snapToGridPosition(_ position: CGPoint, screenWidth: CGFloat, draggedNote: Note?) -> CGPoint {
-        let topPadding: CGFloat = 120 // Increased to account for header + add button
+        let topPadding: CGFloat = addButtonAreaHeight // Use consistent constraint height
         let actualWidth = draggedNote != nil ? CGFloat(draggedNote!.width) : noteWidth
         let minX = actualWidth / 2 + 10
         let maxX = screenWidth - actualWidth / 2 - 10
@@ -354,7 +396,7 @@ struct SpatialCanvasView: View {
         let actualWidth = CGFloat(note.width)
         let minX = actualWidth / 2 + 10
         let maxX = screenWidth - actualWidth / 2 - 10
-        let minY: CGFloat = 120 // Increased to account for header + add button
+        let minY: CGFloat = addButtonAreaHeight // Use consistent constraint height
         
         let safeX = min(max(minX, position.x), maxX)
         let safeY = max(minY, position.y)
@@ -559,7 +601,17 @@ struct SpatialNoteView: View {
                         }
                         
                         if draggedNote?.id == note.id {
-                            dragOffset = value.translation
+                            // Apply constraint logic during drag
+                            let currentPos = CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
+                            let proposedY = currentPos.y + value.translation.height
+                            
+                            if proposedY < 100 { // addButtonAreaHeight equivalent
+                                let resistance = max(0.1, 1.0 - pow((100 - proposedY) / 50, 2) * 0.3)
+                                print("🚫 SpatialNoteView constraining: proposedY=\(proposedY), resistance=\(resistance)")
+                                dragOffset = CGSize(width: value.translation.width, height: value.translation.height * resistance)
+                            } else {
+                                dragOffset = value.translation
+                            }
                         }
                     }
                     .onEnded { value in
@@ -572,10 +624,23 @@ struct SpatialNoteView: View {
                         )
                         
                         let snappedPosition = snapToGrid(finalPosition, geometry.size.width, note, note)
-                        updateNotePosition(note, snappedPosition, geometry.size.width)
                         
-                        draggedNote = nil
-                        dragOffset = .zero
+                        // Check if note was constrained for bounce animation
+                        let wasConstrained = finalPosition.y < 100 // addButtonAreaHeight equivalent
+                        let animationType: Animation = wasConstrained ? 
+                            .bouncy(duration: 0.8, extraBounce: 0.3) : 
+                            .interactiveSpring()
+                        
+                        withAnimation(animationType) {
+                            updateNotePosition(note, snappedPosition, geometry.size.width)
+                            draggedNote = nil
+                            dragOffset = .zero
+                        }
+                        
+                        // Add haptic feedback for constraint bounce
+                        if wasConstrained {
+                            HapticManager.shared.noteDropped()
+                        }
                     }
             )
     }
@@ -1045,7 +1110,7 @@ struct ResizeHandle: View {
         
         let minX = actualWidth / 2 + 10
         let maxX = screenWidth - actualWidth / 2 - 10
-        let minY: CGFloat = 120
+        let minY: CGFloat = 100 // Same as addButtonAreaHeight
         
         if notePos.x < minX || notePos.x > maxX || notePos.y < minY {
             let safeX = min(max(minX, notePos.x), maxX)
