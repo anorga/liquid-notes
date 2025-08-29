@@ -7,42 +7,28 @@
 
 import SwiftUI
 
-// MARK: - Apple Liquid Glass Extensions
-// Based on Apple Developer Documentation: "Adopting Liquid Glass"
-// Key principle: Use standard system components to get Liquid Glass automatically
-
 extension View {
-    /// Apply transparent background for native Liquid Glass effect
-    /// iOS 18+: Enhanced glass effects, iOS 17+: Minimal transparent material
     func liquidGlassBackground() -> some View {
         if #available(iOS 26.0, *) {
-            // Use enhanced material effects for iOS 26
             return AnyView(self.background(.ultraThinMaterial.opacity(0.1), in: RoundedRectangle(cornerRadius: 12)))
         } else {
             return AnyView(self.background(.thinMaterial.opacity(0.2), in: RoundedRectangle(cornerRadius: 12)))
         }
     }
     
-    /// Apply transparent card style with minimal shadow
     func liquidGlassCard() -> some View {
         self.liquidGlassBackground()
             .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 1)
     }
     
-    /// True Apple Liquid Glass effect using native iOS 26+ APIs
-    /// Fallback to less frosted materials for iOS 17+
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
-        // Based on PHASES_TRACKING.md breakthrough: True transparency with Apple-style adaptive borders
-        // Key principle: Let background show through with system-aware glass borders
         if #available(iOS 26.0, *) {
-            // iOS 26: True native Liquid Glass with enhanced spatial support
             switch variant {
             case .regular:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(Color.clear)  // Maximum transparency
+                        shape.fill(Color.clear)
                         
-                        // Inner subtle highlight (like Apple's glass elements)
                         shape.fill(
                             LinearGradient(
                                 colors: [
@@ -74,7 +60,7 @@ extension View {
                 return AnyView(self.background(
                     ZStack {
                         shape.fill(Color.clear)
-                        shape.stroke(.primary.opacity(0.15), lineWidth: 0.5)  // System adaptive
+                        shape.stroke(.primary.opacity(0.15), lineWidth: 0.5)
                     }
                 ))
             case .thick:

@@ -85,28 +85,26 @@ struct NoteEditorView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 30) // More padding to ensure delete buttons are never cut off
-                        .padding(.vertical, 20) // More vertical padding for delete button
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 20)
                     }
                     .padding(.vertical, 10)
-                    .frame(minHeight: 200) // Ensure enough height for attachments and delete buttons
+                    .frame(minHeight: 200) 
                 }
                 
                 Spacer()
             }
-            // No background - let Liquid Glass handle transparency
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         cancelEdit()
                     }
-                    .fontWeight(.semibold) // iOS 26: Match Save button font weight
+                    .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
-                        // GIF picker button
                         Button(action: {
                             showingGiphyPicker = true
                         }) {
@@ -114,7 +112,6 @@ struct NoteEditorView: View {
                                 .foregroundStyle(.blue)
                         }
                         
-                        // Photo/Sticker picker button
                         PhotosPicker(
                             selection: $selectedPhoto,
                             matching: .any(of: [.images, .livePhotos]),
@@ -153,25 +150,18 @@ struct NoteEditorView: View {
     }
     
     private func loadNoteData() {
-        // Store the initial state before setting values that might trigger onChange
         let wasEmpty = note.title.isEmpty && note.content.isEmpty
         
         title = note.title
         content = note.content
-        
-        // Load attributed text if content exists
-        if !note.content.isEmpty {
-            attributedContent = NSAttributedString(string: note.content)
-        }
-        
+        attributedContent = NSAttributedString(string: note.content)
         isNewNote = wasEmpty
         
-        // iOS 26: Delay hasChanges reset to ensure onChange handlers are properly set
+       
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if !self.isNewNote {
                 self.hasChanges = false
             } else {
-                // For new notes, initially allow saving
                 self.hasChanges = true
             }
         }
@@ -181,7 +171,6 @@ struct NoteEditorView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Always save the note when user explicitly chooses to save
         note.title = trimmedTitle
         note.content = trimmedContent
         note.updateModifiedDate()
@@ -190,7 +179,6 @@ struct NoteEditorView: View {
             try modelContext.save()
             HapticManager.shared.success()
             
-            // Reset hasChanges after successful save
             hasChanges = false
         } catch {
             print("❌ Failed to save note: \(error)")
@@ -202,7 +190,6 @@ struct NoteEditorView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Only delete new notes that are completely empty (user never typed anything)
         if isNewNote && trimmedTitle.isEmpty && trimmedContent.isEmpty {
             modelContext.delete(note)
             do {
@@ -240,7 +227,6 @@ struct NoteEditorView: View {
         .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }
 
-// iOS 26 Enhanced Attachment view for displaying images and GIFs
 struct AttachmentView: View {
     let data: Data
     let type: String
@@ -250,12 +236,11 @@ struct AttachmentView: View {
     @State private var sizeScale: CGFloat = 1.0
     @State private var showingResizeOptions = false
     
-    // Dynamic sizing that adapts to content and user scale
     private var adaptiveSize: CGSize {
         if let uiImage = UIImage(data: data) {
             let originalSize = uiImage.size
-            let baseMaxWidth: CGFloat = 280 // Base size
-            let baseMaxHeight: CGFloat = 200 // Base size
+            let baseMaxWidth: CGFloat = 280
+            let baseMaxHeight: CGFloat = 200
             
             let maxWidth = baseMaxWidth * sizeScale
             let maxHeight = baseMaxHeight * sizeScale
@@ -270,7 +255,6 @@ struct AttachmentView: View {
         ZStack(alignment: .topTrailing) {
             if type.hasPrefix("image/") {
                 if type == "image/gif" {
-                    // Animated GIF support with proper sizing
                     AnimatedImageView(data: data)
                         .frame(width: adaptiveSize.width, height: adaptiveSize.height)
                         .clipShape(RoundedRectangle(cornerRadius: 12))

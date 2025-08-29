@@ -56,7 +56,7 @@ struct PinnedNotesView: View {
                     // Use SpatialCanvasView for favorites with moveable notes
                     SpatialCanvasView(
                         notes: favoritedNotes,
-                        folders: [], // No folders in favorites view
+                        folders: [],
                         onTap: { note in
                             selectedNote = note
                             showingNoteEditor = true

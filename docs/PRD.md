@@ -278,7 +278,6 @@ class MotionManager: ObservableObject {
 import SwiftData
 import CloudKit
 
-// Configure the model container with CloudKit
 @main
 struct LiquidNotesApp: App {
     var body: some Scene {
@@ -290,7 +289,6 @@ struct LiquidNotesApp: App {
     }
 }
 
-// CloudKit sync happens automatically with SwiftData
 class NotesViewModel: ObservableObject {
     @Published var syncStatus: SyncStatus = .idle
     
@@ -298,11 +296,7 @@ class NotesViewModel: ObservableObject {
         case idle, syncing, success, error(String)
     }
     
-    // SwiftData handles CloudKit sync automatically
-    // Manual sync trigger if needed
     func forceSyncWithCloud() {
-        // SwiftData will handle the sync automatically
-        // Just update UI state
         syncStatus = .syncing
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -383,7 +377,7 @@ import CloudKit
 import CoreMotion
 import WidgetKit
 import Intents
-import WatchConnectivity // For Apple Watch
+import WatchConnectivity
 ```
 
 ### Third-Party Libraries
