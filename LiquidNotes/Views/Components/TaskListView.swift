@@ -144,7 +144,7 @@ struct TaskRowView: View {
                             endPoint: .bottomTrailing
                         ) :
                         LinearGradient(
-                            colors: [.secondary, .tertiary],
+                            colors: [.gray, .gray.opacity(0.6)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -204,7 +204,7 @@ struct ProgressCircle: View {
             Circle()
                 .stroke(
                     LinearGradient(
-                        colors: [.secondary.opacity(0.2), .tertiary.opacity(0.1)],
+                        colors: [Color.gray.opacity(0.2), Color.gray.opacity(0.1)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),

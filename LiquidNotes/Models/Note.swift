@@ -31,7 +31,7 @@ final class Note {
     
     var tasks: [TaskItem] = []
     var dueDate: Date?
-    var priority: NotePriority = .normal
+    var priority: NotePriority = NotePriority.normal
     var progress: Double = 0.0
     
     var category: NoteCategory?
