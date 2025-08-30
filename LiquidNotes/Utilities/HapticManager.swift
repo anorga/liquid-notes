@@ -46,6 +46,14 @@ class HapticManager {
     func noteDropped() {
         mediumImpact.impactOccurred()
     }
+
+    func noteFavorited() {
+        mediumImpact.impactOccurred(intensity: 0.7)
+    }
+
+    func noteArchived() {
+        heavyImpact.impactOccurred(intensity: 0.9)
+    }
     
     // MARK: - Glass Effects
     

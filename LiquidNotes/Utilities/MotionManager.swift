@@ -10,6 +10,7 @@ import SwiftUI
 import Combine
 
 class MotionManager: ObservableObject {
+    static let shared = MotionManager()
     private let motionManager = CMMotionManager()
     
     @Published var data = MotionData()
@@ -112,5 +113,11 @@ class MotionManager: ObservableObject {
     
     func stopMotionUpdates() {
         stopTracking()
+    }
+}
+
+extension MotionManager {
+    func syncWithReduceMotion(_ reduce: Bool) {
+        if reduce { stopTracking() } else { startTracking() }
     }
 }

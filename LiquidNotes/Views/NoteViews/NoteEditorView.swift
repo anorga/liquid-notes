@@ -24,34 +24,36 @@ struct NoteEditorView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingPhotoPicker = false
     @State private var showingGiphyPicker = false
+    @State private var showingTaskList = false
+    @State private var showingTagEditor = false
+    @State private var tempTags: [String] = []
     
     var body: some View {
         NavigationStack {
-            // Using standard SwiftUI form components for automatic Liquid Glass
-            VStack(spacing: 0) {
-                // Title Field
-                TextField("Note Title", text: $title)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .textInputAutocapitalization(.sentences)
-                    .disableAutocorrection(false)
-                    .onChange(of: title) { oldValue, newValue in
-                        hasChanges = true
-                    }
+            ZStack {
+                LiquidNotesBackground()
                 
-                Divider()
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                VStack(spacing: 16) {
+                    TextField("Note Title", text: $title)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .textInputAutocapitalization(.sentences)
+                        .disableAutocorrection(false)
+                        .onChange(of: title) { oldValue, newValue in
+                            hasChanges = true
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 20)
+                        .background(.clear)
+                        .modernGlassCard()
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                 
-                // Rich Content Field with native keyboard font support
                 RichTextEditor(
                     text: $content,
                     attributedText: $attributedContent,
                     placeholder: "Start typing your note...",
                     onTextChanged: {
-                        // iOS 26: Direct callback ensures hasChanges is always triggered
                         hasChanges = true
                     }
                 )
@@ -59,69 +61,181 @@ struct NoteEditorView: View {
                     hasChanges = true
                 }
                 .onChange(of: content) { oldValue, newValue in
-                    // iOS 26: Additional change detection for plain text changes
                     hasChanges = true
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .background(.clear)
+                .modernGlassCard()
+                .padding(.horizontal, 20)
                 
-                // Attachments Section - Enhanced for iOS 26 with better spacing
+                if showingTaskList {
+                    TaskListView(
+                        tasks: .constant([]), // note.tasks), // Temporarily disabled
+                        onToggle: { index in
+                            note.toggleTask(at: index)
+                            hasChanges = true
+                        },
+                        onDelete: { index in
+                            note.removeTask(at: index)
+                            hasChanges = true
+                        },
+                        onAdd: { text in
+                            note.addTask(text)
+                            hasChanges = true
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+                
+                if showingTagEditor {
+                    TagListView(
+                        tags: $tempTags,
+                        onAdd: { tag in
+                            note.addTag(tag)
+                            tempTags = note.tags
+                            hasChanges = true
+                        },
+                        onRemove: { tag in
+                            note.removeTag(tag)
+                            tempTags = note.tags
+                            hasChanges = true
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                }
+                
                 if !note.attachments.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
-                                if index < note.attachmentTypes.count {
-                                    AttachmentView(
-                                        data: data,
-                                        type: note.attachmentTypes[index],
-                                        onDelete: {
-                                            // iOS 26: Safe attachment removal with bounds checking
-                                            if index < note.attachments.count && index < note.attachmentTypes.count {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    note.removeAttachment(at: index)
-                                                    hasChanges = true
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Attachments")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text("\(note.attachments.count)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        .padding(.horizontal, 24)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                    if index < note.attachmentTypes.count {
+                                        AttachmentView(
+                                            data: data,
+                                            type: note.attachmentTypes[index],
+                                            onDelete: {
+                                                if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                    withAnimation(.bouncy(duration: 0.4)) {
+                                                        note.removeAttachment(at: index)
+                                                        hasChanges = true
+                                                    }
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 16)
                         }
-                        .padding(.horizontal, 30) // More padding to ensure delete buttons are never cut off
-                        .padding(.vertical, 20) // More vertical padding for delete button
                     }
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 200) // Ensure enough height for attachments and delete buttons
+                    .background(.clear)
+                    .ambientGlassEffect()
+                    .padding(.horizontal, 20)
                 }
                 
                 Spacer()
+                }
             }
-            // No background - let Liquid Glass handle transparency
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         cancelEdit()
                     }
-                    .fontWeight(.semibold) // iOS 26: Match Save button font weight
+                    .fontWeight(.semibold)
                     .foregroundStyle(.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        // GIF picker button
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            withAnimation(.bouncy(duration: 0.3)) {
+                                showingTaskList.toggle()
+                            }
+                        }) {
+                            Image(systemName: showingTaskList ? "checklist.checked" : "checklist")
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: showingTaskList ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                        .buttonStyle(.borderless)
+                        
+                        Button(action: {
+                            withAnimation(.bouncy(duration: 0.3)) {
+                                showingTagEditor.toggle()
+                            }
+                        }) {
+                            Image(systemName: showingTagEditor ? "tag.fill" : "tag")
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: showingTagEditor ? [.purple, .pink] : [Color.gray, Color.gray.opacity(0.6)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                        .buttonStyle(.borderless)
+                        
                         Button(action: {
                             showingGiphyPicker = true
                         }) {
                             Image(systemName: "face.smiling")
-                                .foregroundStyle(.blue)
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.blue, .cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                         }
+                        .buttonStyle(.borderless)
                         
-                        // Photo/Sticker picker button
                         PhotosPicker(
                             selection: $selectedPhoto,
                             matching: .any(of: [.images, .livePhotos]),
                             photoLibrary: .shared()
                         ) {
                             Image(systemName: "photo.badge.plus")
-                                .foregroundStyle(.blue)
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.green, .mint],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                         }
                         .buttonStyle(.borderless)
                         
@@ -129,15 +243,19 @@ struct NoteEditorView: View {
                             saveNote()
                             dismiss()
                         }
+                        .font(.headline)
                         .fontWeight(.semibold)
                         .disabled(!hasChanges && !isNewNote)
                         .foregroundStyle((hasChanges || isNewNote) ? Color.accentColor : Color.secondary)
-                        .animation(.easeInOut(duration: 0.2), value: hasChanges)
+                        .scaleEffect((hasChanges || isNewNote) ? 1.05 : 1.0)
+                        .animation(.bouncy(duration: 0.3), value: hasChanges)
                     }
                 }
             }
             .onAppear {
                 loadNoteData()
+                // Initialize tempTags from note
+                tempTags = note.tags
             }
             .onChange(of: selectedPhoto) { _, newPhoto in
                 guard let newPhoto = newPhoto else { return }
@@ -153,25 +271,18 @@ struct NoteEditorView: View {
     }
     
     private func loadNoteData() {
-        // Store the initial state before setting values that might trigger onChange
         let wasEmpty = note.title.isEmpty && note.content.isEmpty
         
         title = note.title
         content = note.content
-        
-        // Load attributed text if content exists
-        if !note.content.isEmpty {
-            attributedContent = NSAttributedString(string: note.content)
-        }
-        
+        attributedContent = NSAttributedString(string: note.content)
         isNewNote = wasEmpty
         
-        // iOS 26: Delay hasChanges reset to ensure onChange handlers are properly set
+       
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if !self.isNewNote {
                 self.hasChanges = false
             } else {
-                // For new notes, initially allow saving
                 self.hasChanges = true
             }
         }
@@ -181,16 +292,18 @@ struct NoteEditorView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Always save the note when user explicitly chooses to save
         note.title = trimmedTitle
         note.content = trimmedContent
+        // Sync tags back if user edited locally (should already be in note via add/remove, but ensure)
+        if note.tags != tempTags {
+            note.tags = tempTags
+        }
         note.updateModifiedDate()
         
         do {
             try modelContext.save()
             HapticManager.shared.success()
             
-            // Reset hasChanges after successful save
             hasChanges = false
         } catch {
             print("❌ Failed to save note: \(error)")
@@ -202,7 +315,6 @@ struct NoteEditorView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Only delete new notes that are completely empty (user never typed anything)
         if isNewNote && trimmedTitle.isEmpty && trimmedContent.isEmpty {
             modelContext.delete(note)
             do {
@@ -211,6 +323,8 @@ struct NoteEditorView: View {
                 print("❌ Failed to delete empty note: \(error)")
             }
         }
+        // Revert tempTags if cancel
+        tempTags = note.tags
         dismiss()
     }
     
@@ -240,7 +354,6 @@ struct NoteEditorView: View {
         .modelContainer(for: [Note.self, NoteCategory.self], inMemory: true)
 }
 
-// iOS 26 Enhanced Attachment view for displaying images and GIFs
 struct AttachmentView: View {
     let data: Data
     let type: String
@@ -250,12 +363,11 @@ struct AttachmentView: View {
     @State private var sizeScale: CGFloat = 1.0
     @State private var showingResizeOptions = false
     
-    // Dynamic sizing that adapts to content and user scale
     private var adaptiveSize: CGSize {
         if let uiImage = UIImage(data: data) {
             let originalSize = uiImage.size
-            let baseMaxWidth: CGFloat = 280 // Base size
-            let baseMaxHeight: CGFloat = 200 // Base size
+            let baseMaxWidth: CGFloat = 280
+            let baseMaxHeight: CGFloat = 200
             
             let maxWidth = baseMaxWidth * sizeScale
             let maxHeight = baseMaxHeight * sizeScale
@@ -270,7 +382,6 @@ struct AttachmentView: View {
         ZStack(alignment: .topTrailing) {
             if type.hasPrefix("image/") {
                 if type == "image/gif" {
-                    // Animated GIF support with proper sizing
                     AnimatedImageView(data: data)
                         .frame(width: adaptiveSize.width, height: adaptiveSize.height)
                         .clipShape(RoundedRectangle(cornerRadius: 12))

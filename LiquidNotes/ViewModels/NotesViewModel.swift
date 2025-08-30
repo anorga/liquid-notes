@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 @Observable
+@MainActor
 class NotesViewModel {
     private var modelContext: ModelContext
     
@@ -29,20 +30,13 @@ class NotesViewModel {
     
     func createNote(title: String = "", content: String = "") -> Note {
         let note = Note(title: title, content: content)
-        
-        // Ensure new notes get the highest z-index (NEVER modifies existing notes)
-        let descriptor = FetchDescriptor<Note>()
-        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+    let descriptor = FetchDescriptor<Note>()
+    let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
-        
-        // Note starts with positionX=0, positionY=0 and will be positioned by canvas initialization
-        // This NEVER moves existing notes
-        
-        print("📝 Creating new note with ID: \(note.id)")
         modelContext.insert(note)
+        
         saveContext()
-        print("✅ Note inserted and saved to context")
         return note
     }
     
@@ -54,7 +48,6 @@ class NotesViewModel {
     }
     
     func deleteNote(_ note: Note) {
-        print("🗑️ Deleting note: '\(note.title.isEmpty ? "(untitled)" : note.title)' with ID: \(note.id)")
         modelContext.delete(note)
         saveContext()
     }
@@ -89,16 +82,12 @@ class NotesViewModel {
         let maxZIndex = existingFolders.lazy.map(\.zIndex).max() ?? 0
         folder.zIndex = maxZIndex + 1
         
-        print("📁 Creating new folder with ID: \(folder.id)")
         modelContext.insert(folder)
         saveContext()
-        print("✅ Folder inserted and saved to context")
         return folder
     }
     
     func deleteFolder(_ folder: Folder) {
-        print("🗑️ Deleting folder: '\(folder.name)' with ID: \(folder.id)")
-        // Move all notes in folder to root - handle optional notes array
         if let notes = folder.notes {
             for note in notes {
                 note.folder = nil
@@ -140,8 +129,8 @@ class NotesViewModel {
         return notes.filter { note in
             !note.isArchived &&
             (note.title.localizedCaseInsensitiveContains(searchText) ||
-             note.content.localizedCaseInsensitiveContains(searchText) ||
-             note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) })
+             note.content.localizedCaseInsensitiveContains(searchText))
+             // || note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }) // Temporarily disabled
         }
     }
     
@@ -167,9 +156,9 @@ class NotesViewModel {
     private func saveContext() {
         do {
             try modelContext.save()
-            print("💾 Context saved successfully")
         } catch {
-            print("❌ Failed to save context: \(error)")
+            print("❌ NotesViewModel: Save failed with error: \(error)")
+            print("❌ NotesViewModel: Error details: \(error.localizedDescription)")
             syncStatus = .error(error.localizedDescription)
         }
     }

@@ -1,0 +1,439 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @State private var showResetConfirmation = false
+    @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
+    @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
+    @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
+    @ObservedObject private var motion = MotionManager.shared
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LiquidNotesBackground()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        themeSection
+                        archiveSection
+                        accessibilitySection
+                        aboutSection
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
+        }
+        .alert("Reset Settings", isPresented: $showResetConfirmation) {
+            Button("Reset", role: .destructive) {
+                themeManager.resetToDefaults()
+                HapticManager.shared.success()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will reset all settings to their default values.")
+        }
+    }
+
+    private var depthLabel: String {
+        switch themeManager.noteGlassDepth {
+        case ..<0.45: return "Subtle"
+        case ..<0.75: return "Balanced"
+        case ..<1.0: return "Rich"
+        default: return "Vivid"
+        }
+    }
+
+    private var intensityLabel: String {
+        let v = themeManager.glassIntensity
+        switch v {
+        case ..<0.25: return "Airy"
+        case ..<0.55: return "Balanced"
+        case ..<0.8: return "Lush"
+        default: return "Vivid"
+        }
+    }
+
+    private var archiveSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Notes Behavior", systemImage: "archivebox")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Show Archived Inline",
+                    description: "Display archived notes faded at the end",
+                    icon: "eye",
+                    isOn: $showArchivedInPlace
+                )
+                Divider().padding(.horizontal)
+                SettingToggle(
+                    title: "Swipe Hints",
+                    description: "Show subtle arrows on horizontal swipe",
+                    icon: "arrow.left.and.right",
+                    isOn: $enableSwipeAffordance
+                )
+                Divider().padding(.horizontal)
+                SettingToggle(
+                    title: "Archive Undo",
+                    description: "Offer undo after archiving",
+                    icon: "clock.arrow.circlepath",
+                    isOn: $enableArchiveUndo
+                )
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+    
+    private var themeSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Appearance", systemImage: "paintbrush.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                // Live preview card
+                Text("Preview")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .center) {
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, style: .continuous)
+                            .fill(Color.clear)
+                            .refinedClearGlass(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, intensity: themeManager.noteGlassDepth)
+                            .frame(width: 160, height: 110)
+                            .overlay(alignment: .topLeading) {
+                                Text("Sample")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+                                    .padding(8)
+                            }
+                            .overlay(alignment: .bottomTrailing) {
+                                if themeManager.noteStyle == 1 {
+                                    Image(systemName: "sparkles")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .padding(6)
+                                }
+                            }
+                            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.05 : 0.18), radius: themeManager.minimalMode ? 4 : 12, x: 0, y: themeManager.minimalMode ? 2 : 6)
+                            // Overlay stroke removed; unified border handled by refinedClearGlass
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 4)
+
+                Text("Glass Theme")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 12) {
+                    ForEach(GlassTheme.allCases, id: \.self) { theme in
+                        ThemeButton(
+                            theme: theme,
+                            isSelected: themeManager.currentTheme == theme
+                        ) {
+                            themeManager.applyTheme(theme)
+                            HapticManager.shared.buttonTapped()
+                        }
+                    }
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Glass Intensity")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(intensityLabel)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.tertiary.opacity(0.2), in: Capsule())
+                }
+                Slider(value: Binding(
+                    get: { themeManager.glassIntensity },
+                    set: { newVal in themeManager.glassIntensity = newVal; HapticManager.shared.buttonTapped() }
+                ), in: 0...1) {
+                    Text("Glass Intensity")
+                }
+                .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                
+                HStack {
+                    Text("Subtle")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    Text("Opaque")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Divider().padding(.vertical, 4)
+                SettingToggle(
+                    title: "Minimal Mode",
+                    description: "Flatter surfaces & lighter shadows",
+                    icon: "rectangle.compress.vertical",
+                    isOn: $themeManager.minimalMode
+                )
+                SettingToggle(
+                    title: "Animate Background",
+                    description: "Soft shifts in ambient gradient",
+                    icon: "sparkles",
+                    isOn: $themeManager.animateGradients
+                )
+                SettingToggle(
+                    title: "Note Parallax",
+                    description: "Subtle device tilt on notes",
+                    icon: "gyroscope",
+                    isOn: $themeManager.noteParallax
+                )
+                SettingToggle(
+                    title: "Dynamic Tag Colors",
+                    description: "Cycle tag hues subtly",
+                    icon: "tag",
+                    isOn: $themeManager.dynamicTagCycling
+                )
+                SettingToggle(
+                    title: "Solid Tag Accents",
+                    description: "Use solid fills instead of gradients",
+                    icon: "square.filled.on.square",
+                    isOn: $themeManager.tagAccentSolid
+                )
+                SettingToggle(
+                    title: "Pin Theme Picker",
+                    description: "Keep quick theme overlay open",
+                    icon: "pin",
+                    isOn: $themeManager.themeOverlayPinned
+                )
+                Divider().padding(.vertical, 6)
+                Text("Note Style")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Note Style", selection: $themeManager.noteStyle) {
+                    Text("Rounded").tag(0)
+                    Text("Squircle").tag(1)
+                }
+                .pickerStyle(.segmented)
+                DisclosureGroup(isExpanded: $themeManager.showAdvancedGlass) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Glass Depth")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(depthLabel)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        Slider(value: $themeManager.noteGlassDepth, in: 0.3...1.2, step: 0.05) { Text("Glass Depth") }
+                            .tint(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                        HStack {
+                            Text("Glass Opacity")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int(themeManager.glassOpacity * 100))%")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        Slider(value: $themeManager.glassOpacity, in: 0.3...0.95, step: 0.05) { Text("Glass Opacity") }
+                            .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("Advanced Glass")
+                        Spacer()
+                        Image(systemName: themeManager.showAdvancedGlass ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+    
+    private var accessibilitySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Accessibility", systemImage: "accessibility")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "High Contrast",
+                    description: "Increase contrast for better visibility",
+                    icon: "circle.lefthalf.filled",
+                    isOn: $themeManager.highContrast
+                )
+                
+                Divider()
+                    .padding(.horizontal)
+                
+                SettingToggle(
+                    title: "Reduce Motion",
+                    description: "Minimize animations and transitions",
+                    icon: "figure.walk.motion",
+                    isOn: $themeManager.reduceMotion
+                )
+                .onChange(of: themeManager.reduceMotion) { _, newValue in
+                    MotionManager.shared.syncWithReduceMotion(newValue)
+                }
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+    
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("About", systemImage: "info.circle.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Version")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("1.0.0")
+                        .fontWeight(.medium)
+                }
+                
+                Divider()
+                
+                Button(action: {
+                    showResetConfirmation = true
+                    HapticManager.shared.buttonTapped()
+                }) {
+                    HStack {
+                        Label("Reset All Settings", systemImage: "arrow.counterclockwise")
+                            .foregroundStyle(.red)
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 8)
+        }
+        .padding()
+        .background(.clear)
+        .ambientGlassEffect()
+    }
+}
+
+struct ThemeButton: View {
+    let theme: GlassTheme
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            colors: theme.primaryGradient.map { $0.opacity(1.0) },
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 60)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                isSelected ? Color.accentColor : Color.clear,
+                                lineWidth: 3
+                            )
+                    )
+                    .shadow(
+                        color: .black.opacity(theme.shadowIntensity),
+                        radius: isSelected ? 8 : 4,
+                        x: 0,
+                        y: isSelected ? 4 : 2
+                    )
+                
+                Text(theme.rawValue)
+                    .font(.caption)
+                    .fontWeight(isSelected ? .semibold : .medium)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.bouncy(duration: 0.3), value: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SettingToggle: View {
+    let title: String
+    let description: String
+    let icon: String
+    @Binding var isOn: Bool
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: isOn ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 32)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .onChange(of: isOn) { _, _ in
+                    HapticManager.shared.buttonTapped()
+                }
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+#Preview {
+    SettingsView()
+}

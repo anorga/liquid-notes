@@ -1,16 +1,10 @@
-//
-//  PinnedNotesView.swift
-//  LiquidNotes
-//
-//  Created by Christian Anorga on 8/18/25.
-//
 
 import SwiftUI
 import SwiftData
 
 struct PinnedNotesView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Note> { $0.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse) 
+    @Query(filter: #Predicate<Note> { note in note.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse) 
     private var favoritedNotes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
@@ -23,7 +17,6 @@ struct PinnedNotesView: View {
                 LiquidNotesBackground()
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    // Custom large left-aligned title
                     HStack {
                         Text("Favorites")
                             .font(.largeTitle)
@@ -35,7 +28,6 @@ struct PinnedNotesView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                    // Spatial Canvas for Favorited Notes
                 if favoritedNotes.isEmpty {
                     VStack {
                         Spacer()
@@ -53,10 +45,9 @@ struct PinnedNotesView: View {
                     }
                     .padding()
                 } else {
-                    // Use SpatialCanvasView for favorites with moveable notes
                     SpatialCanvasView(
                         notes: favoritedNotes,
-                        folders: [], // No folders in favorites view
+                        folders: [],
                         onTap: { note in
                             selectedNote = note
                             showingNoteEditor = true
