@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension View {
     func liquidGlassBackground() -> some View {
@@ -305,7 +306,25 @@ struct GlassDepthLayer {
     static let pronounced = GlassDepthLayer(opacity: 0.15, blur: 4, offset: CGSize(width: 0, height: 2), tint: .white)
 }
 
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+    
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
 extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+    
     func modernGlassCard() -> some View {
         self.liquidGlassEffect(.floating, in: RoundedRectangle(cornerRadius: 16))
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)

@@ -8,6 +8,7 @@
 import SwiftData
 import Foundation
 import UIKit
+import SwiftUI
 
 @Model
 final class Note {
@@ -25,8 +26,13 @@ final class Note {
     var isArchived: Bool = false
     var isFavorited: Bool = false
     var tags: [String] = []
-    var attachments: [Data] = [] // Store image/GIF data
-    var attachmentTypes: [String] = [] // Store MIME types
+    var attachments: [Data] = []
+    var attachmentTypes: [String] = []
+    
+    var tasks: [TaskItem] = []
+    var dueDate: Date?
+    var priority: NotePriority = .normal
+    var progress: Double = 0.0
     
     var category: NoteCategory?
     var folder: Folder?
@@ -64,5 +70,87 @@ final class Note {
         attachments.remove(at: index)
         attachmentTypes.remove(at: index)
         updateModifiedDate()
+    }
+    
+    func addTask(_ text: String) {
+        let task = TaskItem(text: text)
+        tasks.append(task)
+        updateProgress()
+        updateModifiedDate()
+    }
+    
+    func toggleTask(at index: Int) {
+        guard index < tasks.count else { return }
+        tasks[index].isCompleted.toggle()
+        updateProgress()
+        updateModifiedDate()
+    }
+    
+    func removeTask(at index: Int) {
+        guard index < tasks.count else { return }
+        tasks.remove(at: index)
+        updateProgress()
+        updateModifiedDate()
+    }
+    
+    func updateProgress() {
+        guard !tasks.isEmpty else {
+            progress = 0
+            return
+        }
+        let completedCount = tasks.filter { $0.isCompleted }.count
+        progress = Double(completedCount) / Double(tasks.count)
+    }
+    
+    func addTag(_ tag: String) {
+        if !tags.contains(tag) {
+            tags.append(tag)
+            updateModifiedDate()
+        }
+    }
+    
+    func removeTag(_ tag: String) {
+        tags.removeAll { $0 == tag }
+        updateModifiedDate()
+    }
+}
+
+@Model
+final class TaskItem {
+    var id: UUID = UUID()
+    var text: String = ""
+    var isCompleted: Bool = false
+    var createdDate: Date = Date()
+    
+    init(text: String, isCompleted: Bool = false) {
+        self.id = UUID()
+        self.text = text
+        self.isCompleted = isCompleted
+        self.createdDate = Date()
+    }
+}
+
+enum NotePriority: String, CaseIterable, Codable {
+    case low = "low"
+    case normal = "normal"
+    case high = "high"
+    case urgent = "urgent"
+    
+    var color: Color {
+        switch self {
+        case .low: return .blue.opacity(0.6)
+        case .normal: return .clear
+        case .high: return .orange.opacity(0.6)
+        case .urgent: return .red.opacity(0.6)
+        }
+    }
+    
+    var iconName: String {
+        switch self {
+        case .low: return "arrow.down.circle"
+        case .normal: return "minus.circle"
+        case .high: return "arrow.up.circle"
+        case .urgent: return "exclamationmark.circle.fill"
+        }
     }
 }

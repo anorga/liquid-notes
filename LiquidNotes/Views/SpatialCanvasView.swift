@@ -91,13 +91,75 @@ struct GridNoteCard: View {
     @State private var noteSize = CGSize(width: 180, height: 140)
     @State private var isResizing = false
     @State private var dragStartLocation = CGPoint.zero
+    @State private var swipeOffset: CGFloat = 0
+    @State private var showSwipeActions = false
     
     var body: some View {
         ZStack {
+            if swipeOffset < -50 {
+                HStack(spacing: 0) {
+                    Spacer()
+                    
+                    VStack {
+                        Image(systemName: "star.fill")
+                            .font(.title2)
+                            .foregroundStyle(.yellow)
+                        Text("Favorite")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 80, height: noteSize.height)
+                    .background(
+                        LinearGradient(
+                            colors: [.yellow, .orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(20, corners: [.topRight, .bottomRight])
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
+                }
+                .frame(width: noteSize.width, height: noteSize.height)
+            }
+            
+            if swipeOffset > 50 {
+                HStack(spacing: 0) {
+                    VStack {
+                        Image(systemName: "archivebox.fill")
+                            .font(.title2)
+                        Text("Archive")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 80, height: noteSize.height)
+                    .background(
+                        LinearGradient(
+                            colors: [.blue, .cyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(20, corners: [.topLeft, .bottomLeft])
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                    
+                    Spacer()
+                }
+                .frame(width: noteSize.width, height: noteSize.height)
+            }
+            
             RoundedRectangle(cornerRadius: 20)
                 .fill(.clear)
                 .frame(width: noteSize.width, height: noteSize.height)
                 .modernGlassCard()
+                .offset(x: swipeOffset)
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "arrow.up.backward.and.arrow.down.forward")
                         .font(.caption2)
@@ -150,17 +212,24 @@ struct GridNoteCard: View {
                     
                     Spacer(minLength: 8)
                     
-                    if note.isFavorited {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.yellow, .orange],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                    HStack(spacing: 6) {
+                        if !note.tasks.isEmpty {
+                            ProgressCircle(progress: note.progress)
+                                .frame(width: 24, height: 24)
+                        }
+                        
+                        if note.isFavorited {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.yellow, .orange],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
-                            .font(.system(size: 14, weight: .medium))
-                            .shadow(color: .yellow.opacity(0.3), radius: 2, x: 0, y: 1)
+                                .font(.system(size: 14, weight: .medium))
+                                .shadow(color: .yellow.opacity(0.3), radius: 2, x: 0, y: 1)
+                        }
                     }
                 }
                 
@@ -195,7 +264,7 @@ struct GridNoteCard: View {
                         .font(.callout)
                         .fontWeight(.regular)
                         .foregroundStyle(.primary.opacity(0.8))
-                        .lineLimit(note.attachments.isEmpty ? 5 : 3)
+                        .lineLimit(note.attachments.isEmpty && note.tags.isEmpty ? 5 : 3)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(2)
                         .padding(.top, 2)
@@ -204,6 +273,19 @@ struct GridNoteCard: View {
                         .font(.callout)
                         .foregroundStyle(.tertiary)
                         .italic()
+                }
+                
+                if !note.tags.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(note.tags, id: \.self) { tag in
+                                TagView(tag: tag, color: .blue)
+                                    .scaleEffect(0.9)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 28)
+                    .padding(.top, 4)
                 }
                 
                 Spacer(minLength: 8)
@@ -240,21 +322,42 @@ struct GridNoteCard: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+        .simultaneousGesture(
+            DragGesture()
+                .onChanged { value in
+                    if abs(value.translation.width) > abs(value.translation.height) * 2 {
+                        swipeOffset = value.translation.width
+                        showSwipeActions = true
+                    }
+                }
+                .onEnded { value in
+                    withAnimation(.bouncy(duration: 0.4)) {
+                        if swipeOffset < -100 {
+                            onFavorite()
+                            HapticManager.shared.success()
+                        } else if swipeOffset > 100 {
+                            note.isArchived = true
+                            HapticManager.shared.success()
+                        }
+                        swipeOffset = 0
+                        showSwipeActions = false
+                    }
+                }
+        )
         .gesture(
             DragGesture(minimumDistance: 5)
                 .onChanged { value in
-                    guard !isResizing else { return }
+                    guard !isResizing && !showSwipeActions else { return }
                     isDragging = true
                     
-                    // Prevent left boundary overflow - constrain X to be non-negative
                     let rawConstrainedX = value.translation.width * 0.6
-                    let constrainedX = max(-10, rawConstrainedX)  // Allow small negative offset but prevent major left overflow
+                    let constrainedX = max(-10, rawConstrainedX)
                     let constrainedY = value.translation.height * 0.9  
                     
                     dragOffset = CGSize(width: constrainedX, height: constrainedY)
                 }
                 .onEnded { value in
-                    guard !isResizing else { return }
+                    guard !isResizing && !showSwipeActions else { return }
                     isDragging = false
                     
                     // Check if this was a move request

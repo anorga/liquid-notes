@@ -14,6 +14,7 @@ struct MainTabView: View {
     @State private var showingAddOptions = false
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    @State private var showingSettings = false
     
     var body: some View {
         ZStack {
@@ -38,7 +39,19 @@ struct MainTabView: View {
             
             VStack {
                 HStack {
+                    Button(action: { showingSettings = true }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .padding(12)
+                    }
+                    .interactiveGlassButton()
+                    .padding(.leading, 20)
+                    .padding(.top, 20)
+                    
                     Spacer()
+                    
                     Button(action: handleAddAction) {
                         Image(systemName: "plus")
                             .font(.title2)
@@ -64,6 +77,9 @@ struct MainTabView: View {
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
     }
     

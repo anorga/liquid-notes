@@ -24,6 +24,8 @@ struct NoteEditorView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var showingPhotoPicker = false
     @State private var showingGiphyPicker = false
+    @State private var showingTaskList = false
+    @State private var showingTagEditor = false
     
     var body: some View {
         NavigationStack {
@@ -65,6 +67,48 @@ struct NoteEditorView: View {
                 .background(.clear)
                 .modernGlassCard()
                 .padding(.horizontal, 20)
+                
+                if showingTaskList {
+                    TaskListView(
+                        tasks: .constant(note.tasks),
+                        onToggle: { index in
+                            note.toggleTask(at: index)
+                            hasChanges = true
+                        },
+                        onDelete: { index in
+                            note.removeTask(at: index)
+                            hasChanges = true
+                        },
+                        onAdd: { text in
+                            note.addTask(text)
+                            hasChanges = true
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+                
+                if showingTagEditor {
+                    TagListView(
+                        tags: .constant(note.tags),
+                        onAdd: { tag in
+                            note.addTag(tag)
+                            hasChanges = true
+                        },
+                        onRemove: { tag in
+                            note.removeTag(tag)
+                            hasChanges = true
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                }
                 
                 if !note.attachments.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
@@ -126,6 +170,40 @@ struct NoteEditorView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
+                        Button(action: {
+                            withAnimation(.bouncy(duration: 0.3)) {
+                                showingTaskList.toggle()
+                            }
+                        }) {
+                            Image(systemName: showingTaskList ? "checklist.checked" : "checklist")
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: showingTaskList ? [.green, .mint] : [.secondary, .tertiary],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                        .buttonStyle(.borderless)
+                        
+                        Button(action: {
+                            withAnimation(.bouncy(duration: 0.3)) {
+                                showingTagEditor.toggle()
+                            }
+                        }) {
+                            Image(systemName: showingTagEditor ? "tag.fill" : "tag")
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: showingTagEditor ? [.purple, .pink] : [.secondary, .tertiary],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                        .buttonStyle(.borderless)
+                        
                         Button(action: {
                             showingGiphyPicker = true
                         }) {
