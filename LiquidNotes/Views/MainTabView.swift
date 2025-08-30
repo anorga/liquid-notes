@@ -15,21 +15,19 @@ struct MainTabView: View {
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingSettings = false
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @State private var showThemeOverlay = false
     
     var body: some View {
-        ZStack {
+    ZStack {
             TabView(selection: $selectedTab) {
-                Tab("Notes", systemImage: "note.text", value: 0) {
-                    SpatialTabView()
-                }
+                Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView() }
                 
-                Tab("Favorites", systemImage: "star.fill", value: 1) {
-                    PinnedNotesView()
-                }
+                Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
                 
-                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) {
-                    SearchView()
-                }
+                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
+                
+                Tab("Settings", systemImage: "gearshape.fill", value: 3) { SettingsView() }
             }
             .tabViewStyle(.sidebarAdaptable)
             .toolbarBackgroundVisibility(.hidden, for: .tabBar)
@@ -39,20 +37,8 @@ struct MainTabView: View {
             
             VStack {
                 HStack {
-                    Button(action: { showingSettings = true }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                            .padding(12)
-                    }
-                    .interactiveGlassButton()
-                    .padding(.leading, 20)
-                    .padding(.top, 20)
-                    
                     Spacer()
-                    
-                    Button(action: handleAddAction) {
+                    Button(action: { handleAddAction() }) {
                         Image(systemName: "plus")
                             .font(.title2)
                             .fontWeight(.medium)
@@ -66,6 +52,43 @@ struct MainTabView: View {
                 Spacer()
             }
         }
+        .overlay(alignment: .center) {
+            if showThemeOverlay {
+                VStack(spacing: 16) {
+                    Text("Quick Theme")
+                        .font(.headline)
+                    HStack(spacing: 10) {
+                        ForEach(GlassTheme.allCases, id: \.self) { theme in
+                            Circle()
+                                .fill(LinearGradient(colors: theme.primaryGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Circle().stroke(themeManager.currentTheme == theme ? Color.primary : Color.clear, lineWidth: 3)
+                                )
+                                .onTapGesture {
+                                    themeManager.applyTheme(theme)
+                                    HapticManager.shared.buttonTapped()
+                                }
+                        }
+                    }
+                    Button("Close") { withAnimation(.spring()) { showThemeOverlay = false } }
+                        .font(.caption)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .padding(24)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                .shadow(radius: 20)
+                .padding(40)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .contentShape(Rectangle())
+        .onLongPressGesture(minimumDuration: 0.7) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) { showThemeOverlay = true }
+            HapticManager.shared.buttonTapped()
+        }
         .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .hidden) {
             Button("Note", action: createNewNote)
             Button("Folder", action: createNewFolder)
@@ -77,9 +100,6 @@ struct MainTabView: View {
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
                 .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
         }
     }
     
@@ -117,28 +137,19 @@ struct MainTabView: View {
     
     private func setupViewModel() {
         if notesViewModel == nil {
-            print("🔧 Setting up NotesViewModel with modelContext: \(modelContext)")
             notesViewModel = NotesViewModel(modelContext: modelContext)
-            print("✅ NotesViewModel setup complete")
         }
     }
     
     private func createNewNote() {
-        print("🚀 MainTabView: createNewNote called")
         HapticManager.shared.noteCreated()
-        
-        guard let viewModel = notesViewModel else { 
-            print("❌ MainTabView: NotesViewModel is nil!")
-            return 
-        }
-        
-        print("📝 MainTabView: Creating note with viewModel")
+    guard let viewModel = notesViewModel else { return }
         let newNote = viewModel.createNote()
-        print("✅ MainTabView: Note created with ID: \(newNote.id)")
-        
-        // Add a small delay to ensure the note is properly saved before showing editor
+        do {
+            try modelContext.save()
+        } catch {
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            print("📱 MainTabView: Setting selectedNote to show editor")
             self.selectedNote = newNote
         }
     }

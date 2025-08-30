@@ -26,6 +26,7 @@ struct NoteEditorView: View {
     @State private var showingGiphyPicker = false
     @State private var showingTaskList = false
     @State private var showingTagEditor = false
+    @State private var tempTags: [String] = []
     
     var body: some View {
         NavigationStack {
@@ -70,7 +71,7 @@ struct NoteEditorView: View {
                 
                 if showingTaskList {
                     TaskListView(
-                        tasks: .constant(note.tasks),
+                        tasks: .constant([]), // note.tasks), // Temporarily disabled
                         onToggle: { index in
                             note.toggleTask(at: index)
                             hasChanges = true
@@ -93,13 +94,15 @@ struct NoteEditorView: View {
                 
                 if showingTagEditor {
                     TagListView(
-                        tags: .constant(note.tags),
+                        tags: $tempTags,
                         onAdd: { tag in
                             note.addTag(tag)
+                            tempTags = note.tags
                             hasChanges = true
                         },
                         onRemove: { tag in
                             note.removeTag(tag)
+                            tempTags = note.tags
                             hasChanges = true
                         }
                     )
@@ -179,7 +182,7 @@ struct NoteEditorView: View {
                                 .font(.title3)
                                 .foregroundStyle(
                                     LinearGradient(
-                                        colors: showingTaskList ? [.green, .mint] : [.secondary, .tertiary],
+                                        colors: showingTaskList ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -196,7 +199,7 @@ struct NoteEditorView: View {
                                 .font(.title3)
                                 .foregroundStyle(
                                     LinearGradient(
-                                        colors: showingTagEditor ? [.purple, .pink] : [.secondary, .tertiary],
+                                        colors: showingTagEditor ? [.purple, .pink] : [Color.gray, Color.gray.opacity(0.6)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -251,6 +254,8 @@ struct NoteEditorView: View {
             }
             .onAppear {
                 loadNoteData()
+                // Initialize tempTags from note
+                tempTags = note.tags
             }
             .onChange(of: selectedPhoto) { _, newPhoto in
                 guard let newPhoto = newPhoto else { return }
@@ -289,6 +294,10 @@ struct NoteEditorView: View {
         
         note.title = trimmedTitle
         note.content = trimmedContent
+        // Sync tags back if user edited locally (should already be in note via add/remove, but ensure)
+        if note.tags != tempTags {
+            note.tags = tempTags
+        }
         note.updateModifiedDate()
         
         do {
@@ -314,6 +323,8 @@ struct NoteEditorView: View {
                 print("❌ Failed to delete empty note: \(error)")
             }
         }
+        // Revert tempTags if cancel
+        tempTags = note.tags
         dismiss()
     }
     

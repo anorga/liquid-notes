@@ -12,34 +12,34 @@ enum GlassTheme: String, CaseIterable {
     var primaryGradient: [Color] {
         switch self {
         case .clear:
-            return [.white.opacity(0.1), .clear]
+            return [.white.opacity(0.4), .gray.opacity(0.2)]
         case .warm:
-            return [.orange.opacity(0.15), .pink.opacity(0.08)]
+            return [.orange.opacity(0.35), .pink.opacity(0.25)]
         case .cool:
-            return [.blue.opacity(0.12), .cyan.opacity(0.06)]
+            return [.blue.opacity(0.32), .cyan.opacity(0.22)]
         case .vibrant:
-            return [.purple.opacity(0.15), .pink.opacity(0.1)]
+            return [.purple.opacity(0.38), .pink.opacity(0.28)]
         case .midnight:
-            return [.indigo.opacity(0.2), .black.opacity(0.1)]
+            return [.indigo.opacity(0.45), .black.opacity(0.25)]
         case .sunset:
-            return [.orange.opacity(0.18), .red.opacity(0.08)]
+            return [.orange.opacity(0.42), .red.opacity(0.28)]
         }
     }
     
     var backgroundGradient: [Color] {
         switch self {
         case .clear:
-            return [.clear, .gray.opacity(0.02)]
+            return [.gray.opacity(0.1), .gray.opacity(0.06)]
         case .warm:
-            return [.orange.opacity(0.05), .yellow.opacity(0.03)]
+            return [.orange.opacity(0.12), .yellow.opacity(0.08)]
         case .cool:
-            return [.blue.opacity(0.04), .mint.opacity(0.02)]
+            return [.blue.opacity(0.1), .mint.opacity(0.06)]
         case .vibrant:
-            return [.purple.opacity(0.06), .pink.opacity(0.04)]
+            return [.purple.opacity(0.14), .pink.opacity(0.1)]
         case .midnight:
-            return [.indigo.opacity(0.08), .purple.opacity(0.04)]
+            return [.indigo.opacity(0.18), .purple.opacity(0.12)]
         case .sunset:
-            return [.orange.opacity(0.07), .red.opacity(0.03)]
+            return [.orange.opacity(0.16), .red.opacity(0.1)]
         }
     }
     
@@ -98,7 +98,7 @@ class ThemeManager: ObservableObject {
         self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .clear
         
         let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
-        self.glassOpacity = savedOpacity == 0 ? 0.7 : savedOpacity
+        self.glassOpacity = savedOpacity == 0 ? 0.85 : savedOpacity
         
         self.reduceMotion = UserDefaults.standard.bool(forKey: "reduceMotion")
         self.highContrast = UserDefaults.standard.bool(forKey: "highContrast")
@@ -119,7 +119,7 @@ class ThemeManager: ObservableObject {
     func resetToDefaults() {
         withAnimation(.easeInOut(duration: 0.5)) {
             currentTheme = .clear
-            glassOpacity = 0.7
+            glassOpacity = 0.85
             reduceMotion = false
             highContrast = false
         }

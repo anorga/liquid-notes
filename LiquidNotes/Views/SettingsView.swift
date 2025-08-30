@@ -2,8 +2,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var themeManager = ThemeManager.shared
-    @Environment(\.dismiss) private var dismiss
     @State private var showResetConfirmation = false
+    @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
+    @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
+    @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
     
     var body: some View {
         NavigationStack {
@@ -13,6 +15,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         themeSection
+                        archiveSection
                         accessibilitySection
                         aboutSection
                     }
@@ -21,14 +24,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
         }
         .alert("Reset Settings", isPresented: $showResetConfirmation) {
             Button("Reset", role: .destructive) {
@@ -39,6 +34,40 @@ struct SettingsView: View {
         } message: {
             Text("This will reset all settings to their default values.")
         }
+    }
+
+    private var archiveSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Notes Behavior", systemImage: "archivebox")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Show Archived Inline",
+                    description: "Display archived notes faded at the end",
+                    icon: "eye",
+                    isOn: $showArchivedInPlace
+                )
+                Divider().padding(.horizontal)
+                SettingToggle(
+                    title: "Swipe Hints",
+                    description: "Show subtle arrows on horizontal swipe",
+                    icon: "arrow.left.and.right",
+                    isOn: $enableSwipeAffordance
+                )
+                Divider().padding(.horizontal)
+                SettingToggle(
+                    title: "Archive Undo",
+                    description: "Offer undo after archiving",
+                    icon: "clock.arrow.circlepath",
+                    isOn: $enableArchiveUndo
+                )
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
     }
     
     private var themeSection: some View {
@@ -246,7 +275,7 @@ struct SettingToggle: View {
                 .font(.title3)
                 .foregroundStyle(
                     LinearGradient(
-                        colors: isOn ? [.green, .mint] : [.secondary, .tertiary],
+                        colors: isOn ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )

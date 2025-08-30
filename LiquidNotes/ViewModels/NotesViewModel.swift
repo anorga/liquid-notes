@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 
 @Observable
+@MainActor
 class NotesViewModel {
     private var modelContext: ModelContext
     
@@ -29,13 +30,12 @@ class NotesViewModel {
     
     func createNote(title: String = "", content: String = "") -> Note {
         let note = Note(title: title, content: content)
-        
-        let descriptor = FetchDescriptor<Note>()
-        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+    let descriptor = FetchDescriptor<Note>()
+    let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
-        
         modelContext.insert(note)
+        
         saveContext()
         return note
     }
@@ -129,8 +129,8 @@ class NotesViewModel {
         return notes.filter { note in
             !note.isArchived &&
             (note.title.localizedCaseInsensitiveContains(searchText) ||
-             note.content.localizedCaseInsensitiveContains(searchText) ||
-             note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) })
+             note.content.localizedCaseInsensitiveContains(searchText))
+             // || note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }) // Temporarily disabled
         }
     }
     
@@ -157,6 +157,8 @@ class NotesViewModel {
         do {
             try modelContext.save()
         } catch {
+            print("❌ NotesViewModel: Save failed with error: \(error)")
+            print("❌ NotesViewModel: Error details: \(error.localizedDescription)")
             syncStatus = .error(error.localizedDescription)
         }
     }

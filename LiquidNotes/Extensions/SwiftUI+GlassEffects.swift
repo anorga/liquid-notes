@@ -16,6 +16,7 @@ extension View {
     }
     
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
+        let theme = ThemeManager.shared
         if #available(iOS 26.0, *) {
             switch variant {
             case .regular:
@@ -25,48 +26,52 @@ extension View {
                         
                         shape.fill(
                             LinearGradient(
-                                colors: [
-                                    .white.opacity(0.08),     // Top inner highlight
-                                    .clear,                    // Middle transparent
-                                    .clear                     // Bottom transparent
-                                ],
-                                startPoint: .top,
-                                endPoint: .center
+                                colors: theme.currentTheme.primaryGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.6)
+                        )
+                        if theme.highContrast {
+                            shape.stroke(Color.primary.opacity(0.6), lineWidth: 2)
+                        } else {
+                            shape.stroke(
+                                LinearGradient(
+                                    colors: [
+                                        .white.opacity(0.35),
+                                        .white.opacity(0.08),
+                                        .black.opacity(0.12)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 1
                             )
-                        )
-                        
-                        // Apple-style adaptive border that changes with light/dark mode
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.3),      // Top highlight
-                                    .white.opacity(0.1),      // Middle
-                                    .black.opacity(0.1)       // Bottom shadow
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1.0
-                        )
+                        }
                     }
                 ))
             case .thin:
                 return AnyView(self.background(
                     ZStack {
                         shape.fill(Color.clear)
-                        shape.stroke(.primary.opacity(0.15), lineWidth: 0.5)
+                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.5) : .primary.opacity(0.15), lineWidth: theme.highContrast ? 1 : 0.5)
                     }
                 ))
             case .thick:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.ultraThinMaterial.opacity(0.05))
+                        shape.fill(
+                            LinearGradient(
+                                colors: theme.currentTheme.primaryGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.55)
+                        )
                         shape.stroke(
                             LinearGradient(
                                 colors: [
-                                    .white.opacity(0.4),
-                                    .white.opacity(0.1),
-                                    .black.opacity(0.15)
+                                    .white.opacity(0.45),
+                                    .white.opacity(0.15),
+                                    .black.opacity(0.18)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -78,41 +83,31 @@ extension View {
             case .ultra:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.clear)
                         shape.fill(
                             LinearGradient(
-                                colors: [
-                                    .white.opacity(0.12),
-                                    .clear,
-                                    .black.opacity(0.02)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+                                colors: theme.currentTheme.primaryGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.4)
                         )
-                        shape.stroke(.white.opacity(0.25), lineWidth: 0.8)
+                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.7) : .white.opacity(0.25), lineWidth: theme.highContrast ? 1.2 : 0.8)
                     }
                 ))
             case .floating:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.ultraThinMaterial.opacity(0.08))
                         shape.fill(
-                            RadialGradient(
-                                colors: [
-                                    .white.opacity(0.1),
-                                    .clear
-                                ],
-                                center: .topLeading,
-                                startRadius: 0,
-                                endRadius: 100
-                            )
+                            LinearGradient(
+                                colors: theme.currentTheme.primaryGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.7)
                         )
                         shape.stroke(
                             LinearGradient(
                                 colors: [
-                                    .white.opacity(0.35),
-                                    .white.opacity(0.05)
+                                    .white.opacity(0.4),
+                                    .white.opacity(0.08)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -124,24 +119,19 @@ extension View {
             case .elevated:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.regularMaterial.opacity(0.1))
                         shape.fill(
                             LinearGradient(
-                                colors: [
-                                    .white.opacity(0.15),
-                                    .white.opacity(0.02),
-                                    .black.opacity(0.05)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+                                colors: theme.currentTheme.primaryGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.75)
                         )
                         shape.stroke(
                             LinearGradient(
                                 colors: [
-                                    .white.opacity(0.5),
-                                    .white.opacity(0.2),
-                                    .black.opacity(0.1)
+                                    .white.opacity(0.55),
+                                    .white.opacity(0.25),
+                                    .black.opacity(0.12)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -153,42 +143,32 @@ extension View {
             case .ambient:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.thinMaterial.opacity(0.12))
                         shape.fill(
-                            AngularGradient(
-                                colors: [
-                                    .blue.opacity(0.03),
-                                    .purple.opacity(0.02),
-                                    .pink.opacity(0.03),
-                                    .blue.opacity(0.03)
-                                ],
-                                center: .center
-                            )
+                            LinearGradient(
+                                colors: theme.currentTheme.backgroundGradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ).opacity(theme.glassOpacity * 0.5)
                         )
-                        shape.stroke(.white.opacity(0.2), lineWidth: 0.8)
+                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.6) : .white.opacity(0.2), lineWidth: 0.8)
                     }
                 ))
             case .vibrant:
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.ultraThinMaterial.opacity(0.15))
                         shape.fill(
                             LinearGradient(
-                                colors: [
-                                    .white.opacity(0.2),
-                                    .blue.opacity(0.02),
-                                    .purple.opacity(0.02)
-                                ],
+                                colors: theme.currentTheme.primaryGradient,
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
-                            )
+                            ).opacity(theme.glassOpacity)
                         )
                         shape.stroke(
                             LinearGradient(
                                 colors: [
-                                    .white.opacity(0.4),
-                                    .blue.opacity(0.1),
-                                    .purple.opacity(0.1)
+                                    .white.opacity(0.45),
+                                    .blue.opacity(0.12),
+                                    .purple.opacity(0.12)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -202,34 +182,29 @@ extension View {
             // iOS 17+: Apple-style glass borders with system adaptation
             return AnyView(self.background(
                 ZStack {
-                    shape.fill(Color.clear)  // Pure transparency
-                    
-                    // Inner highlight for depth (adapts to light/dark mode)
                     shape.fill(
                         LinearGradient(
-                            colors: [
-                                .primary.opacity(0.06),    // Top highlight (adapts to theme)
-                                .clear,                     // Middle transparent
-                                .clear                      // Bottom transparent
-                            ],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                    )
-                    
-                    // Multi-layer border system like Apple's tab bar glass
-                    shape.stroke(
-                        LinearGradient(
-                            colors: [
-                                .primary.opacity(0.2),     // Adapts to light/dark mode
-                                .primary.opacity(0.05),    // Middle
-                                .secondary.opacity(0.1)    // Bottom definition
-                            ],
+                            colors: theme.currentTheme.primaryGradient,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.8
+                        ).opacity(theme.glassOpacity * 0.65)
                     )
+                    if theme.highContrast {
+                        shape.stroke(Color.primary.opacity(0.55), lineWidth: 1.2)
+                    } else {
+                        shape.stroke(
+                            LinearGradient(
+                                colors: [
+                                    .primary.opacity(0.18),
+                                    .primary.opacity(0.05),
+                                    .secondary.opacity(0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.8
+                        )
+                    }
                 }
             ))
         }

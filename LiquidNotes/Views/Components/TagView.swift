@@ -6,6 +6,7 @@ struct TagView: View {
     let onDelete: (() -> Void)?
     
     @State private var isPressed = false
+    @ObservedObject private var themeManager = ThemeManager.shared
     
     init(tag: String, color: Color = .blue, onDelete: (() -> Void)? = nil) {
         self.tag = tag
@@ -14,7 +15,7 @@ struct TagView: View {
     }
     
     var body: some View {
-        HStack(spacing: 6) {
+    HStack(spacing: 6) {
             Text(tag)
                 .font(.caption)
                 .fontWeight(.medium)
@@ -33,30 +34,17 @@ struct TagView: View {
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(.clear)
-                .background(
+                .fill(
                     LinearGradient(
-                        colors: [
-                            color.opacity(0.15),
-                            color.opacity(0.05)
-                        ],
+                        colors: themeManager.currentTheme.primaryGradient,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    )
+                    ).opacity(themeManager.glassOpacity * 0.9)
                 )
                 .overlay(
-                    Capsule()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    color.opacity(0.4),
-                                    color.opacity(0.2)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
+                    Capsule().stroke(
+                        themeManager.highContrast ? Color.primary.opacity(0.7) : Color.white.opacity(0.25), lineWidth: 1
+                    )
                 )
         )
         .scaleEffect(isPressed ? 0.95 : 1.0)

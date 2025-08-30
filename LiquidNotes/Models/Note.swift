@@ -25,13 +25,13 @@ final class Note {
     var height: Float = 140
     var isArchived: Bool = false
     var isFavorited: Bool = false
-    var tags: [String] = []
+    var tags: [String] = [] // Restored tags support
     var attachments: [Data] = []
     var attachmentTypes: [String] = []
     
-    var tasks: [TaskItem] = []
+    // var tasks: [TaskItem] = [] // Temporarily commented out for debugging
     var dueDate: Date?
-    var priority: NotePriority = NotePriority.normal
+    var priorityRawValue: String = "normal"
     var progress: Double = 0.0
     
     var category: NoteCategory?
@@ -50,9 +50,16 @@ final class Note {
         self.height = 140
         self.isArchived = false
         self.isFavorited = false
-        self.tags = []
-        self.attachments = []
-        self.attachmentTypes = []
+    self.tags = []
+    self.attachments = []
+    self.attachmentTypes = []  
+        // self.tasks = [] // Temporarily commented out
+    self.dueDate = nil
+    }
+    
+    var priority: NotePriority {
+        get { NotePriority(rawValue: priorityRawValue) ?? .normal }
+        set { priorityRawValue = newValue.rawValue }
     }
     
     func updateModifiedDate() {
@@ -60,46 +67,46 @@ final class Note {
     }
     
     func addAttachment(data: Data, type: String) {
-        attachments.append(data)
-        attachmentTypes.append(type)
+    attachments.append(data)
+    attachmentTypes.append(type)
         updateModifiedDate()
     }
     
     func removeAttachment(at index: Int) {
-        guard index < attachments.count && index < attachmentTypes.count else { return }
-        attachments.remove(at: index)
-        attachmentTypes.remove(at: index)
+    guard index < attachments.count && index < attachmentTypes.count else { return }
+    attachments.remove(at: index)
+    attachmentTypes.remove(at: index)
         updateModifiedDate()
     }
     
     func addTask(_ text: String) {
-        let task = TaskItem(text: text)
-        tasks.append(task)
-        updateProgress()
+        // let task = TaskItem(text: text)
+        // tasks.append(task)
+        // updateProgress()
         updateModifiedDate()
     }
     
     func toggleTask(at index: Int) {
-        guard index < tasks.count else { return }
-        tasks[index].isCompleted.toggle()
-        updateProgress()
+        // guard index < tasks.count else { return }
+        // tasks[index].isCompleted.toggle()
+        // updateProgress()
         updateModifiedDate()
     }
     
     func removeTask(at index: Int) {
-        guard index < tasks.count else { return }
-        tasks.remove(at: index)
-        updateProgress()
+        // guard index < tasks.count else { return }
+        // tasks.remove(at: index)
+        // updateProgress()
         updateModifiedDate()
     }
     
     func updateProgress() {
-        guard !tasks.isEmpty else {
+        // guard !tasks.isEmpty else {
             progress = 0
-            return
-        }
-        let completedCount = tasks.filter { $0.isCompleted }.count
-        progress = Double(completedCount) / Double(tasks.count)
+        //     return
+        // }
+        // let completedCount = tasks.filter { $0.isCompleted }.count
+        // progress = Double(completedCount) / Double(tasks.count)
     }
     
     func addTag(_ tag: String) {
@@ -130,27 +137,3 @@ final class TaskItem {
     }
 }
 
-enum NotePriority: String, CaseIterable, Codable {
-    case low = "low"
-    case normal = "normal"
-    case high = "high"
-    case urgent = "urgent"
-    
-    var color: Color {
-        switch self {
-        case .low: return .blue.opacity(0.6)
-        case .normal: return .clear
-        case .high: return .orange.opacity(0.6)
-        case .urgent: return .red.opacity(0.6)
-        }
-    }
-    
-    var iconName: String {
-        switch self {
-        case .low: return "arrow.down.circle"
-        case .normal: return "minus.circle"
-        case .high: return "arrow.up.circle"
-        case .urgent: return "exclamationmark.circle.fill"
-        }
-    }
-}
