@@ -96,10 +96,10 @@ class ThemeManager: ObservableObject {
     private init() {
         let savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
         self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .clear
-        self.glassOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
-        if self.glassOpacity == 0 {
-            self.glassOpacity = 0.7
-        }
+        
+        let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
+        self.glassOpacity = savedOpacity == 0 ? 0.7 : savedOpacity
+        
         self.reduceMotion = UserDefaults.standard.bool(forKey: "reduceMotion")
         self.highContrast = UserDefaults.standard.bool(forKey: "highContrast")
     }
@@ -181,16 +181,16 @@ struct ThemedGlassModifier: ViewModifier {
 }
 
 struct AnyShape: Shape {
-    private let _path: (CGRect) -> Path
+    private let makePath: @Sendable (CGRect) -> Path
     
     init<S: Shape>(_ shape: S) {
-        _path = { rect in
+        makePath = { rect in
             shape.path(in: rect)
         }
     }
     
     func path(in rect: CGRect) -> Path {
-        _path(rect)
+        makePath(rect)
     }
 }
 
