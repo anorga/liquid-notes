@@ -12,7 +12,7 @@ struct SearchView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
     
-    @State private var searchText = ""
+    @AppStorage("persistedSearchText") private var searchText = ""
     @State private var isSearching = false
     
     var body: some View {

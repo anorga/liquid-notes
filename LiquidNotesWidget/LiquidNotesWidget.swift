@@ -23,24 +23,20 @@ struct Provider: TimelineProvider {
         let notes = loadNotes()
         let entry = SimpleEntry(date: Date(), notes: notes)
         
-        // Update every 15 minutes
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
         completion(timeline)
     }
     
     private func loadNotes() -> [WidgetNote] {
-        // TODO: Load from SwiftData container
         return getSampleNotes()
     }
     
     private func getSampleNotes() -> [WidgetNote] {
-        // Only show sample data in preview/development
         return []
     }
 }
 
-// Simple note model for widget (avoiding SwiftData complexity in widget)
 struct WidgetNote: Identifiable {
     let id = UUID()
     let title: String
@@ -152,7 +148,6 @@ struct WidgetNoteCard: View {
         }
         .padding(8)
         .background(
-            // Simplified glass effect for widget
             RoundedRectangle(cornerRadius: 12)
                 .fill(.ultraThinMaterial)
                 .opacity(0.8)

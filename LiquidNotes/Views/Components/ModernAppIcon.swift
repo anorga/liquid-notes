@@ -87,17 +87,13 @@ struct ModernAppIcon: View {
                     // Inner highlight for 3D effect
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.15),
-                                    Color.clear,
-                                    Color.clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
+                            LinearGradient(colors: [
+                                Color.white.opacity(0.45),
+                                Color.white.opacity(0.05)
+                            ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7
                         )
+                        .blendMode(.plusLighter)
+                        .opacity(0.9)
                 )
                 .overlay(
                     // Y2K-style blue accent edge (top note only)
@@ -105,16 +101,12 @@ struct ModernAppIcon: View {
                         if hasAccent {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(.sRGB, red: 0.3, green: 0.6, blue: 1.0, opacity: 0.8),
-                                            Color(.sRGB, red: 0.1, green: 0.3, blue: 0.7, opacity: 0.4)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 1.5
+                                    LinearGradient(colors: [
+                                        Color(.sRGB, red: 0.3, green: 0.6, blue: 1.0, opacity: 0.65),
+                                        Color(.sRGB, red: 0.1, green: 0.3, blue: 0.7, opacity: 0.25)
+                                    ], startPoint: .top, endPoint: .bottom), lineWidth: 0.9
                                 )
+                                .blendMode(.screen)
                         }
                     }
                 )

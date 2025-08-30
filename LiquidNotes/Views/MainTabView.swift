@@ -14,53 +14,90 @@ struct MainTabView: View {
     @State private var showingAddOptions = false
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    @State private var showingSettings = false
+    @ObservedObject private var themeManager = ThemeManager.shared
+    @State private var showThemeOverlay = false
     
     var body: some View {
-        ZStack {
+    ZStack {
             TabView(selection: $selectedTab) {
-                // Notes Tab (spatial canvas view) - Default view
-                Tab("Notes", systemImage: "note.text", value: 0) {
-                    SpatialTabView()
-                }
+                Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView() }
                 
-                // Favorites Tab  
-                Tab("Favorites", systemImage: "star.fill", value: 1) {
-                    PinnedNotesView()
-                }
+                Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
                 
-                // Search Tab with native trailing placement
-                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) {
-                    SearchView()
-                }
+                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
+                
+                Tab("Settings", systemImage: "gearshape.fill", value: 3) { SettingsView() }
             }
-            .tabViewStyle(.sidebarAdaptable) // iOS 26: Enhanced tab bar with Liquid Glass
-            .toolbarBackgroundVisibility(.hidden, for: .tabBar) // Let Liquid Glass handle background
+            .tabViewStyle(.sidebarAdaptable)
+            .toolbarBackgroundVisibility(.hidden, for: .tabBar)
             .onAppear {
-                // iOS 26: Enable native Liquid Glass for tab bar
-                if #available(iOS 26.0, *) {
-                    let appearance = UITabBarAppearance()
-                    appearance.configureWithTransparentBackground()
-                    appearance.backgroundColor = .clear
-                    UITabBar.appearance().standardAppearance = appearance
-                    UITabBar.appearance().scrollEdgeAppearance = appearance
-                }
+                setupGlassTabBar()
             }
             
             VStack {
                 HStack {
                     Spacer()
-                    Button(action: handleAddAction) {
+                    Button(action: { handleAddAction() }) {
                         Image(systemName: "plus")
                             .font(.title2)
+                            .fontWeight(.medium)
                             .foregroundColor(.primary)
-                            .padding(12)
+                            .padding(14)
                     }
-                    .liquidGlassEffect(.regular, in: Circle())
-                    .padding(.trailing, 16)
-                    .padding(.top, 16)
+                    .interactiveGlassButton()
+                    .padding(.trailing, 20)
+                    .padding(.top, 20)
                 }
                 Spacer()
             }
+        }
+        .overlay(alignment: .center) {
+            if showThemeOverlay {
+                VStack(spacing: 16) {
+                    Text("Quick Theme")
+                        .font(.headline)
+                    HStack(spacing: 10) {
+                        ForEach(GlassTheme.allCases, id: \.self) { theme in
+                            Circle()
+                                .fill(LinearGradient(colors: theme.primaryGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Group {
+                                        if themeManager.currentTheme == theme {
+                                            Circle().fill(Color.clear).overlay(
+                                                Circle().stroke(
+                                                    LinearGradient(colors: [
+                                                        .white.opacity(0.9), .white.opacity(0.05)
+                                                    ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2
+                                                ).blendMode(.plusLighter)
+                                            )
+                                        }
+                                    }
+                                )
+                                .onTapGesture {
+                                    themeManager.applyTheme(theme)
+                                    HapticManager.shared.buttonTapped()
+                                }
+                        }
+                    }
+                    Button("Close") { withAnimation(.spring()) { showThemeOverlay = false } }
+                        .font(.caption)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .padding(24)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                .shadow(radius: 20)
+                .padding(40)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .contentShape(Rectangle())
+        .onLongPressGesture(minimumDuration: 0.7) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) { showThemeOverlay = true }
+            HapticManager.shared.buttonTapped()
         }
         .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .hidden) {
             Button("Note", action: createNewNote)
@@ -78,35 +115,51 @@ struct MainTabView: View {
     
     // iOS 26 native add action - consolidated from AddFloatingButton
     private func handleAddAction() {
-        // Trigger the confirmation dialog for creating notes/folders
         showingAddOptions = true
         HapticManager.shared.buttonTapped()
     }
     
+    private func setupGlassTabBar() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = UIColor.clear
+        
+        appearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.secondaryLabel,
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+        ]
+        
+        appearance.stackedLayoutAppearance.selected.iconColor = UIColor.label
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor.label,
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
+        ]
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+        
+        if #available(iOS 17.0, *) {
+            UITabBar.appearance().barTintColor = UIColor.clear
+            UITabBar.appearance().isTranslucent = true
+        }
+    }
+    
     private func setupViewModel() {
         if notesViewModel == nil {
-            print("🔧 Setting up NotesViewModel with modelContext: \(modelContext)")
             notesViewModel = NotesViewModel(modelContext: modelContext)
-            print("✅ NotesViewModel setup complete")
         }
     }
     
     private func createNewNote() {
-        print("🚀 MainTabView: createNewNote called")
         HapticManager.shared.noteCreated()
-        
-        guard let viewModel = notesViewModel else { 
-            print("❌ MainTabView: NotesViewModel is nil!")
-            return 
-        }
-        
-        print("📝 MainTabView: Creating note with viewModel")
+    guard let viewModel = notesViewModel else { return }
         let newNote = viewModel.createNote()
-        print("✅ MainTabView: Note created with ID: \(newNote.id)")
-        
-        // Add a small delay to ensure the note is properly saved before showing editor
+        do {
+            try modelContext.save()
+        } catch {
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            print("📱 MainTabView: Setting selectedNote to show editor")
             self.selectedNote = newNote
         }
     }

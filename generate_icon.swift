@@ -4,7 +4,6 @@ import Foundation
 import UIKit
 import SwiftUI
 
-// Copy the IconGenerator code here
 struct IconGenerator {
     static func createModernIcon() -> UIImage? {
         let size = CGSize(width: 1024, height: 1024)
@@ -13,7 +12,6 @@ struct IconGenerator {
         return renderer.image { context in
             let ctx = context.cgContext
             
-            // Background with dark Y2K gradient
             let backgroundColors = [
                 UIColor(red: 0.02, green: 0.02, blue: 0.08, alpha: 1.0).cgColor,
                 UIColor(red: 0.08, green: 0.08, blue: 0.12, alpha: 1.0).cgColor,
@@ -24,7 +22,6 @@ struct IconGenerator {
                                               colors: backgroundColors as CFArray,
                                               locations: [0.0, 0.5, 1.0])!
             
-            // Create rounded rectangle path
             let cornerRadius: CGFloat = 45
             let rect = CGRect(origin: .zero, size: size)
             let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
@@ -32,13 +29,11 @@ struct IconGenerator {
             ctx.addPath(path.cgPath)
             ctx.clip()
             
-            // Draw background gradient
             ctx.drawLinearGradient(backgroundGradient,
                                  start: CGPoint(x: 0, y: 0),
                                  end: CGPoint(x: size.width, y: size.height),
                                  options: [])
             
-            // Draw three layered notes
             drawNote(in: ctx, size: size, layer: 0)
             drawNote(in: ctx, size: size, layer: 1)
             drawNote(in: ctx, size: size, layer: 2)
@@ -50,17 +45,17 @@ struct IconGenerator {
         
         let noteConfigs = [
             (width: 140.0, height: 100.0, rotation: -8.0, offsetX: 15.0, offsetY: 20.0,
-             colors: [UIColor(red: 0.18, green: 0.18, blue: 0.22, alpha: 1.0).cgColor,
-                     UIColor(red: 0.12, green: 0.12, blue: 0.16, alpha: 1.0).cgColor,
-                     UIColor(red: 0.08, green: 0.08, blue: 0.12, alpha: 1.0).cgColor]),
+             colors: [UIColor(red: 0.55, green: 0.55, blue: 0.65, alpha: 1.0).cgColor,
+                     UIColor(red: 0.45, green: 0.45, blue: 0.55, alpha: 1.0).cgColor,
+                     UIColor(red: 0.35, green: 0.35, blue: 0.45, alpha: 1.0).cgColor]),
             (width: 130.0, height: 95.0, rotation: 2.0, offsetX: -5.0, offsetY: 5.0,
-             colors: [UIColor(red: 0.25, green: 0.25, blue: 0.30, alpha: 1.0).cgColor,
-                     UIColor(red: 0.18, green: 0.18, blue: 0.23, alpha: 1.0).cgColor,
-                     UIColor(red: 0.12, green: 0.12, blue: 0.18, alpha: 1.0).cgColor]),
+             colors: [UIColor(red: 0.65, green: 0.65, blue: 0.75, alpha: 1.0).cgColor,
+                     UIColor(red: 0.55, green: 0.55, blue: 0.65, alpha: 1.0).cgColor,
+                     UIColor(red: 0.45, green: 0.45, blue: 0.55, alpha: 1.0).cgColor]),
             (width: 120.0, height: 90.0, rotation: -3.0, offsetX: 8.0, offsetY: -10.0,
-             colors: [UIColor(red: 0.35, green: 0.35, blue: 0.40, alpha: 1.0).cgColor,
-                     UIColor(red: 0.25, green: 0.25, blue: 0.32, alpha: 1.0).cgColor,
-                     UIColor(red: 0.18, green: 0.18, blue: 0.25, alpha: 1.0).cgColor])
+             colors: [UIColor(red: 0.80, green: 0.80, blue: 0.88, alpha: 1.0).cgColor,
+                     UIColor(red: 0.70, green: 0.70, blue: 0.78, alpha: 1.0).cgColor,
+                     UIColor(red: 0.60, green: 0.60, blue: 0.68, alpha: 1.0).cgColor])
         ]
         
         let config = noteConfigs[layer]
@@ -97,20 +92,30 @@ struct IconGenerator {
         
         ctx.resetClip()
         
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.15).cgColor)
-        ctx.setLineWidth(1 * scale)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.5).cgColor)
+        ctx.setLineWidth(2.5 * scale)
         ctx.addPath(notePath.cgPath)
         ctx.strokePath()
         
         if layer == 2 {
-            ctx.setStrokeColor(UIColor(red: 0.3, green: 0.6, blue: 1.0, alpha: 0.8).cgColor)
+            ctx.setStrokeColor(UIColor(red: 0.4, green: 0.7, blue: 1.0, alpha: 0.9).cgColor)
+            ctx.setLineWidth(3 * scale)
+            ctx.addPath(notePath.cgPath)
+            ctx.strokePath()
+            
+            ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.8).cgColor)
+            ctx.setLineWidth(1.5 * scale)
+            ctx.addPath(notePath.cgPath)
+            ctx.strokePath()
+        } else {
+            ctx.setStrokeColor(UIColor(red: 0.85, green: 0.85, blue: 0.9, alpha: 0.4).cgColor)
             ctx.setLineWidth(1.5 * scale)
             ctx.addPath(notePath.cgPath)
             ctx.strokePath()
         }
         
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.08).cgColor)
-        ctx.setLineWidth(1)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.25).cgColor)
+        ctx.setLineWidth(1.5 * scale)
         
         let lineSpacing = noteHeight * 0.15
         let lineWidth = noteWidth * 0.7
@@ -127,7 +132,6 @@ struct IconGenerator {
     }
 }
 
-// Generate and save the icon
 if let iconImage = IconGenerator.createModernIcon() {
     if let pngData = iconImage.pngData() {
         let currentDir = FileManager.default.currentDirectoryPath

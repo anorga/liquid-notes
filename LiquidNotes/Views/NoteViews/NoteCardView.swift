@@ -42,17 +42,18 @@ struct NoteCardView: View {
             }
             
             // Show first attachment if available
-            if !note.attachments.isEmpty, let firstAttachment = note.attachments.first,
-               let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
-               let uiImage = UIImage(data: firstAttachment) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
-                    .frame(maxHeight: 40)
-                    .clipped()
-                    .cornerRadius(6)
-                    .opacity(0.9)
-                    .allowsHitTesting(false)
+            if false { // !note.attachments.isEmpty, let firstAttachment = note.attachments.first, // Temporarily disabled
+               // let firstType = note.attachmentTypes.first, firstType.hasPrefix("image/"),
+               // let uiImage = UIImage(data: firstAttachment) {
+                // Image(uiImage: uiImage)
+                //     .resizable()
+                //     .aspectRatio(uiImage.size.width / uiImage.size.height, contentMode: .fit)
+                //     .frame(maxHeight: 40)
+                //     .clipped()
+                //     .cornerRadius(6)
+                //     .opacity(0.9)
+                //     .allowsHitTesting(false)
+                Text("Image placeholder") // Temporary placeholder
             }
             
             Spacer()
@@ -64,19 +65,19 @@ struct NoteCardView: View {
                 
                 Spacer()
                 
-                if !note.tags.isEmpty {
+                if false { // !note.tags.isEmpty { // Temporarily disabled
                     HStack(spacing: 4) {
-                        ForEach(note.tags.prefix(2), id: \.self) { tag in
-                            Text("#\(tag)")
-                                .font(.caption2)
-                                .foregroundColor(.blue)
-                        }
+                        // ForEach(note.tags.prefix(2), id: \.self) { tag in
+                        //     Text("#\(tag)")
+                        //         .font(.caption2)
+                        //         .foregroundColor(.blue)
+                        // }
                         
-                        if note.tags.count > 2 {
-                            Text("+\(note.tags.count - 2)")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
+                        // if note.tags.count > 2 {
+                        //     Text("+\(note.tags.count - 2)")
+                        //         .font(.caption2)
+                        //         .foregroundStyle(.tertiary)
+                        // }
                     }
                 }
             }
@@ -115,14 +116,12 @@ struct NoteCardView: View {
 }
 
 #Preview {
-    let sampleNote = Note(
+    @Previewable @State var sampleNote = Note(
         title: "Sample Note",
         content: "This is a sample note with some content to show how it looks in the card view."
     )
-    sampleNote.tags = ["work", "important"]
-    sampleNote.isFavorited = true
     
-    return NoteCardView(
+    NoteCardView(
         note: sampleNote,
         onTap: {},
         onDelete: {},
