@@ -46,7 +46,6 @@ struct SpatialTabView: View {
                         }
                         .frame(maxWidth: .infinity)
                     } else {
-                        let _ = print("SpatialTabView: showing SpatialCanvasView with \(filteredNotes.count) notes")
                         SpatialCanvasView(
                             notes: filteredNotes,
                             folders: folders,
@@ -66,7 +65,6 @@ struct SpatialTabView: View {
             .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
-                print("🔄 SpatialTabView: onAppear - refreshing view")
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -130,36 +128,12 @@ private struct FilterChip: View {
     }
 }
     private func setupViewModels() {
-        print("SpatialTabView: setupViewModels called, current notesViewModel: \(notesViewModel != nil ? "exists" : "nil")")
-        print("SpatialTabView: modelContext = \(modelContext)")
         if notesViewModel == nil {
             notesViewModel = NotesViewModel(modelContext: modelContext)
-            print("SpatialTabView: notesViewModel created")
         }
         
         // Force a refresh of the @Query by checking the model context
-        let descriptor = FetchDescriptor<Note>()
-        do {
-            let directNotes = try modelContext.fetch(descriptor)
-            print("🔍 SpatialTabView: Direct fetch found \(directNotes.count) notes")
-            print("🔍 SpatialTabView: @Query allNotes.count = \(allNotes.count)")
-            
-            if !directNotes.isEmpty {
-                print("🔍 SpatialTabView: Direct fetch notes:")
-                for (i, note) in directNotes.enumerated() {
-                    print("  \(i): \(note.id) - \(note.title.isEmpty ? "Untitled" : note.title) - archived: \(note.isArchived)")
-                }
-            }
-            
-            if !allNotes.isEmpty {
-                print("🔍 SpatialTabView: @Query notes:")
-                for (i, note) in allNotes.enumerated() {
-                    print("  \(i): \(note.id) - \(note.title.isEmpty ? "Untitled" : note.title) - archived: \(note.isArchived)")
-                }
-            }
-        } catch {
-            print("❌ SpatialTabView: Direct fetch failed: \(error)")
-        }
+    // (Removed verbose debug logging)
     }
     
     private func createNewNote() {
