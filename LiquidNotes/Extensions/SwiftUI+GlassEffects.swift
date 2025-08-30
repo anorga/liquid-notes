@@ -329,3 +329,49 @@ extension View {
             .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8), value: false)
     }
 }
+
+// MARK: - Refined Clear Glass (modernized)
+extension View {
+    func refinedClearGlass(cornerRadius: CGFloat = 22, intensity: Double = 1.0) -> some View {
+        let theme = ThemeManager.shared
+        return self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(theme.currentTheme.backgroundGradient.first?.opacity(0.001) ?? .clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: theme.currentTheme.primaryGradient.map { $0.opacity(0.18 * intensity) },
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+                    .blur(radius: 28)
+                    .opacity(0.5)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(colors: [
+                            .white.opacity(0.6), .white.opacity(0.05)
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1
+                    )
+                    .blendMode(.overlay)
+                    .opacity(0.9)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(theme.currentTheme.primaryGradient.first?.opacity(0.25) ?? .white.opacity(0.25), lineWidth: 0.5)
+                    .blur(radius: 1)
+                    .opacity(0.5)
+            )
+            .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
+            .shadow(color: (theme.currentTheme.primaryGradient.first ?? .white).opacity(0.15), radius: 40, x: 0, y: 22)
+    }
+    
+    func subtleParallax(_ motion: MotionManager = .shared, maxOffset: CGFloat = 8) -> some View {
+        let values = motion.normalizedMotionValues()
+        return self.offset(x: values.x * maxOffset, y: values.y * maxOffset)
+    }
+}

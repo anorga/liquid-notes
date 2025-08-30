@@ -31,7 +31,7 @@ struct SpatialCanvasView: View {
     
     var body: some View {
         ScrollView(.vertical) {
-            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 15) {
+            FlowLayout(horizontalSpacing: 15, verticalSpacing: 15) {
                 ForEach(displayedNotes, id: \.id) { note in
                     GridNoteCard(
                         note: note,
@@ -42,6 +42,9 @@ struct SpatialCanvasView: View {
                             handleNoteMove(draggedNote: draggedNote, targetPosition: targetPosition)
                         }
                     )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text("Note titled \(note.title.isEmpty ? "Untitled" : note.title)"))
+                    .accessibilityHint(Text("Double tap to open. Swipe horizontally for actions."))
                 }
             }
             .padding(.horizontal, 20)
@@ -159,26 +162,14 @@ struct GridNoteCard: View {
                 .frame(width: noteSize.width, height: noteSize.height)
             }
             
-            // Themed glass background container
+            // Refined clear glass background container (modernized)
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.clear)
-                .themedGlass(.regular, in: RoundedRectangle(cornerRadius: 20))
-                .overlay(
-                    // Subtle adaptive overlay to prevent flat white look
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(themeManager.highContrast ? 0.10 : 0.05),
-                            Color.black.opacity(themeManager.highContrast ? 0.15 : 0.06)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .blendMode(.overlay)
-                    .opacity(themeManager.highContrast ? 0.7 : 0.4)
-                )
-                .frame(width: noteSize.width, height: noteSize.height)
-                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5) // Enhanced shadow for depth
+                .refinedClearGlass(cornerRadius: 20)
+                .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height)
+                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
                 .offset(x: swipeOffset)
+                .subtleParallax(.shared, maxOffset: themeManager.reduceMotion ? 0 : 4)
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "arrow.up.backward.and.arrow.down.forward")
                         .font(.caption2)
@@ -327,7 +318,7 @@ struct GridNoteCard: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .frame(width: noteSize.width, height: noteSize.height, alignment: .leading)
+            .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height, alignment: .leading)
             .overlay(alignment: .topTrailing) {
                 if note.isArchived {
                     Text("Archived")
@@ -340,7 +331,7 @@ struct GridNoteCard: View {
                 }
             }
         }
-        .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)  // Hard constraint with left alignment
+    .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
         .scaleEffect(isDragging ? 1.08 : isResizing ? 1.04 : 1.0)
         .offset(dragOffset)
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)

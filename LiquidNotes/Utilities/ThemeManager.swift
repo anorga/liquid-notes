@@ -93,6 +93,18 @@ class ThemeManager: ObservableObject {
         }
     }
     
+    @Published var animateGradients: Bool {
+        didSet { UserDefaults.standard.set(animateGradients, forKey: "animateGradients") }
+    }
+    
+    @Published var themeOverlayPinned: Bool {
+        didSet { UserDefaults.standard.set(themeOverlayPinned, forKey: "themeOverlayPinned") }
+    }
+    
+    @Published var dynamicTagCycling: Bool {
+        didSet { UserDefaults.standard.set(dynamicTagCycling, forKey: "dynamicTagCycling") }
+    }
+    
     private init() {
         let savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
         self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .clear
@@ -102,6 +114,9 @@ class ThemeManager: ObservableObject {
         
         self.reduceMotion = UserDefaults.standard.bool(forKey: "reduceMotion")
         self.highContrast = UserDefaults.standard.bool(forKey: "highContrast")
+    self.animateGradients = UserDefaults.standard.object(forKey: "animateGradients") as? Bool ?? true
+    self.themeOverlayPinned = UserDefaults.standard.object(forKey: "themeOverlayPinned") as? Bool ?? false
+    self.dynamicTagCycling = UserDefaults.standard.object(forKey: "dynamicTagCycling") as? Bool ?? true
     }
     
     func applyTheme(_ theme: GlassTheme) {

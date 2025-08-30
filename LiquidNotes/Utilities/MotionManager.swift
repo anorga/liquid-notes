@@ -10,6 +10,7 @@ import SwiftUI
 import Combine
 
 class MotionManager: ObservableObject {
+    static let shared = MotionManager()
     private let motionManager = CMMotionManager()
     
     @Published var data = MotionData()

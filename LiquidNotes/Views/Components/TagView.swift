@@ -36,7 +36,7 @@ struct TagView: View {
             Capsule()
                 .fill(
                     LinearGradient(
-                        colors: themeManager.currentTheme.primaryGradient,
+                        colors: animatedGradient(),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ).opacity(themeManager.glassOpacity * 0.9)
@@ -47,6 +47,8 @@ struct TagView: View {
                     )
                 )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Tag \(tag)"))
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .onTapGesture {
             withAnimation(.bouncy(duration: 0.2)) {
@@ -57,6 +59,19 @@ struct TagView: View {
                     isPressed = false
                 }
             }
+        }
+    }
+}
+
+private extension TagView {
+    func animatedGradient() -> [Color] {
+        guard themeManager.dynamicTagCycling else { return themeManager.currentTheme.primaryGradient }
+        let base = themeManager.currentTheme.primaryGradient
+        let time = Date().timeIntervalSince1970
+        let phase = sin(time.truncatingRemainder(dividingBy: 8) / 8 * .pi * 2)
+        return base.enumerated().map { idx, color in
+            let shift = (phase * 25) + Double(idx) * 18
+            return color.hueShift(shift)
         }
     }
 }
