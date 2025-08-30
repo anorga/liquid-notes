@@ -207,19 +207,30 @@ struct GridNoteCard: View {
             // Refined clear glass background container (modernized & theme-configurable)
             let corner: CGFloat = themeManager.noteStyle == 0 ? 20 : 34
             let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-            base
-                .fill(Color.clear)
-                .overlay(
-                    // Base glass style (shared)
-                    Color.clear.refinedClearGlass(cornerRadius: corner, intensity: themeManager.noteGlassDepth * (themeManager.noteStyle == 0 ? 1.0 : 1.08))
-                )
-                .overlay(
-                    Group { /* redundant strokes removed; refinedClearGlass now provides unified liquid border */ }
-                )
+
+            // Break chained heavy view into intermediate constants to help type checker.
+            let glass = Color.clear.refinedClearGlass(
+                cornerRadius: corner,
+                intensity: themeManager.noteGlassDepth * (themeManager.noteStyle == 0 ? 1.0 : 1.08)
+            )
+            let firstShadowColor = Color.black.opacity(
+                themeManager.minimalMode ? 0.08 : (themeManager.noteStyle == 0 ? 0.15 : 0.18)
+            )
+            let secondShadowColor = (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(
+                themeManager.minimalMode ? 0.04 : (themeManager.noteStyle == 0 ? 0.08 : 0.12)
+            )
+            let widthCap = min(noteSize.width, UIScreen.main.bounds.width - 60)
+
+            base.fill(Color.clear)
+                .overlay(glass)
                 .clipShape(base)
-                .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height)
-                .shadow(color: .black.opacity( themeManager.minimalMode ? 0.08 : (themeManager.noteStyle == 0 ? 0.15 : 0.18)), radius: themeManager.minimalMode ? 6 : (themeManager.noteStyle == 0 ? 10 : 14), x: 0, y: themeManager.minimalMode ? 3 : 5)
-                .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : (themeManager.noteStyle == 0 ? 0.08 : 0.12)), radius: themeManager.minimalMode ? 18 : (themeManager.noteStyle == 0 ? 28 : 36), x: 0, y: themeManager.minimalMode ? 10 : (themeManager.noteStyle == 0 ? 18 : 22))
+                .frame(width: widthCap, height: noteSize.height)
+                .shadow(color: firstShadowColor,
+                        radius: themeManager.minimalMode ? 6 : (themeManager.noteStyle == 0 ? 10 : 14),
+                        x: 0, y: themeManager.minimalMode ? 3 : 5)
+                .shadow(color: secondShadowColor,
+                        radius: themeManager.minimalMode ? 18 : (themeManager.noteStyle == 0 ? 28 : 36),
+                        x: 0, y: themeManager.minimalMode ? 10 : (themeManager.noteStyle == 0 ? 18 : 22))
                 .offset(x: swipeOffset)
                 .modifier(ParallaxIfEnabled(enabled: themeManager.noteParallax && !themeManager.reduceMotion))
                 .overlay(alignment: .bottomTrailing) {
