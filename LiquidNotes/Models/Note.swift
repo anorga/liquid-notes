@@ -29,7 +29,7 @@ final class Note {
     var attachments: [Data] = []
     var attachmentTypes: [String] = []
     
-    // var tasks: [TaskItem] = [] // Temporarily commented out for debugging
+    @Relationship(deleteRule: .cascade, inverse: \TaskItem.note) var tasks: [TaskItem]? // CloudKit requires optional relationships
     var dueDate: Date?
     var priorityRawValue: String = "normal"
     var progress: Double = 0.0
@@ -53,7 +53,7 @@ final class Note {
     self.tags = []
     self.attachments = []
     self.attachmentTypes = []  
-        // self.tasks = [] // Temporarily commented out
+    self.tasks = []
     self.dueDate = nil
     }
     
@@ -80,33 +80,33 @@ final class Note {
     }
     
     func addTask(_ text: String) {
-        // let task = TaskItem(text: text)
-        // tasks.append(task)
-        // updateProgress()
+        let task = TaskItem(text: text, note: self)
+        if tasks == nil { tasks = [] }
+        tasks?.append(task)
+        updateProgress()
         updateModifiedDate()
     }
-    
+
     func toggleTask(at index: Int) {
-        // guard index < tasks.count else { return }
-        // tasks[index].isCompleted.toggle()
-        // updateProgress()
+    guard let arr = tasks, index < arr.count else { return }
+    arr[index].isCompleted.toggle() // mutates TaskItem (reference type), array copy not needed
+    tasks = arr
+        updateProgress()
         updateModifiedDate()
     }
-    
+
     func removeTask(at index: Int) {
-        // guard index < tasks.count else { return }
-        // tasks.remove(at: index)
-        // updateProgress()
+        guard var arr = tasks, index < arr.count else { return }
+        arr.remove(at: index)
+        tasks = arr
+        updateProgress()
         updateModifiedDate()
     }
-    
+
     func updateProgress() {
-        // guard !tasks.isEmpty else {
-            progress = 0
-        //     return
-        // }
-        // let completedCount = tasks.filter { $0.isCompleted }.count
-        // progress = Double(completedCount) / Double(tasks.count)
+        guard let arr = tasks, !arr.isEmpty else { progress = 0; return }
+        let completedCount = arr.filter { $0.isCompleted }.count
+        progress = Double(completedCount) / Double(arr.count)
     }
     
     func addTag(_ tag: String) {
@@ -128,12 +128,14 @@ final class TaskItem {
     var text: String = ""
     var isCompleted: Bool = false
     var createdDate: Date = Date()
+    @Relationship var note: Note?
     
-    init(text: String, isCompleted: Bool = false) {
+    init(text: String, isCompleted: Bool = false, note: Note? = nil) {
         self.id = UUID()
         self.text = text
         self.isCompleted = isCompleted
         self.createdDate = Date()
+        self.note = note
     }
 }
 

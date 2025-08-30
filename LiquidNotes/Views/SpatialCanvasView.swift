@@ -367,6 +367,30 @@ struct GridNoteCard: View {
                             .clipShape(Circle())
                             .transition(.scale.combined(with: .opacity))
                     }
+                    if let tasks = note.tasks, !tasks.isEmpty {
+                        let incomplete = tasks.filter { !$0.isCompleted }.count
+                        let allDone = incomplete == 0
+                        HStack(spacing: 4) {
+                            Image(systemName: allDone ? "checkmark.circle.fill" : "checklist")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(allDone ? "Done" : "\(incomplete)/\(tasks.count)")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule().fill(
+                                allDone ? LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing) : .ultraThinMaterial
+                            )
+                        )
+                        .overlay(
+                            Capsule().stroke(Color.white.opacity(allDone ? 0.35 : 0.22), lineWidth: 0.6)
+                        )
+                        .foregroundStyle(allDone ? .white : .primary.opacity(0.85))
+                        .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel(Text(allDone ? "All tasks complete" : "\(incomplete) incomplete of \(tasks.count) tasks"))
+                    }
                     if note.isArchived {
                         Text("Archived")
                             .font(.caption2)

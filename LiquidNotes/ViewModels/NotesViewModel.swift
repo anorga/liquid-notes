@@ -25,6 +25,7 @@ class NotesViewModel {
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
+
     
     // MARK: - Note Operations
     

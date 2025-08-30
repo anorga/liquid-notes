@@ -71,7 +71,14 @@ struct NoteEditorView: View {
                 
                 if showingTaskList {
                     TaskListView(
-                        tasks: .constant([]), // note.tasks), // Temporarily disabled
+                        tasks: Binding(
+                            get: { note.tasks ?? [] },
+                            set: { newVal in
+                                note.tasks = newVal
+                                note.updateProgress()
+                                hasChanges = true
+                            }
+                        ),
                         onToggle: { index in
                             note.toggleTask(at: index)
                             hasChanges = true
