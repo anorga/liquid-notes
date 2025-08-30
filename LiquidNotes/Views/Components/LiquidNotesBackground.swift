@@ -30,8 +30,22 @@ struct LiquidNotesBackground: View {
     
     var body: some View {
         ZStack {
-            Color(colorScheme == .dark ? .black : .systemGray6)
-                .ignoresSafeArea()
+            // Brand base: fused theme gradient + adaptive neutral
+            let theme = themeManager.currentTheme
+            let baseNeutral = Color(colorScheme == .dark ? .black : .white)
+            LinearGradient(
+                colors: [
+                    (theme.primaryGradient.first ?? .blue).opacity(colorScheme == .dark ? 0.18 : 0.22),
+                    (theme.primaryGradient.last ?? .purple).opacity(colorScheme == .dark ? 0.14 : 0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .overlay(
+                baseNeutral.opacity(colorScheme == .dark ? 0.55 : 0.75)
+            )
+            .blendMode(.plusLighter)
+            .ignoresSafeArea()
             
             ZStack {
                 EllipticalGradient(
@@ -52,16 +66,34 @@ struct LiquidNotesBackground: View {
                 .opacity(0.4)
                 .blur(radius: 80)
                 
+                // Brand accent veil using theme gradient
                 LinearGradient(
                     colors: [
-                        ambientColors.first?.opacity(0.02) ?? .clear,
+                        (theme.primaryGradient.first ?? .clear).opacity(0.04 + themeManager.glassOpacity * 0.05),
                         .clear,
-                        ambientColors.last?.opacity(0.03) ?? .clear
+                        (theme.primaryGradient.last ?? .clear).opacity(0.06 + themeManager.glassOpacity * 0.05)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .opacity(0.8)
+                .opacity(0.9)
+                .blendMode(.screen)
+                .allowsHitTesting(false)
+
+                // Subtle noise / texture overlay (procedural via blending tiny gradient grid)
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.015 : 0.03),
+                                .white.opacity(0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .blendMode(.overlay)
+                    .opacity(themeManager.minimalMode ? 0.3 : 0.5)
             }
             .ignoresSafeArea()
             .onAppear {
@@ -84,21 +116,21 @@ struct LiquidNotesBackground: View {
                 }
             }
             
-            if colorScheme == .dark {
-                Rectangle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                .clear,
-                                .black.opacity(0.1)
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 400
-                        )
+            // Unified vignette (slightly stronger in dark)
+            Rectangle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .clear,
+                            (colorScheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.08))
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 500
                     )
-                    .ignoresSafeArea()
-            }
+                )
+                .blendMode(.multiply)
+                .ignoresSafeArea()
         }
     }
 }

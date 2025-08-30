@@ -28,23 +28,7 @@ struct PinnedNotesView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                if favoritedNotes.isEmpty {
-                    VStack {
-                        Spacer()
-                        Image(systemName: "star.slash")
-                            .font(.system(size: 64))
-                            .foregroundStyle(.tertiary)
-                        Text("No favorited notes")
-                            .font(.title2)
-                            .foregroundStyle(.tertiary)
-                        Text("Add notes to favorites to keep them at your fingertips")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        Spacer()
-                    }
-                    .padding()
-                } else {
+                if !favoritedNotes.isEmpty {
                     SpatialCanvasView(
                         notes: favoritedNotes,
                         folders: [],
@@ -64,6 +48,36 @@ struct PinnedNotesView: View {
                         onFolderFavorite: nil
                     )
                 }
+                }
+                .overlay(alignment: .center) {
+                    if favoritedNotes.isEmpty {
+                        VStack(spacing: 14) {
+                            Image(systemName: "star.slash")
+                                .font(.system(size: 58))
+                                .foregroundStyle(.tertiary)
+                            Text("No Favorited Notes")
+                                .font(.title2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text("Tap the star on a note to pin it here for quick access.")
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 280)
+                        }
+                        .padding(32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                .fill(.ultraThinMaterial.opacity(0.6))
+                                .blendMode(.plusLighter)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 0.6)
+                        )
+                        .padding(.horizontal, 24)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(Text("No favorited notes. Mark notes with a star to show them here."))
+                    }
                 }
             }
             .navigationBarHidden(true)
