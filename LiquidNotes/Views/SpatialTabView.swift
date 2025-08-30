@@ -1,9 +1,3 @@
-//
-//  SpatialTabView.swift
-//  LiquidNotes
-//
-//  Created by Christian Anorga on 8/19/25.
-//
 
 import SwiftUI
 import SwiftData
@@ -23,7 +17,6 @@ struct SpatialTabView: View {
                 LiquidNotesBackground()
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header section - same layout as PinnedNotesView
                     HStack {
                         Text("Notes")
                             .font(.largeTitle)
@@ -35,20 +28,23 @@ struct SpatialTabView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                    // Canvas section
                     if filteredNotes.isEmpty {
                         VStack {
                             Spacer()
-                            Text("No notes yet")
-                                .font(.title2)
-                                .foregroundStyle(.tertiary)
-                            Text("Tap + to create your first note")
-                                .font(.body)
-                                .foregroundStyle(.secondary)
+                            VStack(spacing: 8) {
+                                Text("No notes yet")
+                                    .font(.title2)
+                                    .foregroundStyle(.tertiary)
+                                Text("Tap + to create your first note")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
                             Spacer()
                         }
-                        .padding()
+                        .frame(maxWidth: .infinity)
                     } else {
+                        let _ = print("SpatialTabView: showing SpatialCanvasView with \(filteredNotes.count) notes")
                         SpatialCanvasView(
                             notes: filteredNotes,
                             folders: folders,
@@ -58,7 +54,7 @@ struct SpatialTabView: View {
                             },
                             onDelete: deleteNote,
                             onFavorite: toggleFavorite,
-                            onFolderTap: nil, // TODO: Implement folder opening
+                            onFolderTap: nil,
                             onFolderDelete: deleteFolder,
                             onFolderFavorite: toggleFolderFavorite
                         )
@@ -68,10 +64,6 @@ struct SpatialTabView: View {
             .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
-                print("🖼️ SpatialTabView appeared with \(notes.count) notes")
-            }
-            .onChange(of: notes.count) { oldCount, newCount in
-                print("🖼️ SpatialTabView notes count changed: \(oldCount) → \(newCount)")
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -81,13 +73,21 @@ struct SpatialTabView: View {
     }
     
     private var filteredNotes: [Note] {
-        guard let viewModel = notesViewModel else { return notes }
-        return viewModel.filteredNotes(from: notes)
+        print("SpatialTabView: notes.count = \(notes.count)")
+        guard let viewModel = notesViewModel else {
+            print("SpatialTabView: no viewModel, returning raw notes: \(notes.count)")
+            return notes
+        }
+        let filtered = viewModel.filteredNotes(from: notes)
+        print("SpatialTabView: filtered notes: \(filtered.count)")
+        return filtered
     }
     
     private func setupViewModels() {
+        print("SpatialTabView: setupViewModels called, current notesViewModel: \(notesViewModel != nil ? "exists" : "nil")")
         if notesViewModel == nil {
             notesViewModel = NotesViewModel(modelContext: modelContext)
+            print("SpatialTabView: notesViewModel created")
         }
     }
     

@@ -20,8 +20,8 @@ final class Note {
     var positionX: Float = 0
     var positionY: Float = 0
     var zIndex: Int = 0
-    var width: Float = 160  // Default note width
-    var height: Float = 120 // Default note height
+    var width: Float = 180
+    var height: Float = 140
     var isArchived: Bool = false
     var isFavorited: Bool = false
     var tags: [String] = []
@@ -40,8 +40,8 @@ final class Note {
         self.positionX = 0
         self.positionY = 0
         self.zIndex = 0
-        self.width = 160
-        self.height = 120
+        self.width = 180
+        self.height = 140
         self.isArchived = false
         self.isFavorited = false
         self.tags = []

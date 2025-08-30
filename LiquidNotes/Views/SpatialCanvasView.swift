@@ -94,17 +94,20 @@ struct GridNoteCard: View {
     
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.clear)
                 .frame(width: noteSize.width, height: noteSize.height)
-                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                .modernGlassCard()
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "arrow.up.backward.and.arrow.down.forward")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(Circle().fill(.clear).modernGlassCard())
                         .padding(6)
-                        .background(Circle().fill(.ultraThinMaterial))
-                        .padding(4)
+                        .opacity(isResizing ? 0.9 : 0.7)
+                        .scaleEffect(isResizing ? 1.1 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: isResizing)
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -136,59 +139,87 @@ struct GridNoteCard: View {
                         )
                 }
             
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(note.title.isEmpty ? "Note" : note.title)
-                        .font(.headline)
-                        .fontWeight(.medium)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    Text(note.title.isEmpty ? "Untitled Note" : note.title)
+                        .font(.title3)
+                        .fontWeight(.semibold)
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
                     
                     if note.isFavorited {
                         Image(systemName: "star.fill")
-                            .foregroundStyle(.yellow)
-                            .font(.caption)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.yellow, .orange],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .font(.system(size: 14, weight: .medium))
+                            .shadow(color: .yellow.opacity(0.3), radius: 2, x: 0, y: 1)
                     }
                 }
                 
                 if !note.attachments.isEmpty, 
                    let firstImageData = note.attachments.first,
                    let firstType = note.attachmentTypes.first {
-                    if firstType.contains("gif") {
-                        AnimatedGIFView(data: firstImageData)
-                            .frame(maxHeight: noteSize.height * 0.4)
-                            .clipped()
-                            .cornerRadius(8)
-                    } else if let uiImage = UIImage(data: firstImageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(maxHeight: noteSize.height * 0.4)
-                            .clipped()
-                            .cornerRadius(8)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.clear)
+                            .modernGlassCard()
+                            .frame(maxHeight: noteSize.height * 0.45)
+                        
+                        if firstType.contains("gif") {
+                            AnimatedGIFView(data: firstImageData)
+                                .aspectRatio(contentMode: .fill)
+                                .frame(maxHeight: noteSize.height * 0.4)
+                                .clipped()
+                                .cornerRadius(10)
+                        } else if let uiImage = UIImage(data: firstImageData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(maxHeight: noteSize.height * 0.4)
+                                .clipped()
+                                .cornerRadius(10)
+                        }
                     }
                 }
                 
-                Text(note.content)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(note.attachments.isEmpty ? 4 : 2)
-                    .multilineTextAlignment(.leading)
+                if !note.content.isEmpty {
+                    Text(note.content)
+                        .font(.callout)
+                        .fontWeight(.regular)
+                        .foregroundStyle(.primary.opacity(0.8))
+                        .lineLimit(note.attachments.isEmpty ? 5 : 3)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
+                        .padding(.top, 2)
+                } else {
+                    Text("No content")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .italic()
+                }
                 
-                Spacer()
+                Spacer(minLength: 8)
             }
-            .padding(12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .frame(width: noteSize.width, height: noteSize.height, alignment: .leading)
         }
         .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)  // Hard constraint with left alignment
-        .scaleEffect(isDragging ? 1.05 : isResizing ? 1.02 : 1.0)
+        .scaleEffect(isDragging ? 1.08 : isResizing ? 1.04 : 1.0)
         .offset(dragOffset)
-        .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8), value: isDragging)
-        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9), value: dragOffset)
-        .animation(.interactiveSpring(response: 0.15, dampingFraction: 0.95), value: noteSize)
-        .animation(.easeInOut(duration: 0.2), value: isResizing)
+        .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
+        .animation(.interactiveSpring(response: 0.5, dampingFraction: 0.75), value: isDragging)
+        .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8), value: dragOffset)
+        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9), value: noteSize)
+        .animation(.bouncy(duration: 0.3, extraBounce: 0.1), value: isResizing)
         .onTapGesture {
             print("👆 TAP detected on note: \(note.id)")
             HapticManager.shared.noteSelected()

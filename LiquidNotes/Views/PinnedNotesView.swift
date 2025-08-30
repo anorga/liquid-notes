@@ -1,9 +1,3 @@
-//
-//  PinnedNotesView.swift
-//  LiquidNotes
-//
-//  Created by Christian Anorga on 8/18/25.
-//
 
 import SwiftUI
 import SwiftData
@@ -23,7 +17,6 @@ struct PinnedNotesView: View {
                 LiquidNotesBackground()
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    // Custom large left-aligned title
                     HStack {
                         Text("Favorites")
                             .font(.largeTitle)
@@ -35,7 +28,6 @@ struct PinnedNotesView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 5)
                     
-                    // Spatial Canvas for Favorited Notes
                 if favoritedNotes.isEmpty {
                     VStack {
                         Spacer()
@@ -53,7 +45,6 @@ struct PinnedNotesView: View {
                     }
                     .padding()
                 } else {
-                    // Use SpatialCanvasView for favorites with moveable notes
                     SpatialCanvasView(
                         notes: favoritedNotes,
                         folders: [],

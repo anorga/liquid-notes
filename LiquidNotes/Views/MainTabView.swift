@@ -18,32 +18,22 @@ struct MainTabView: View {
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-                // Notes Tab (spatial canvas view) - Default view
                 Tab("Notes", systemImage: "note.text", value: 0) {
                     SpatialTabView()
                 }
                 
-                // Favorites Tab  
                 Tab("Favorites", systemImage: "star.fill", value: 1) {
                     PinnedNotesView()
                 }
                 
-                // Search Tab with native trailing placement
                 Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) {
                     SearchView()
                 }
             }
-            .tabViewStyle(.sidebarAdaptable) // iOS 26: Enhanced tab bar with Liquid Glass
-            .toolbarBackgroundVisibility(.hidden, for: .tabBar) // Let Liquid Glass handle background
+            .tabViewStyle(.sidebarAdaptable)
+            .toolbarBackgroundVisibility(.hidden, for: .tabBar)
             .onAppear {
-                // iOS 26: Enable native Liquid Glass for tab bar
-                if #available(iOS 26.0, *) {
-                    let appearance = UITabBarAppearance()
-                    appearance.configureWithTransparentBackground()
-                    appearance.backgroundColor = .clear
-                    UITabBar.appearance().standardAppearance = appearance
-                    UITabBar.appearance().scrollEdgeAppearance = appearance
-                }
+                setupGlassTabBar()
             }
             
             VStack {
@@ -52,12 +42,13 @@ struct MainTabView: View {
                     Button(action: handleAddAction) {
                         Image(systemName: "plus")
                             .font(.title2)
+                            .fontWeight(.medium)
                             .foregroundColor(.primary)
-                            .padding(12)
+                            .padding(14)
                     }
-                    .liquidGlassEffect(.regular, in: Circle())
-                    .padding(.trailing, 16)
-                    .padding(.top, 16)
+                    .interactiveGlassButton()
+                    .padding(.trailing, 20)
+                    .padding(.top, 20)
                 }
                 Spacer()
             }
@@ -78,9 +69,34 @@ struct MainTabView: View {
     
     // iOS 26 native add action - consolidated from AddFloatingButton
     private func handleAddAction() {
-        // Trigger the confirmation dialog for creating notes/folders
         showingAddOptions = true
         HapticManager.shared.buttonTapped()
+    }
+    
+    private func setupGlassTabBar() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = UIColor.clear
+        
+        appearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: UIColor.secondaryLabel,
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+        ]
+        
+        appearance.stackedLayoutAppearance.selected.iconColor = UIColor.label
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: UIColor.label,
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
+        ]
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+        
+        if #available(iOS 17.0, *) {
+            UITabBar.appearance().barTintColor = UIColor.clear
+            UITabBar.appearance().isTranslucent = true
+        }
     }
     
     private func setupViewModel() {

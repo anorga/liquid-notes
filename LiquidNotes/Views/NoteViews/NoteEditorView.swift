@@ -27,31 +27,30 @@ struct NoteEditorView: View {
     
     var body: some View {
         NavigationStack {
-            // Using standard SwiftUI form components for automatic Liquid Glass
-            VStack(spacing: 0) {
-                // Title Field
-                TextField("Note Title", text: $title)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .textInputAutocapitalization(.sentences)
-                    .disableAutocorrection(false)
-                    .onChange(of: title) { oldValue, newValue in
-                        hasChanges = true
-                    }
+            ZStack {
+                LiquidNotesBackground()
                 
-                Divider()
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                VStack(spacing: 16) {
+                    TextField("Note Title", text: $title)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .textInputAutocapitalization(.sentences)
+                        .disableAutocorrection(false)
+                        .onChange(of: title) { oldValue, newValue in
+                            hasChanges = true
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 20)
+                        .background(.clear)
+                        .modernGlassCard()
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
                 
-                // Rich Content Field with native keyboard font support
                 RichTextEditor(
                     text: $content,
                     attributedText: $attributedContent,
                     placeholder: "Start typing your note...",
                     onTextChanged: {
-                        // iOS 26: Direct callback ensures hasChanges is always triggered
                         hasChanges = true
                     }
                 )
@@ -59,40 +58,62 @@ struct NoteEditorView: View {
                     hasChanges = true
                 }
                 .onChange(of: content) { oldValue, newValue in
-                    // iOS 26: Additional change detection for plain text changes
                     hasChanges = true
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .background(.clear)
+                .modernGlassCard()
+                .padding(.horizontal, 20)
                 
-                // Attachments Section - Enhanced for iOS 26 with better spacing
                 if !note.attachments.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
-                                if index < note.attachmentTypes.count {
-                                    AttachmentView(
-                                        data: data,
-                                        type: note.attachmentTypes[index],
-                                        onDelete: {
-                                            // iOS 26: Safe attachment removal with bounds checking
-                                            if index < note.attachments.count && index < note.attachmentTypes.count {
-                                                withAnimation(.easeInOut(duration: 0.3)) {
-                                                    note.removeAttachment(at: index)
-                                                    hasChanges = true
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Attachments")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text("\(note.attachments.count)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        .padding(.horizontal, 24)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 16) {
+                                ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                    if index < note.attachmentTypes.count {
+                                        AttachmentView(
+                                            data: data,
+                                            type: note.attachmentTypes[index],
+                                            onDelete: {
+                                                if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                    withAnimation(.bouncy(duration: 0.4)) {
+                                                        note.removeAttachment(at: index)
+                                                        hasChanges = true
+                                                    }
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 16)
                         }
-                        .padding(.horizontal, 30)
-                        .padding(.vertical, 20)
                     }
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 200) 
+                    .background(.clear)
+                    .ambientGlassEffect()
+                    .padding(.horizontal, 20)
                 }
                 
                 Spacer()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -104,13 +125,21 @@ struct NoteEditorView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
+                    HStack(spacing: 12) {
                         Button(action: {
                             showingGiphyPicker = true
                         }) {
                             Image(systemName: "face.smiling")
-                                .foregroundStyle(.blue)
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.blue, .cyan],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                         }
+                        .buttonStyle(.borderless)
                         
                         PhotosPicker(
                             selection: $selectedPhoto,
@@ -118,7 +147,14 @@ struct NoteEditorView: View {
                             photoLibrary: .shared()
                         ) {
                             Image(systemName: "photo.badge.plus")
-                                .foregroundStyle(.blue)
+                                .font(.title3)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.green, .mint],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                         }
                         .buttonStyle(.borderless)
                         
@@ -126,10 +162,12 @@ struct NoteEditorView: View {
                             saveNote()
                             dismiss()
                         }
+                        .font(.headline)
                         .fontWeight(.semibold)
                         .disabled(!hasChanges && !isNewNote)
                         .foregroundStyle((hasChanges || isNewNote) ? Color.accentColor : Color.secondary)
-                        .animation(.easeInOut(duration: 0.2), value: hasChanges)
+                        .scaleEffect((hasChanges || isNewNote) ? 1.05 : 1.0)
+                        .animation(.bouncy(duration: 0.3), value: hasChanges)
                     }
                 }
             }
