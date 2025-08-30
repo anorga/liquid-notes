@@ -104,6 +104,42 @@ class ThemeManager: ObservableObject {
     @Published var dynamicTagCycling: Bool {
         didSet { UserDefaults.standard.set(dynamicTagCycling, forKey: "dynamicTagCycling") }
     }
+
+    // New appearance options
+    @Published var noteParallax: Bool {
+        didSet { UserDefaults.standard.set(noteParallax, forKey: "noteParallax") }
+    }
+    @Published var noteGlassDepth: Double { // 0 = subtle, 1 = vivid
+        didSet { UserDefaults.standard.set(noteGlassDepth, forKey: "noteGlassDepth") }
+    }
+    @Published var noteStyle: Int { // 0 = rounded, 1 = squircle
+        didSet { UserDefaults.standard.set(noteStyle, forKey: "noteStyle") }
+    }
+    @Published var minimalMode: Bool { // flattens shadows, reduces blur
+        didSet { UserDefaults.standard.set(minimalMode, forKey: "minimalMode") }
+    }
+    @Published var tagAccentSolid: Bool { // solid instead of gradient tags
+        didSet { UserDefaults.standard.set(tagAccentSolid, forKey: "tagAccentSolid") }
+    }
+    @Published var showAdvancedGlass: Bool { // toggles advanced controls UI only
+        didSet { UserDefaults.standard.set(showAdvancedGlass, forKey: "showAdvancedGlass") }
+    }
+
+    // Combined slider convenience (0.0 - 1.0). Setting it adjusts both glassOpacity and noteGlassDepth proportionally.
+    var glassIntensity: Double {
+        get {
+            // normalize depth (noteGlassDepth default center 0.75) and opacity (0.3-0.95)
+            let normOpacity = (glassOpacity - 0.3) / 0.65 // 0..1
+            let normDepth = noteGlassDepth / 1.2 // 0..1 (depth slider upper bound earlier 1.2)
+            return (normOpacity * 0.55 + normDepth * 0.45)
+        }
+        set {
+            let clamped = max(0, min(1, newValue))
+            // Map back: bias opacity slightly more for readability
+            glassOpacity = 0.3 + (clamped * 0.65)
+            noteGlassDepth = 0.3 + (clamped * 0.9) // keep within 0.3...1.2
+        }
+    }
     
     private init() {
         let savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
@@ -117,6 +153,12 @@ class ThemeManager: ObservableObject {
     self.animateGradients = UserDefaults.standard.object(forKey: "animateGradients") as? Bool ?? true
     self.themeOverlayPinned = UserDefaults.standard.object(forKey: "themeOverlayPinned") as? Bool ?? false
     self.dynamicTagCycling = UserDefaults.standard.object(forKey: "dynamicTagCycling") as? Bool ?? true
+    self.noteParallax = UserDefaults.standard.object(forKey: "noteParallax") as? Bool ?? true
+    self.noteGlassDepth = UserDefaults.standard.object(forKey: "noteGlassDepth") as? Double ?? 0.75
+    self.noteStyle = UserDefaults.standard.object(forKey: "noteStyle") as? Int ?? 0
+    self.minimalMode = UserDefaults.standard.object(forKey: "minimalMode") as? Bool ?? false
+    self.tagAccentSolid = UserDefaults.standard.object(forKey: "tagAccentSolid") as? Bool ?? false
+    self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false
     }
     
     func applyTheme(_ theme: GlassTheme) {

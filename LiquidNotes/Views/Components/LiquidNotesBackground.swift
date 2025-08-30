@@ -3,6 +3,7 @@ import SwiftUI
 struct LiquidNotesBackground: View {
     @State private var animationProgress: Double = 0
     @Environment(\.colorScheme) var colorScheme
+    @ObservedObject private var themeManager = ThemeManager.shared
     
     private var currentHour: Int {
         Calendar.current.component(.hour, from: Date())
@@ -64,11 +65,22 @@ struct LiquidNotesBackground: View {
             }
             .ignoresSafeArea()
             .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 20)
-                    .repeatForever(autoreverses: true)
-                ) {
-                    animationProgress = 1.0
+                if themeManager.animateGradients {
+                    withAnimation(
+                        .easeInOut(duration: 20)
+                        .repeatForever(autoreverses: true)
+                    ) { animationProgress = 1.0 }
+                }
+            }
+            .onChange(of: themeManager.animateGradients) { _, newValue in
+                if newValue {
+                    animationProgress = 0
+                    withAnimation(
+                        .easeInOut(duration: 20)
+                        .repeatForever(autoreverses: true)
+                    ) { animationProgress = 1.0 }
+                } else {
+                    withAnimation(.easeOut(duration: 0.6)) { animationProgress = 0 }
                 }
             }
             

@@ -63,7 +63,17 @@ struct MainTabView: View {
                                 .fill(LinearGradient(colors: theme.primaryGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 40, height: 40)
                                 .overlay(
-                                    Circle().stroke(themeManager.currentTheme == theme ? Color.primary : Color.clear, lineWidth: 3)
+                                    Group {
+                                        if themeManager.currentTheme == theme {
+                                            Circle().fill(Color.clear).overlay(
+                                                Circle().stroke(
+                                                    LinearGradient(colors: [
+                                                        .white.opacity(0.9), .white.opacity(0.05)
+                                                    ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2
+                                                ).blendMode(.plusLighter)
+                                            )
+                                        }
+                                    }
                                 )
                                 .onTapGesture {
                                     themeManager.applyTheme(theme)

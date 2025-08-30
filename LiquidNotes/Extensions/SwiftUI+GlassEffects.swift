@@ -334,44 +334,94 @@ extension View {
 extension View {
     func refinedClearGlass(cornerRadius: CGFloat = 22, intensity: Double = 1.0) -> some View {
         let theme = ThemeManager.shared
+    // Blend noteGlassDepth (passed as intensity) with global glassOpacity; adapt for minimalMode
+    let depth = intensity
+    let opacityFactor = theme.glassOpacity // 0.3 ... 0.95
+    let combined = depth * opacityFactor // master factor
+    // Base translucency target: lower values = more transparent
+    let materialOpacity = 0.25 + combined * 0.55 // 0.25 ... ~0.8
+    // Gradient strength (color wash)
+    let gradientAlpha = 0.08 + combined * 0.28 + (theme.highContrast ? 0.08 : 0)
+    let gradientColors = theme.currentTheme.primaryGradient.map { $0.opacity(gradientAlpha) }
+    // Stroke & glow scaling (re-tuned for subtle "liquid" border)
+    // We collapse dual-stroke system into a single adaptive hairline + faint inner highlight
+    let hairlineAlpha = (theme.highContrast ? 0.75 : 0.45) + combined * (theme.highContrast ? 0.15 : 0.10)
+    let innerHighlightAlpha = (theme.highContrast ? 0.35 : 0.20) + combined * 0.08
+    let outerShadowAlpha = 0.18 + combined * 0.18 + (theme.highContrast ? 0.06 : 0)
+    let haloAlpha = 0.05 + combined * 0.12 + (theme.highContrast ? 0.08 : 0)
+    let minimal = theme.minimalMode
+    let blurRadius = minimal ? 4 : (theme.reduceMotion ? 8 : 18 + combined * 14)
+    let gradientBlur = minimal ? 6 : (theme.reduceMotion ? 10 : 24 + combined * 10)
         return self
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(theme.currentTheme.backgroundGradient.first?.opacity(0.001) ?? .clear)
+            .fill(.ultraThinMaterial.opacity(materialOpacity))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: theme.currentTheme.primaryGradient.map { $0.opacity(0.18 * intensity) },
+                            colors: gradientColors,
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         )
                     )
-                    .blur(radius: 28)
-                    .opacity(0.5)
+            .blur(radius: gradientBlur)
+            .opacity(0.85)
             )
+            // Unified liquid border system: subtle hairline + inner luminous edge
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(colors: [
-                            .white.opacity(0.6), .white.opacity(0.05)
-                        ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1
-                    )
-                    .blendMode(.overlay)
-                    .opacity(0.9)
+                ZStack {
+                    // Hairline (outer) – very subtle, adaptive
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(colors: [
+                                .white.opacity(hairlineAlpha),
+                                .white.opacity(0.02)
+                            ], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: theme.highContrast ? 1.1 : 0.7
+                        )
+                        .blendMode(.plusLighter)
+                        .opacity(minimal ? 0.55 : 0.85)
+                    // Inner highlight (simulated inner shadow inverse)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(colors: [
+                                (theme.currentTheme.primaryGradient.first ?? .white).opacity(innerHighlightAlpha * 0.9),
+                                .clear
+                            ], startPoint: .bottomTrailing, endPoint: .topLeading),
+                            lineWidth: theme.highContrast ? 0.9 : 0.6
+                        )
+                        .blur(radius: 1.0)
+                        .opacity(minimal ? 0.35 : 0.55)
+                        .blendMode(.screen)
+                }
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(theme.currentTheme.primaryGradient.first?.opacity(0.25) ?? .white.opacity(0.25), lineWidth: 0.5)
-                    .blur(radius: 1)
-                    .opacity(0.5)
-            )
-            .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
-            .shadow(color: (theme.currentTheme.primaryGradient.first ?? .white).opacity(0.15), radius: 40, x: 0, y: 22)
+            .shadow(color: .black.opacity(minimal ? outerShadowAlpha * 0.4 : outerShadowAlpha), radius: (minimal ? 8 : 16) + combined * (minimal ? 2 : 6), x: 0, y: minimal ? 6 : 10)
+            .shadow(color: (theme.currentTheme.primaryGradient.first ?? .white).opacity(minimal ? haloAlpha * 0.5 : haloAlpha), radius: (minimal ? 16 : 30) + combined * (minimal ? 8 : 18), x: 0, y: minimal ? 12 : 20)
+        .blur(radius: blurRadius * 0.0) // placeholder if future depth-of-field needed
     }
     
     func subtleParallax(_ motion: MotionManager = .shared, maxOffset: CGFloat = 8) -> some View {
         let values = motion.normalizedMotionValues()
         return self.offset(x: values.x * maxOffset, y: values.y * maxOffset)
+    }
+
+    // Reusable subtle liquid border (hairline) for small components (chips, icons)
+    func liquidBorderHairline(cornerRadius: CGFloat = 12) -> some View {
+        let theme = ThemeManager.shared
+        let combined = theme.noteGlassDepth * theme.glassOpacity
+        let baseAlpha: Double = theme.highContrast ? 0.65 : 0.42
+        let hairlineAlpha = baseAlpha + combined * (theme.highContrast ? 0.18 : 0.12)
+        return overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(
+                    LinearGradient(colors: [
+                        .white.opacity(hairlineAlpha),
+                        .white.opacity(0.02)
+                    ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: theme.highContrast ? 1 : 0.6
+                )
+                .blendMode(.plusLighter)
+                .opacity(theme.minimalMode ? 0.55 : 0.85)
+        )
     }
 }

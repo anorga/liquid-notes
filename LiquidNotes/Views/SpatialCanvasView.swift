@@ -92,6 +92,7 @@ struct GridNoteCard: View {
     @State private var isDragging = false
     @State private var noteSize = CGSize(width: 180, height: 140)
     @State private var isResizing = false
+    @State private var initialSize: CGSize = .zero // store size at resize gesture start
     @State private var dragStartLocation = CGPoint.zero
     @State private var swipeOffset: CGFloat = 0
     @State private var showSwipeActions = false
@@ -100,6 +101,47 @@ struct GridNoteCard: View {
     @State private var showUndo = false
     @State private var undoWorkItem: DispatchWorkItem?
     @ObservedObject private var themeManager = ThemeManager.shared
+
+    // Breakpoint-based padding for consistent interior spacing & to avoid icon overflow on narrow notes
+    private var horizontalPadding: CGFloat {
+        let w = noteSize.width
+        if w <= 155 { return 18 }
+        if w <= 185 { return 20 }
+        return 22
+    }
+    private var verticalPadding: CGFloat {
+        let h = noteSize.height
+        if h <= 145 { return 16 }
+        if h <= 180 { return 18 }
+        return 20
+    }
+
+    // Only show large attachment preview if note is big enough to not crowd title/padding
+    private var showAttachmentPreview: Bool {
+        noteSize.width >= 170 && noteSize.height >= 160
+    }
+
+    private var contentLineLimit: Int {
+        if showAttachmentPreview { return 3 }
+        if !note.tags.isEmpty { return 4 }
+        return 5
+    }
+
+    // Tag truncation logic (E): try to fit tags within available width budget
+    private var displayedTags: [String] {
+        guard !note.tags.isEmpty else { return [] }
+        // Rough width estimation: base 20 + 8 per char (capsules) up to available width minus padding and star/archive overlay zone
+        let available = max(60, noteSize.width - horizontalPadding * 2 - 40)
+        var used: CGFloat = 0
+        var result: [String] = []
+        for tag in note.tags {
+            let est = 28 + CGFloat(tag.count) * 7.0
+            if used + est > available { break }
+            result.append(tag)
+            used += est
+        }
+        return result
+    }
     
     var body: some View {
         ZStack {
@@ -162,126 +204,109 @@ struct GridNoteCard: View {
                 .frame(width: noteSize.width, height: noteSize.height)
             }
             
-            // Refined clear glass background container (modernized)
-            RoundedRectangle(cornerRadius: 20)
+            // Refined clear glass background container (modernized & theme-configurable)
+            let corner: CGFloat = themeManager.noteStyle == 0 ? 20 : 34
+            let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
+            base
                 .fill(Color.clear)
-                .refinedClearGlass(cornerRadius: 20)
+                .overlay(
+                    // Base glass style (shared)
+                    Color.clear.refinedClearGlass(cornerRadius: corner, intensity: themeManager.noteGlassDepth * (themeManager.noteStyle == 0 ? 1.0 : 1.08))
+                )
+                .overlay(
+                    Group { /* redundant strokes removed; refinedClearGlass now provides unified liquid border */ }
+                )
+                .clipShape(base)
                 .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height)
-                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+                .shadow(color: .black.opacity( themeManager.minimalMode ? 0.08 : (themeManager.noteStyle == 0 ? 0.15 : 0.18)), radius: themeManager.minimalMode ? 6 : (themeManager.noteStyle == 0 ? 10 : 14), x: 0, y: themeManager.minimalMode ? 3 : 5)
+                .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : (themeManager.noteStyle == 0 ? 0.08 : 0.12)), radius: themeManager.minimalMode ? 18 : (themeManager.noteStyle == 0 ? 28 : 36), x: 0, y: themeManager.minimalMode ? 10 : (themeManager.noteStyle == 0 ? 18 : 22))
                 .offset(x: swipeOffset)
-                .subtleParallax(.shared, maxOffset: themeManager.reduceMotion ? 0 : 4)
+                .modifier(ParallaxIfEnabled(enabled: themeManager.noteParallax && !themeManager.reduceMotion))
                 .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "arrow.up.backward.and.arrow.down.forward")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(8)
-                        .background(Circle().fill(.regularMaterial))
-                        .padding(6)
-                        .opacity(isResizing ? 0.9 : 0.7)
-                        .scaleEffect(isResizing ? 1.1 : 1.0)
-                        .animation(.easeInOut(duration: 0.2), value: isResizing)
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
+                    // Enlarged (44x44) hit target for resizing with transparent backdrop
+                    ZStack {
+                        Rectangle()
+                            .fill(Color.clear)
+                            .frame(width: 52, height: 52)
+                            .contentShape(Rectangle())
+                        Image(systemName: "arrow.up.backward.and.arrow.down.forward")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                            .background(Circle().fill(.regularMaterial))
+                            .opacity(isResizing ? 0.95 : 0.7)
+                            .scaleEffect(isResizing ? 1.15 : 1.0)
+                            .animation(.easeInOut(duration: 0.2), value: isResizing)
+                    }
+                    .padding(2)
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if !isResizing {
                                     isResizing = true
-                                    
-                                    // Calculate safe boundaries for note resizing
-                                    let screenWidth = UIScreen.main.bounds.width
-                                    let screenHeight = UIScreen.main.bounds.height
-                                    
-                                    // Calculate maximum width: screen width minus padding, with some buffer
-                                    let totalPadding: CGFloat = 40  // horizontal padding
-                                    let safeBuffer: CGFloat = 20    // Extra buffer to prevent edge clipping
-                                    let maxWidth = screenWidth - totalPadding - safeBuffer
-                                    let maxHeight = min(280, screenHeight * 0.3)
-                                    
-                                    let newWidth = max(140, min(maxWidth, noteSize.width + value.translation.width))
-                                    let newHeight = max(120, min(maxHeight, noteSize.height + value.translation.height))
-                                    
-                                    // Smooth resize animation
-                                    withAnimation(.interactiveSpring(response: 0.1, dampingFraction: 0.9)) {
-                                        noteSize = CGSize(width: newWidth, height: newHeight)
-                                    }
+                                    initialSize = noteSize
                                 }
-                                .onEnded { _ in
-                                    withAnimation(.bouncy(duration: 0.3, extraBounce: 0.1)) {
-                                        isResizing = false
-                                    }
+                                let screenWidth = UIScreen.main.bounds.width
+                                let screenHeight = UIScreen.main.bounds.height
+                                let totalPadding: CGFloat = 40
+                                let safeBuffer: CGFloat = 20
+                                let maxWidth = screenWidth - totalPadding - safeBuffer
+                                let maxHeight = min(320, screenHeight * 0.35)
+                                let proposedWidth = initialSize.width + value.translation.width
+                                let proposedHeight = initialSize.height + value.translation.height
+                                let newWidth = max(140, min(maxWidth, proposedWidth))
+                                let newHeight = max(120, min(maxHeight, proposedHeight))
+                                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.88)) {
+                                    noteSize = CGSize(width: newWidth, height: newHeight)
                                 }
-                        )
+                            }
+                            .onEnded { _ in
+                                withAnimation(.bouncy(duration: 0.32, extraBounce: 0.08)) { isResizing = false }
+                                // (A) Persist size to model so it survives reloads
+                                note.width = Float(noteSize.width)
+                                note.height = Float(noteSize.height)
+                                note.updateModifiedDate()
+                            }
+                    )
                 }
             
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 6) {
                     Text(note.title.isEmpty ? "Untitled Note" : note.title)
-                        .font(.title3)
+                        .font(.headline)
                         .fontWeight(.semibold)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                    
-                    Spacer(minLength: 8)
-                    
-                    HStack(spacing: 6) {
-                        if false { // !note.tasks.isEmpty { // Temporarily disabled
-                            ProgressCircle(progress: note.progress)
-                                .frame(width: 24, height: 24)
-                        }
-                        
-                        if note.isFavorited {
-                            ZStack {
-                                if !themeManager.reduceMotion {
-                                    Circle()
-                                        .fill(
-                                            RadialGradient(
-                                                colors: [Color.yellow.opacity(0.55), Color.orange.opacity(0.0)],
-                                                center: .center,
-                                                startRadius: 0,
-                                                endRadius: 28
-                                            )
-                                        )
-                                        .frame(width: 40, height: 40)
-                                        .blur(radius: 6)
-                                        .opacity(0.9)
-                                        .transition(.scale.combined(with: .opacity))
-                                }
-                                Image(systemName: "star.fill")
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            colors: [.yellow, .orange],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .font(.system(size: 14, weight: .medium))
-                                    .shadow(color: .yellow.opacity(0.5), radius: 4, x: 0, y: 1)
-                                    .scaleEffect(themeManager.reduceMotion ? 1 : 1.08)
-                                    .animation(themeManager.reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.55), value: note.isFavorited)
-                            }
-                        }
-                    }
+                    Spacer(minLength: 4)
                 }
                 
-                if let firstImageData = note.attachments.first,
+                if showAttachmentPreview,
+                   let firstImageData = note.attachments.first,
                    let firstType = note.attachmentTypes.first {
-                    ZStack {
+                    ZStack(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(.regularMaterial)
-                            .frame(maxHeight: noteSize.height * 0.45)
-                        if firstType.contains("gif") {
-                            AnimatedGIFView(data: firstImageData)
-                                .aspectRatio(contentMode: .fill)
-                                .frame(maxHeight: noteSize.height * 0.4)
-                                .clipped()
-                                .cornerRadius(10)
-                        } else if let uiImage = UIImage(data: firstImageData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(maxHeight: noteSize.height * 0.4)
-                                .clipped()
-                                .cornerRadius(10)
+                            .frame(maxHeight: min(noteSize.height * 0.45, 120))
+                        Group {
+                            if firstType.contains("gif") {
+                                AnimatedGIFView(data: firstImageData)
+                            } else if let uiImage = UIImage(data: firstImageData) {
+                                Image(uiImage: uiImage).resizable()
+                            }
                         }
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxHeight: min(noteSize.height * 0.4, 100))
+                        .clipped()
+                        .cornerRadius(10)
+                        // Gradient mask for subtle fade (C)
+                        LinearGradient(
+                            colors: [Color.clear, Color.black.opacity(0.35)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .blendMode(.overlay)
+                        .cornerRadius(10)
                     }
                 }
                 
@@ -290,7 +315,7 @@ struct GridNoteCard: View {
                         .font(.callout)
                         .fontWeight(.regular)
                         .foregroundStyle(.primary.opacity(0.8))
-                        .lineLimit(5) // note.attachments.isEmpty && note.tags.isEmpty ? 5 : 3) // Temporarily simplified
+                        .lineLimit(contentLineLimit)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(2)
                         .padding(.top, 2)
@@ -301,34 +326,57 @@ struct GridNoteCard: View {
                         .italic()
                 }
                 
-                if false { // !note.tags.isEmpty { // Temporarily disabled
+                if !note.tags.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            // ForEach(note.tags, id: \.self) { tag in
-                            //     TagView(tag: tag, color: .blue)
-                            //         .scaleEffect(0.9)
-                            // }
+                            ForEach(displayedTags, id: \.self) { tag in
+                                TagView(tag: tag, color: .blue)
+                                    .scaleEffect(0.85)
+                                    .lineLimit(1)
+                            }
                         }
                     }
-                    .frame(maxHeight: 28)
-                    .padding(.top, 4)
+                    .frame(maxHeight: 26)
+                    .padding(.top, 2)
                 }
                 
                 Spacer(minLength: 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            // Dynamic internal padding for clearer content breathing room without overflow
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
             .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height, alignment: .leading)
             .overlay(alignment: .topTrailing) {
-                if note.isArchived {
-                    Text("Archived")
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .padding(6)
-                        .transition(.scale.combined(with: .opacity))
+                VStack(alignment: .trailing, spacing: 4) {
+                    if !showAttachmentPreview && !note.attachments.isEmpty {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(5)
+                            .background(Circle().fill(.ultraThinMaterial))
+                            .clipShape(Circle())
+                            .transition(.opacity.combined(with: .scale))
+                            .onTapGesture { onTap() } // (B) quick open editor
+                    }
+                    if note.isFavorited {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .padding(6)
+                            .background(Circle().fill(.ultraThinMaterial))
+                            .clipShape(Circle())
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    if note.isArchived {
+                        Text("Archived")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
+                .padding(6)
             }
         }
     .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
@@ -338,14 +386,19 @@ struct GridNoteCard: View {
     .opacity(note.isArchived ? 0.45 : 1.0)
     .saturation(note.isArchived ? 0.4 : 1.0)
     .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
-    .animation(themeManager.reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.82), value: noteSize)
-        .animation(.interactiveSpring(response: 0.5, dampingFraction: 0.75), value: isDragging)
-        .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8), value: dragOffset)
-        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9), value: noteSize)
-        .animation(.bouncy(duration: 0.3, extraBounce: 0.1), value: isResizing)
+    // Removed multiple overlapping implicit animations for noteSize to reduce jitter during resize
+    .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isDragging)
+    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: dragOffset)
+    // Explicit animations handled in gesture bodies for resizing
         .onTapGesture {
             HapticManager.shared.noteSelected()
             onTap()
+        }
+        .onAppear {
+            // Initialize with persisted size if available
+            let persistedWidth = CGFloat(note.width)
+            let persistedHeight = CGFloat(note.height)
+            if persistedWidth >= 140, persistedHeight >= 120 { noteSize = CGSize(width: persistedWidth, height: persistedHeight) }
         }
         .contextMenu {
             Button(action: {
@@ -362,41 +415,40 @@ struct GridNoteCard: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 8)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 4)
                 .onChanged { value in
-                    if showSwipeActions { // actively swiping
-                        swipeOffset = value.translation.width
-                        return
-                    }
+                    guard !isResizing else { return } // ignore when resizing
+                    if showSwipeActions { swipeOffset = value.translation.width; return }
                     let horizontalPriority = abs(value.translation.width) > abs(value.translation.height) * 1.6
-                    if horizontalPriority && isDragging == false && swipeOffset == 0 && !isResizing {
+                    if horizontalPriority && !isDragging && swipeOffset == 0 {
                         showSwipeActions = true
                         swipeOffset = value.translation.width
                         return
                     }
-                    guard !showSwipeActions && !isResizing else { return }
-                    isDragging = true
-                    let rawConstrainedX = value.translation.width * 0.6
-                    let constrainedX = max(-10, rawConstrainedX)
-                    let constrainedY = value.translation.height * 0.9
-                    dragOffset = CGSize(width: constrainedX, height: constrainedY)
+                    guard !showSwipeActions else { return }
+                    if !isDragging { isDragging = true }
+                    let smoothing: CGFloat = 0.55
+                    let constrainedX = max(-12, value.translation.width * smoothing)
+                    let constrainedY = value.translation.height * 0.85
+                    dragOffset = CGSize(
+                        width: dragOffset.width * 0.35 + constrainedX * 0.65,
+                        height: dragOffset.height * 0.35 + constrainedY * 0.65
+                    )
                 }
                 .onEnded { value in
+                    guard !isResizing else { return }
                     if showSwipeActions {
                         withAnimation(.bouncy(duration: 0.35)) {
-                            if swipeOffset < -110 {
-                                onFavorite(); HapticManager.shared.noteFavorited();
-                            } else if swipeOffset > 110 {
+                            if swipeOffset < -110 { onFavorite(); HapticManager.shared.noteFavorited() }
+                            else if swipeOffset > 110 {
                                 let wasArchived = note.isArchived
                                 note.isArchived = true
                                 HapticManager.shared.noteArchived()
                                 if enableArchiveUndo {
                                     showUndo = true
                                     undoWorkItem?.cancel()
-                                    let work = DispatchWorkItem {
-                                        showUndo = false
-                                    }
+                                    let work = DispatchWorkItem { showUndo = false }
                                     undoWorkItem = work
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
                                 }
@@ -407,14 +459,13 @@ struct GridNoteCard: View {
                         }
                         return
                     }
-                    guard !isResizing else { return }
                     isDragging = false
                     let dragDistance = sqrt(value.translation.width * value.translation.width + value.translation.height * value.translation.height)
                     if dragDistance > 80 {
                         onMoveRequest(note, CGPoint(x: value.translation.width, y: value.translation.height))
                         HapticManager.shared.noteDropped()
                     }
-                    withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.9)) { dragOffset = .zero }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = .zero }
                     if dragDistance > 30 && dragDistance <= 80 { HapticManager.shared.buttonTapped() }
                 }
         )
@@ -429,6 +480,7 @@ struct GridNoteCard: View {
                 .transition(.opacity)
             }
         }
+    // Debug build marker removed
         .overlay(alignment: .bottom) {
             if showUndo {
                 HStack(spacing: 12) {
@@ -513,5 +565,15 @@ struct AnimatedGIFView: View {
     private func stopAnimation() {
         timer?.invalidate()
         timer = nil
+    }
+}
+
+// Helper modifier to conditionally apply subtle parallax
+private struct ParallaxIfEnabled: ViewModifier {
+    let enabled: Bool
+    func body(content: Content) -> some View {
+        if enabled {
+            content.subtleParallax(.shared, maxOffset: 4)
+        } else { content }
     }
 }

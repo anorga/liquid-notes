@@ -123,7 +123,7 @@ private struct FilterChip: View {
                 )
             )
             .overlay(
-                Capsule().stroke(isOn ? Color.primary.opacity(themeManager.highContrast ? 0.8 : 0.4) : Color.clear, lineWidth: 1)
+                Group { if isOn { Color.clear.liquidBorderHairline(cornerRadius: 40) } }
             )
             .foregroundStyle(isOn ? .primary : .secondary)
             .onTapGesture { withAnimation(.bouncy(duration: 0.3)) { selection = index; HapticManager.shared.buttonTapped() } }

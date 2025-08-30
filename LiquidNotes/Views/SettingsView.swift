@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
     @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
     @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
+    @ObservedObject private var motion = MotionManager.shared
     
     var body: some View {
         NavigationStack {
@@ -33,6 +34,25 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will reset all settings to their default values.")
+        }
+    }
+
+    private var depthLabel: String {
+        switch themeManager.noteGlassDepth {
+        case ..<0.45: return "Subtle"
+        case ..<0.75: return "Balanced"
+        case ..<1.0: return "Rich"
+        default: return "Vivid"
+        }
+    }
+
+    private var intensityLabel: String {
+        let v = themeManager.glassIntensity
+        switch v {
+        case ..<0.25: return "Airy"
+        case ..<0.55: return "Balanced"
+        case ..<0.8: return "Lush"
+        default: return "Vivid"
         }
     }
 
@@ -78,6 +98,38 @@ struct SettingsView: View {
                 .foregroundStyle(.primary)
             
             VStack(alignment: .leading, spacing: 12) {
+                // Live preview card
+                Text("Preview")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .center) {
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, style: .continuous)
+                            .fill(Color.clear)
+                            .refinedClearGlass(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, intensity: themeManager.noteGlassDepth)
+                            .frame(width: 160, height: 110)
+                            .overlay(alignment: .topLeading) {
+                                Text("Sample")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+                                    .padding(8)
+                            }
+                            .overlay(alignment: .bottomTrailing) {
+                                if themeManager.noteStyle == 1 {
+                                    Image(systemName: "sparkles")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .padding(6)
+                                }
+                            }
+                            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.05 : 0.18), radius: themeManager.minimalMode ? 4 : 12, x: 0, y: themeManager.minimalMode ? 2 : 6)
+                            // Overlay stroke removed; unified border handled by refinedClearGlass
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 4)
+
                 Text("Glass Theme")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -101,13 +153,11 @@ struct SettingsView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Glass Opacity")
+                    Text("Glass Intensity")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
                     Spacer()
-                    
-                    Text("\(Int(themeManager.glassOpacity * 100))%")
+                    Text(intensityLabel)
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -115,25 +165,13 @@ struct SettingsView: View {
                         .padding(.vertical, 4)
                         .background(.tertiary.opacity(0.2), in: Capsule())
                 }
-                
-                Slider(
-                    value: $themeManager.glassOpacity,
-                    in: 0.3...0.95,
-                    step: 0.05
-                ) {
-                    Text("Glass Opacity")
-                } onEditingChanged: { editing in
-                    if !editing {
-                        HapticManager.shared.buttonTapped()
-                    }
+                Slider(value: Binding(
+                    get: { themeManager.glassIntensity },
+                    set: { newVal in themeManager.glassIntensity = newVal; HapticManager.shared.buttonTapped() }
+                ), in: 0...1) {
+                    Text("Glass Intensity")
                 }
-                .tint(
-                    LinearGradient(
-                        colors: [.blue, .cyan],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
                 
                 HStack {
                     Text("Subtle")
@@ -143,6 +181,94 @@ struct SettingsView: View {
                     Text("Opaque")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
+                }
+                Divider().padding(.vertical, 4)
+                SettingToggle(
+                    title: "Minimal Mode",
+                    description: "Flatter surfaces & lighter shadows",
+                    icon: "rectangle.compress.vertical",
+                    isOn: $themeManager.minimalMode
+                )
+                SettingToggle(
+                    title: "Animate Background",
+                    description: "Soft shifts in ambient gradient",
+                    icon: "sparkles",
+                    isOn: $themeManager.animateGradients
+                )
+                SettingToggle(
+                    title: "Note Parallax",
+                    description: "Subtle device tilt on notes",
+                    icon: "gyroscope",
+                    isOn: $themeManager.noteParallax
+                )
+                SettingToggle(
+                    title: "Dynamic Tag Colors",
+                    description: "Cycle tag hues subtly",
+                    icon: "tag",
+                    isOn: $themeManager.dynamicTagCycling
+                )
+                SettingToggle(
+                    title: "Solid Tag Accents",
+                    description: "Use solid fills instead of gradients",
+                    icon: "square.filled.on.square",
+                    isOn: $themeManager.tagAccentSolid
+                )
+                SettingToggle(
+                    title: "Pin Theme Picker",
+                    description: "Keep quick theme overlay open",
+                    icon: "pin",
+                    isOn: $themeManager.themeOverlayPinned
+                )
+                Divider().padding(.vertical, 6)
+                Text("Note Style")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Note Style", selection: $themeManager.noteStyle) {
+                    Text("Rounded").tag(0)
+                    Text("Squircle").tag(1)
+                }
+                .pickerStyle(.segmented)
+                DisclosureGroup(isExpanded: $themeManager.showAdvancedGlass) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Glass Depth")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(depthLabel)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        Slider(value: $themeManager.noteGlassDepth, in: 0.3...1.2, step: 0.05) { Text("Glass Depth") }
+                            .tint(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                        HStack {
+                            Text("Glass Opacity")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int(themeManager.glassOpacity * 100))%")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.tertiary.opacity(0.2), in: Capsule())
+                        }
+                        Slider(value: $themeManager.glassOpacity, in: 0.3...0.95, step: 0.05) { Text("Glass Opacity") }
+                            .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                    }
+                    .padding(.top, 4)
+                } label: {
+                    HStack {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("Advanced Glass")
+                        Spacer()
+                        Image(systemName: themeManager.showAdvancedGlass ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -175,6 +301,9 @@ struct SettingsView: View {
                     icon: "figure.walk.motion",
                     isOn: $themeManager.reduceMotion
                 )
+                .onChange(of: themeManager.reduceMotion) { _, newValue in
+                    MotionManager.shared.syncWithReduceMotion(newValue)
+                }
             }
         }
         .padding()

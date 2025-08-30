@@ -203,13 +203,13 @@ struct ProgressCircle: View {
         ZStack {
             Circle()
                 .stroke(
-                    LinearGradient(
-                        colors: [Color.gray.opacity(0.2), Color.gray.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 3
+                    LinearGradient(colors: [
+                        Color.white.opacity(0.55),
+                        Color.white.opacity(0.06)
+                    ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2
                 )
+                .blendMode(.plusLighter)
+                .opacity(0.85)
                 .frame(width: 28, height: 28)
             
             Circle()

@@ -115,3 +115,9 @@ class MotionManager: ObservableObject {
         stopTracking()
     }
 }
+
+extension MotionManager {
+    func syncWithReduceMotion(_ reduce: Bool) {
+        if reduce { stopTracking() } else { startTracking() }
+    }
+}

@@ -35,21 +35,23 @@ struct TagView: View {
         .background(
             Capsule()
                 .fill(
-                    LinearGradient(
-                        colors: animatedGradient(),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ).opacity(themeManager.glassOpacity * 0.9)
+                    tagFill()
                 )
                 .overlay(
                     Capsule().stroke(
-                        themeManager.highContrast ? Color.primary.opacity(0.7) : Color.white.opacity(0.25), lineWidth: 1
+                        LinearGradient(colors: [
+                            .white.opacity(themeManager.highContrast ? 0.7 : 0.45 + themeManager.glassOpacity * 0.15),
+                            .white.opacity(0.02)
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: themeManager.highContrast ? 0.9 : 0.6
                     )
+                    .blendMode(.plusLighter)
+                    .opacity(themeManager.minimalMode ? 0.55 : 0.82)
                 )
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Tag \(tag)"))
-        .scaleEffect(isPressed ? 0.95 : 1.0)
+    .scaleEffect(isPressed ? (themeManager.minimalMode ? 0.98 : 0.95) : 1.0)
         .onTapGesture {
             withAnimation(.bouncy(duration: 0.2)) {
                 isPressed = true
@@ -72,6 +74,20 @@ private extension TagView {
         return base.enumerated().map { idx, color in
             let shift = (phase * 25) + Double(idx) * 18
             return color.hueShift(shift)
+        }
+    }
+
+    func tagFill() -> AnyShapeStyle {
+        if themeManager.tagAccentSolid {
+            return AnyShapeStyle((themeManager.currentTheme.primaryGradient.first ?? .blue).opacity(themeManager.minimalMode ? 0.4 : 0.65))
+        } else {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: animatedGradient(),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ).opacity(themeManager.glassOpacity * (themeManager.minimalMode ? 0.55 : 0.9))
+            )
         }
     }
 }
