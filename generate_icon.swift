@@ -152,20 +152,39 @@ struct IconGenerator {
 }
 
 if let cgImage = IconGenerator.createModernIcon() {
-    let rep = NSBitmapImageRep(cgImage: cgImage)
-    rep.size = NSSize(width: 1024, height: 1024)
-    if let data = rep.representation(using: .png, properties: [:]) {
-        let currentDir = FileManager.default.currentDirectoryPath
-        let iconPath = "\(currentDir)/LiquidNotes/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
-        do {
-            try data.write(to: URL(fileURLWithPath: iconPath))
-            print("✅ New modern app icon generated successfully (opaque).")
-        } catch {
-            print("❌ Failed to save icon: \(error)")
-        }
-    } else {
-        print("❌ Could not encode PNG data")
+    // Target pixel sizes for required iOS/iPadOS icons (distinct set, duplicates allowed)
+    let explicitList: [Int] = [20,29,40,58,60,76,80,87,120,152,167,180,1024] // removed non-standard 83 size
+
+    func resized(_ image: CGImage, to pixel: Int) -> CGImage? {
+        if image.width == pixel { return image }
+        guard let ctx = CGContext(data: nil,
+                                  width: pixel,
+                                  height: pixel,
+                                  bitsPerComponent: 8,
+                                  bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: pixel, height: pixel))
+        return ctx.makeImage()
     }
+
+    let fm = FileManager.default
+    let baseDir = fm.currentDirectoryPath + "/LiquidNotes/Assets.xcassets/AppIcon.appiconset"
+    var generated: [String] = []
+    for p in explicitList {
+        if let scaled = resized(cgImage, to: p) {
+            let rep = NSBitmapImageRep(cgImage: scaled)
+            if let data = rep.representation(using: .png, properties: [:]) {
+                let name = "icon-\(p).png"
+                let path = baseDir + "/" + name
+                do { try data.write(to: URL(fileURLWithPath: path)); generated.append(name) } catch {
+                    fputs("Failed writing \(name): \(error)\n", stderr)
+                }
+            }
+        }
+    }
+    print("✅ Generated icons: \(generated.joined(separator: ", "))")
 } else {
     print("❌ Failed to generate icon")
 }
