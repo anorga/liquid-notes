@@ -258,9 +258,11 @@ private extension MainTabView {
             guard let title = notif.object as? String else { return }
             if notesViewModel == nil { setupViewModel() }
             guard let vm = notesViewModel else { return }
-            let new = vm.createNote(title: title, content: "")
-            vm.reindexLinks() // ensure link graph updates
-            selectedNote = new
+            Task { @MainActor in
+                let new = vm.createNote(title: title, content: "")
+                vm.reindexLinks() // ensure link graph updates
+                selectedNote = new
+            }
         }
     }
 }

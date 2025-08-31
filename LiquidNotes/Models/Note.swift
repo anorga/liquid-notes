@@ -101,27 +101,28 @@ final class Note {
     }
     
     func addTask(_ text: String) {
-        let task = TaskItem(text: text, note: self)
-        if tasks == nil { tasks = [] }
-        tasks?.append(task)
-        updateProgress()
-        updateModifiedDate()
+    let task = TaskItem(text: text, note: self)
+    // Defensive copy to avoid simultaneous access when UI enumerates tasks
+    var copy = tasks ?? []
+    copy.append(task)
+    tasks = copy
+    updateProgress()
+    updateModifiedDate()
     }
 
     func toggleTask(at index: Int) {
     guard let arr = tasks, index < arr.count else { return }
-    arr[index].isCompleted.toggle() // mutates TaskItem (reference type), array copy not needed
-    tasks = arr
-        updateProgress()
-        updateModifiedDate()
+    arr[index].isCompleted = !arr[index].isCompleted
+    updateProgress()
+    updateModifiedDate()
     }
 
     func removeTask(at index: Int) {
-        guard var arr = tasks, index < arr.count else { return }
-        arr.remove(at: index)
-        tasks = arr
-        updateProgress()
-        updateModifiedDate()
+    guard var arr = tasks, index < arr.count else { return }
+    arr.remove(at: index)
+    tasks = arr
+    updateProgress()
+    updateModifiedDate()
     }
 
     func updateProgress() {

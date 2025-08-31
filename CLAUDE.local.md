@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project: LiquidNotes
 
-A SwiftUI iOS app implementing Apple's Liquid Glass design language for modern sticky notes with spatial organization.
+A SwiftUI iOS app implementing Apple's Liquid Glass design language for modern productivity and notes with spatial organization.
 
 ## Development Commands
 
@@ -18,10 +18,6 @@ xcodebuild -scheme LiquidNotes -destination 'platform=iOS Simulator,name=iPhone 
 
 # Clean build folder
 xcodebuild -scheme LiquidNotes clean
-
-# Archive for release
-xcodebuild -scheme LiquidNotes -configuration Release archive
-```
 
 ### Testing
 ```bash
@@ -70,11 +66,6 @@ xcodebuild test -scheme LiquidNotes -only-testing:LiquidNotesTests/TestClassName
 - **Deployment Target**: iOS 17.0 minimum
 
 ### Documentation and Resources
-
-#### Primary Resource
-- **MUST USE**: `apple-doc-mcp` for all native iOS functionality
-- Search symbols with wildcards (e.g., `RPBroadcast*`)
-- Get detailed documentation for SwiftUI, UIKit, Core Motion, etc.
 
 #### Fallback Protocol
 When `apple-doc-mcp` lacks information:

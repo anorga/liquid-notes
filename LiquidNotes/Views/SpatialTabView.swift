@@ -232,21 +232,49 @@ struct SpatialTabView: View {
     private var filteredNotes: [Note] { let base = allNotes.filter { !$0.isArchived }; return selectedFolder == nil ? base : base.filter { $0.folder?.id == selectedFolder?.id } }
     // Batch action bar
     private var batchActionBar: some View {
-        HStack(spacing: 12) {
-            Text("\(selectedNoteIDs.count) selected").font(.caption).foregroundStyle(.secondary)
-            Spacer(minLength: 4)
-            Button { batchToggleFavorite() } label: { Label("Fav", systemImage: "star") }.buttonStyle(.borderless)
-            Button { showingMoveSheet = true } label: { Label("Move", systemImage: "folder") }.buttonStyle(.borderless)
-            Button(role: .destructive) { batchDelete() } label: { Label("Del", systemImage: "trash") }.buttonStyle(.borderless)
-            Divider().frame(height: 16)
-            Button { clearSelection() } label: { Text("Clear") }.buttonStyle(.borderless)
+        HStack(spacing: 14) {
+            Text("\(selectedNoteIDs.count) selected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Button { batchToggleFavorite() } label: {
+                Image(systemName: "star")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .accessibilityLabel("Toggle favorite on selected")
+            .buttonStyle(.borderless)
+            Button { showingMoveSheet = true } label: {
+                Image(systemName: "folder")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .accessibilityLabel("Move selected")
+            .buttonStyle(.borderless)
+            Button(role: .destructive) { batchDelete() } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .accessibilityLabel("Delete selected")
+            .buttonStyle(.borderless)
+            Divider().frame(height: 18)
+            Button { clearSelection() } label: {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .accessibilityLabel("Clear selection")
+            .buttonStyle(.borderless)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.07), lineWidth: 0.6)
+        )
         .padding(.bottom, 20)
         .padding(.horizontal, 20)
-        .shadow(radius: 3, y: 2)
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+        .animation(.easeInOut(duration: 0.2), value: selectedNoteIDs.count)
     }
     // select-all removed per updated requirements
     // MARK: - Actions & Helpers
@@ -267,21 +295,29 @@ struct SpatialTabView: View {
     }
     private func deleteNote(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
-        withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteNote(note) }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteNote(note) }
+        }
     }
     private func toggleFavorite(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
-        withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleNoteFavorite(note) }
-        HapticManager.shared.buttonTapped()
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleNoteFavorite(note) }
+            HapticManager.shared.buttonTapped()
+        }
     }
     private func deleteFolder(_ folder: Folder) {
         guard let viewModel = notesViewModel else { return }
-        withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteFolder(folder) }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteFolder(folder) }
+        }
     }
     private func toggleFolderFavorite(_ folder: Folder) {
         guard let viewModel = notesViewModel else { return }
-        withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleFolderFavorite(folder) }
-        HapticManager.shared.buttonTapped()
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleFolderFavorite(folder) }
+            HapticManager.shared.buttonTapped()
+        }
     }
     // MARK: - Multi-select helpers
     private func toggleSelect(_ note: Note) {
@@ -294,20 +330,31 @@ struct SpatialTabView: View {
         guard let viewModel = notesViewModel else { return }
         let selected = allNotes.filter { selectedNoteIDs.contains($0.id) }
         let allFav = selected.allSatisfy { $0.isFavorited }
-        withAnimation { selected.forEach { note in if allFav { note.isFavorited = false } else { note.isFavorited = true }; note.updateModifiedDate() } }
-        viewModel.persistChanges()
+        DispatchQueue.main.async {
+            withAnimation {
+                selected.forEach { note in
+                    if allFav { note.isFavorited = false } else { note.isFavorited = true }
+                    note.updateModifiedDate()
+                }
+            }
+            viewModel.persistChanges()
+        }
     }
     private func batchDelete() {
         guard let viewModel = notesViewModel else { return }
-        withAnimation { allNotes.filter { selectedNoteIDs.contains($0.id) }.forEach { viewModel.deleteNote($0) } }
-        clearSelection()
+        DispatchQueue.main.async {
+            withAnimation { allNotes.filter { selectedNoteIDs.contains($0.id) }.forEach { viewModel.deleteNote($0) } }
+            clearSelection()
+        }
     }
     private func batchMove(to folder: Folder?) {
         guard let viewModel = notesViewModel else { return }
         let selected = allNotes.filter { selectedNoteIDs.contains($0.id) }
-        withAnimation { selected.forEach { note in note.folder = folder; note.updateModifiedDate() } }
-        viewModel.persistChanges()
-        clearSelection()
+        DispatchQueue.main.async {
+            withAnimation { selected.forEach { note in note.folder = folder; note.updateModifiedDate() } }
+            viewModel.persistChanges()
+            clearSelection()
+        }
     }
     private func handleDrop(providers: [NSItemProvider], into folder: Folder) -> Bool {
         var handled = false
