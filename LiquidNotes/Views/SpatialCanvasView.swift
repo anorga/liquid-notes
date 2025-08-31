@@ -24,12 +24,13 @@ struct SpatialCanvasView: View {
     let selectionMode: Bool
     @Binding var selectedNoteIDs: Set<UUID>
     let onToggleSelect: (Note) -> Void
+    let topContentInset: CGFloat
     
     @State private var showingContextMenu: Note?
     @State private var reorderedNotes: [Note] = []
     
     @State private var zoomScale: CGFloat = 1.0
-    @State private var canvasOffset: CGSize = .zero
+    @State private var canvasOffset: CGSize = .zero // vertical only effective now
     @State private var lastCanvasOffset: CGSize = .zero
     @State private var showZoomIndicator = false
     @State private var zoomIndicatorTimer: Timer?
@@ -37,29 +38,34 @@ struct SpatialCanvasView: View {
     @State private var viewportSize: CGSize = .zero
     
     @State private var isPinching = false
-    @State private var isPanning = false
+    @State private var isPanning = false // legacy, will be phased out
     @State private var pinchStartScale: CGFloat = 1.0
     @State private var pinchStartOffset: CGSize = .zero
     @State private var pinchAnchorPoint: CGPoint = .zero
     @State private var lastSnappedDetent: CGFloat?
     
-    private var noteWidth: CGFloat { 180 }
-    private var noteHeight: CGFloat { 140 }
+    // Standardized card dimensions (only overall pinch-zoom scales visuals)
+    private var cardBaseWidth: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 200 : 160 }
+    private var cardBaseHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
+    private var minColumns: Int { UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2 }
+    private var columnSpacing: CGFloat { 18 }
     
     private var gridColumns: [GridItem] {
-        let screenWidth = UIScreen.main.bounds.width
-        let totalPadding: CGFloat = 40
-        let availableWidth = screenWidth - totalPadding
-        let maxNoteWidth = availableWidth - 20
-        let minWidth: CGFloat = 140
-        return [GridItem(.adaptive(minimum: minWidth, maximum: maxNoteWidth), spacing: 15)]
+        // Compute dynamic column count while enforcing minimum columns per device.
+        let width = viewportSize.width == 0 ? UIScreen.main.bounds.width : viewportSize.width
+        let horizontalPadding: CGFloat = 40 // matches outer .padding(.horizontal, 20)
+        let available = max(0, width - horizontalPadding)
+        var count = Int( (available + columnSpacing) / (cardBaseWidth + columnSpacing) )
+        if count < minColumns { count = minColumns }
+        return Array(repeating: GridItem(.fixed(cardBaseWidth), spacing: columnSpacing, alignment: .topLeading), count: count)
     }
+    // Removed automatic centering compensation; we now use an explicit top inset passed from parent.
     // (GridNoteCard moved to file scope below for clarity)
 
     var body: some View {
         ZStack {
             GeometryReader { geometry in
-                ScrollView([.horizontal, .vertical], showsIndicators: false) {
+                ScrollView(.vertical, showsIndicators: false) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
                         ForEach(notes, id: \.id) { note in
                             let _ = note.id // Force capture to avoid observation
@@ -89,13 +95,14 @@ struct SpatialCanvasView: View {
                                 .preference(key: ContentSizeKey.self, value: proxy.size)
                         }
                     )
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
+                    .padding(.horizontal, 16)
+                    .padding(.top, topContentInset)
+                    .padding(.bottom, 12)
                 }
                 .scaleEffect(zoomScale, anchor: .center)
                 .offset(canvasOffset)
                 .gesture(pinchGesture)
-                .simultaneousGesture(panGesture)
+                // Horizontal panning removed; retain vertical scroll only
                 .onTapGesture(count: 2) { resetZoom() }
                 .onTapGesture(count: 1) {
                     // Dismiss any open action menus when tapping background
@@ -191,54 +198,14 @@ struct SpatialCanvasView: View {
             }
     }
     
-    private var panGesture: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .onChanged { value in
-                guard zoomScale > 1.0, !isPinching else { return }
-                
-                if !isPanning {
-                    isPanning = true
-                    let speed = sqrt(pow(value.translation.width, 2) + pow(value.translation.height, 2))
-                    if speed > 30 {
-                        HapticManager.impact(.light)
-                    }
-                }
-                
-                let proposed = CGSize(
-                    width: lastCanvasOffset.width + value.translation.width,
-                    height: lastCanvasOffset.height + value.translation.height
-                )
-                canvasOffset = boundedOffset(for: proposed)
-            }
-            .onEnded { _ in
-                isPanning = false
-                lastCanvasOffset = canvasOffset
-            }
-    }
+    // Horizontal pan removed; pinch zoom recenters without custom drag.
+    private var panGesture: some Gesture { DragGesture(minimumDistance: .infinity) } // inert placeholder
 
-    private func boundedOffset(for proposed: CGSize) -> CGSize {
-        guard zoomScale > 1.0 else { return .zero }
-        // Effective content size after scaling
-        let scaledWidth = contentSize.width * zoomScale
-        let scaledHeight = contentSize.height * zoomScale
-        let viewWidth = viewportSize.width
-        let viewHeight = viewportSize.height
-        let horizontalExcess = max(0, (scaledWidth - viewWidth)/2)
-        let verticalExcess = max(0, (scaledHeight - viewHeight)/2)
-        let clampedX = min(max(proposed.width, -horizontalExcess), horizontalExcess)
-        let clampedY = min(max(proposed.height, -verticalExcess), verticalExcess)
-        return CGSize(width: clampedX, height: clampedY)
-    }
+    private func boundedOffset(for proposed: CGSize) -> CGSize { .zero }
 
     private func clampOffsetIfNeeded() {
-        if zoomScale <= 1.0 {
-            canvasOffset = .zero
-            lastCanvasOffset = .zero
-        } else {
-            let bounded = boundedOffset(for: canvasOffset)
-            canvasOffset = bounded
-            lastCanvasOffset = bounded
-        }
+    canvasOffset = .zero
+    lastCanvasOffset = .zero
     }
     
     private func resetZoom() {
@@ -288,7 +255,8 @@ extension SpatialCanvasView {
         onFavorite: @escaping (Note) -> Void,
         selectionMode: Bool = false,
         selectedNoteIDs: Binding<Set<UUID>> = .constant([]),
-        onToggleSelect: @escaping (Note) -> Void = { _ in }
+    onToggleSelect: @escaping (Note) -> Void = { _ in },
+    topContentInset: CGFloat = 8
     ) {
         self.notes = notes
         self.folders = []
@@ -301,6 +269,7 @@ extension SpatialCanvasView {
         self.selectionMode = selectionMode
         self._selectedNoteIDs = selectedNoteIDs
         self.onToggleSelect = onToggleSelect
+    self.topContentInset = topContentInset
     }
 }
 
@@ -316,26 +285,23 @@ private struct GridNoteCard: View {
     let onToggleSelect: () -> Void
     // Outer canvas scaling is applied globally now
 
-    // Drag / resize state
+    // Drag state (resizing removed for uniform layout)
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
-    @State private var noteSize = CGSize(width: 180, height: 140)
     @State private var showActions = false
-    
-    private var scaledNoteSize: CGSize { noteSize }
-    @State private var isResizing = false
-    @State private var initialSize: CGSize = .zero
+    private var cardWidth: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 200 : 160 }
+    private var cardHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
 
     @ObservedObject private var themeManager = ThemeManager.shared
 
     // MARK: - Layout helpers
-    private var horizontalPadding: CGFloat { 20 }
-    private var verticalPadding: CGFloat { 18 }
-    private var showAttachmentPreview: Bool { scaledNoteSize.width >= 170 && scaledNoteSize.height >= 160 }
-    private var contentLineLimit: Int { showAttachmentPreview ? 3 : (!note.tags.isEmpty ? 4 : 5) }
+    private var horizontalPadding: CGFloat { 14 }
+    private var verticalPadding: CGFloat { 14 }
+    private var showAttachmentPreview: Bool { true }
+    private var contentLineLimit: Int { 3 }
     private var displayedTags: [String] {
         guard !note.tags.isEmpty else { return [] }
-        let available = max(60, scaledNoteSize.width - horizontalPadding * 2 - 40)
+    let available = max(60, cardWidth - horizontalPadding * 2 - 40)
         var used: CGFloat = 0
         var result: [String] = []
         for tag in note.tags {
@@ -349,7 +315,7 @@ private struct GridNoteCard: View {
 
     var body: some View {
         ZStack {
-            glassCard.overlay(alignment: .bottomTrailing) { resizeHandle }
+            glassCard
             VStack(alignment: .leading, spacing: 10) {
                 noteHeader
                 attachmentPreviewView
@@ -359,7 +325,7 @@ private struct GridNoteCard: View {
             }
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
-            .frame(width: min(scaledNoteSize.width, UIScreen.main.bounds.width - 60), height: scaledNoteSize.height, alignment: .leading)
+            .frame(width: cardWidth, height: cardHeight, alignment: .leading)
             .overlay(alignment: .topTrailing) { topRightBadges }
             .overlay(alignment: .bottomTrailing) {
                 if showActions && !selectionMode {
@@ -378,7 +344,7 @@ private struct GridNoteCard: View {
                 }
             }
         }
-        .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
+    .frame(width: cardWidth, height: cardHeight, alignment: .leading)
         .offset(dragOffset)
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
         .opacity(note.isArchived ? 0.45 : 1.0)
@@ -411,11 +377,7 @@ private struct GridNoteCard: View {
                     }
                 }
         )
-        .onAppear {
-            let w = CGFloat(note.width)
-            let h = CGFloat(note.height)
-            if w >= 140, h >= 120 { noteSize = CGSize(width: CGFloat(w), height: CGFloat(h)) }
-        }
+    .onAppear { /* uniform size: ignore persisted custom note.width/height */ }
         .gesture(dragGesture)
     }
 }
@@ -435,54 +397,9 @@ private extension GridNoteCard {
                 )
             )
             .clipShape(base)
-            .frame(width: min(scaledNoteSize.width, UIScreen.main.bounds.width - 60), height: scaledNoteSize.height)
+            .frame(width: cardWidth, height: cardHeight)
             .shadow(color: .black.opacity(themeManager.minimalMode ? 0.08 : 0.16), radius: themeManager.minimalMode ? 6 : 12, x: 0, y: themeManager.minimalMode ? 3 : 5)
             .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : 0.1), radius: themeManager.minimalMode ? 18 : 32, x: 0, y: themeManager.minimalMode ? 10 : 20)
-    }
-
-    var resizeHandle: some View {
-        ZStack {
-            Rectangle().fill(Color.clear).frame(width: 52, height: 52).contentShape(Rectangle())
-            Image(systemName: "arrow.up.backward.and.arrow.down.forward")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(8)
-                .background(Circle().fill(.regularMaterial))
-                .opacity(isResizing ? 0.95 : 0.7)
-                .scaleEffect(isResizing ? 1.15 : 1.0)
-                .animation(.easeInOut(duration: 0.2), value: isResizing)
-        }
-        .padding(2)
-        .highPriorityGesture(resizeDragGesture)
-    }
-
-    var resizeDragGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if !isResizing {
-                    isResizing = true
-                    initialSize = noteSize
-                }
-                let screenWidth = UIScreen.main.bounds.width
-                let screenHeight = UIScreen.main.bounds.height
-                let totalPadding: CGFloat = 40
-                let safeBuffer: CGFloat = 20
-                let maxWidth = screenWidth - totalPadding - safeBuffer
-                let maxHeight = min(320, screenHeight * 0.35)
-                let proposedWidth = initialSize.width + value.translation.width
-                let proposedHeight = initialSize.height + value.translation.height
-                let newWidth = max(140, min(maxWidth, proposedWidth))
-                let newHeight = max(120, min(maxHeight, proposedHeight))
-                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.88)) { noteSize = CGSize(width: newWidth, height: newHeight) }
-            }
-            .onEnded { _ in
-                withAnimation(.bouncy(duration: 0.32, extraBounce: 0.08)) { isResizing = false }
-                ModelMutationScheduler.shared.schedule {
-                    note.width = Float(noteSize.width)
-                    note.height = Float(noteSize.height)
-                    note.updateModifiedDate()
-                }
-            }
     }
 
     var dragGesture: some Gesture {
@@ -507,11 +424,11 @@ private extension GridNoteCard {
         let hasBadges = note.isFavorited || ((note.tasks?.isEmpty) == false)
     HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
-        .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-        .padding(.trailing, hasBadges ? 60 : 0)
+                .padding(.trailing, hasBadges ? 60 : 0)
             Spacer(minLength: 4)
         }
     }
@@ -521,13 +438,13 @@ private extension GridNoteCard {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.regularMaterial)
-                    .frame(maxHeight: min(scaledNoteSize.height * 0.45, 120))
+                    .frame(height: 90)
                 Group {
                     if firstType.contains("gif") { AnimatedGIFView(data: firstImageData) }
                     else if let uiImage = UIImage(data: firstImageData) { Image(uiImage: uiImage).resizable() }
                 }
                 .aspectRatio(contentMode: .fill)
-                .frame(maxHeight: min(scaledNoteSize.height * 0.4, 100))
+                .frame(height: 80)
                 .clipped()
                 .cornerRadius(10)
                 LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
@@ -725,7 +642,8 @@ private extension GridNoteCard {
                 onFolderFavorite: nil,
                 selectionMode: false,
                 selectedNoteIDs: $selected,
-                onToggleSelect: { _ in }
+                onToggleSelect: { _ in },
+                topContentInset: 12
             )
             .modelContainer(for: [Note.self, Folder.self], inMemory: true)
         }

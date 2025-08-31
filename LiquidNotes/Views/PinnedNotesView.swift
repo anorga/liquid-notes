@@ -50,7 +50,8 @@ struct PinnedNotesView: View {
                             onFolderFavorite: nil,
                             selectionMode: false,
                             selectedNoteIDs: $selectedNoteIDs,
-                            onToggleSelect: { _ in }
+                            onToggleSelect: { _ in },
+                            topContentInset: 12
                         )
                     }
                 }

@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 
 struct SpatialTabView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
+    // Order notes by creation time ascending so earliest appears top-left and new notes append to the right
+    @Query(sort: \Note.createdDate, order: .forward) private var allNotes: [Note]
     @Query private var folders: [Folder]
     
     @State private var notesViewModel: NotesViewModel?
@@ -32,6 +33,9 @@ struct SpatialTabView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     LNHeader(title: "Notes", subtitle: "\(allNotes.filter{ !$0.isArchived }.count) active") { EmptyView() }
                     folderSection
+                    // Slight upward pull to reduce vertical gap before first note row
+                    Divider().opacity(0) // keeps layout stable
+                        .padding(.top, -4)
                     
                     if filteredNotes.isEmpty {
                         VStack {
@@ -63,7 +67,8 @@ struct SpatialTabView: View {
                             onFolderFavorite: toggleFolderFavorite,
                             selectionMode: selectionMode,
                             selectedNoteIDs: $selectedNoteIDs,
-                            onToggleSelect: { note in toggleSelect(note) }
+                            onToggleSelect: { note in toggleSelect(note) },
+                            topContentInset: 12
                         )
                     }
                 }
@@ -95,7 +100,7 @@ struct SpatialTabView: View {
                 // Ensure we have a selection (default to first ordered folder)
                 ensureFolderSelection()
             }
-            .onChange(of: folders) { _ in ensureFolderSelection() }
+            .onChange(of: folders) { ensureFolderSelection() }
             .onDisappear { clearSelection() }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -264,6 +269,7 @@ struct SpatialTabView: View {
         }
     }
     
+    // Notes already fetched in createdDate ascending order; just filter by folder/archive here.
     private var filteredNotes: [Note] { let base = allNotes.filter { !$0.isArchived }; return selectedFolder == nil ? base : base.filter { $0.folder?.id == selectedFolder?.id } }
 
     // Ordered folders: favorites first (creation order via zIndex), then others (creation order)
@@ -502,9 +508,14 @@ private struct FilterChip: View {
 }
 
 #Preview {
-    @State var selectedFolder: Folder? = nil
-    return SpatialTabView(selectedFolder: .constant(nil))
-        .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
+    struct PreviewWrapper: View {
+        @State private var selected: Folder? = nil
+        var body: some View {
+            SpatialTabView(selectedFolder: $selected)
+                .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
+        }
+    }
+    return PreviewWrapper()
 }
 
 extension Notification.Name {
