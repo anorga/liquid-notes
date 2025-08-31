@@ -7,6 +7,8 @@ struct SettingsView: View {
     @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
     @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
     @ObservedObject private var motion = MotionManager.shared
+    @AppStorage("dailyReviewReminderEnabled") private var dailyReviewReminderEnabled = false
+    @AppStorage("dailyReviewReminderHour") private var dailyReviewReminderHour = 9
     
     var body: some View {
         NavigationStack {
@@ -14,21 +16,14 @@ struct SettingsView: View {
                 LiquidNotesBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("Settings")
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                        .padding(.bottom, 5)
+                        LNHeader(title: "Settings") { EmptyView() }
 
                         VStack(spacing: 24) {
                             themeSection
                             archiveSection
                             accessibilitySection
+                            productivitySection
+                            analyticsSection
                             aboutSection
                         }
                         .padding(.horizontal, 20)
@@ -88,9 +83,9 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 HStack(alignment: .center) {
                     ZStack(alignment: .topLeading) {
-                        RoundedRectangle(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, style: .continuous)
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
                             .fill(Color.clear)
-                            .refinedClearGlass(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, intensity: themeManager.noteGlassDepth)
+                            .refinedClearGlass(cornerRadius: 26, intensity: themeManager.noteGlassDepth)
                             .frame(width: 160, height: 110)
                             .overlay(alignment: .topLeading) {
                                 Text("Sample")
@@ -99,14 +94,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.primary)
                                     .padding(8)
                             }
-                            .overlay(alignment: .bottomTrailing) {
-                                if themeManager.noteStyle == 1 {
-                                    Image(systemName: "sparkles")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .padding(6)
-                                }
-                            }
+                            // Removed style embellishment icon (single unified style)
                             .shadow(color: .black.opacity(themeManager.minimalMode ? 0.05 : 0.18), radius: themeManager.minimalMode ? 4 : 12, x: 0, y: themeManager.minimalMode ? 2 : 6)
                             // Overlay stroke removed; unified border handled by refinedClearGlass
                     }
@@ -180,56 +168,8 @@ struct SettingsView: View {
                     isOn: .constant(true)
                 ).hidden()
                 Divider().padding(.vertical, 6)
-                Text("Note Style")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Note Style", selection: $themeManager.noteStyle) {
-                    Text("Rounded").tag(0)
-                    Text("Squircle").tag(1)
-                }
-                .pickerStyle(.segmented)
-                DisclosureGroup(isExpanded: $themeManager.showAdvancedGlass) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Glass Depth")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(depthLabel)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.tertiary.opacity(0.2), in: Capsule())
-                        }
-                        Slider(value: $themeManager.noteGlassDepth, in: 0.3...1.2, step: 0.05) { Text("Glass Depth") }
-                            .tint(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
-                        HStack {
-                            Text("Glass Opacity")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(Int(themeManager.glassOpacity * 100))%")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.tertiary.opacity(0.2), in: Capsule())
-                        }
-                        Slider(value: $themeManager.glassOpacity, in: 0.3...0.95, step: 0.05) { Text("Glass Opacity") }
-                            .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
-                    }
-                    .padding(.top, 4)
-                } label: {
-                    HStack {
-                        Image(systemName: "slider.horizontal.3")
-                        Text("Advanced Glass")
-                        Spacer()
-                        Image(systemName: themeManager.showAdvancedGlass ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                // Note Style picker removed; unified style applied globally
+                // Advanced glass controls removed for simplification
             }
         }
         .padding()
@@ -306,6 +246,83 @@ struct SettingsView: View {
         .padding()
         .background(.clear)
         .ambientGlassEffect()
+    }
+
+    private var productivitySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Productivity", systemImage: "bolt.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Daily Review Reminder",
+                    description: "Prompt to review notes each day",
+                    icon: "bell.badge",
+                    isOn: $dailyReviewReminderEnabled
+                )
+                .onChange(of: dailyReviewReminderEnabled) { _, newVal in
+                    if newVal { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) } else { NotificationScheduler.cancelDailyReview() }
+                }
+                Divider().padding(.leading, 8)
+                HStack(spacing: 16) {
+                    Image(systemName: "clock")
+                        .font(.title3)
+                        .foregroundStyle(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Reminder Time")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                        Text("Hour of day (24h)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Stepper(value: $dailyReviewReminderHour, in: 5...22, step: 1) {
+                        Text("\(dailyReviewReminderHour):00")
+                            .font(.callout)
+                            .monospacedDigit()
+                    }
+                    .onChange(of: dailyReviewReminderHour) { _, _ in
+                        if dailyReviewReminderEnabled { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) }
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+
+    private var analyticsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Usage Analytics", systemImage: "chart.bar.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            let a = AnalyticsManager.shared
+            VStack(alignment: .leading, spacing: 10) {
+                analyticsRow("Command Palette Opens", a.value("cmd.openSearch") + a.value("cmd.openTasks") + a.value("cmd.dailyReview") + a.value("cmd.reindex") + a.value("cmd.fullNote") + a.value("cmd.quickNote"))
+                analyticsRow("Quick Notes Created", a.value("cmd.quickNote"))
+                analyticsRow("Full Notes Created", a.value("cmd.fullNote"))
+                analyticsRow("Daily Review Opens", a.value("cmd.dailyReview"))
+                analyticsRow("Reindexes", a.value("cmd.reindex"))
+            }
+            .padding(.vertical, 4)
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+}
+
+private func analyticsRow(_ title: String, _ val: Int) -> some View {
+    HStack {
+        Text(title).font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        Text("\(val)").font(.caption).fontWeight(.semibold)
     }
 }
 

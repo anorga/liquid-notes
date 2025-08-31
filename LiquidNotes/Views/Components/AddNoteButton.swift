@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+// DEPRECATED: Replaced by FloatingActionButton; scheduled for removal after confirming no lingering references.
 struct AddNoteButton: View {
     let action: () -> Void
     let onCreateFolder: (() -> Void)?
