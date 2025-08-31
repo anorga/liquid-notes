@@ -12,19 +12,32 @@ struct SettingsView: View {
         NavigationStack {
             ZStack {
                 LiquidNotesBackground()
-                
                 ScrollView {
-                    VStack(spacing: 24) {
-                        themeSection
-                        archiveSection
-                        accessibilitySection
-                        aboutSection
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Text("Settings")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                        .padding(.bottom, 5)
+
+                        VStack(spacing: 24) {
+                            themeSection
+                            archiveSection
+                            accessibilitySection
+                            aboutSection
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .padding(.bottom, 32)
                     }
-                    .padding()
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarHidden(true)
         }
         .alert("Reset Settings", isPresented: $showResetConfirmation) {
             Button("Reset", role: .destructive) {

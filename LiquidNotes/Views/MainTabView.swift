@@ -33,16 +33,19 @@ struct MainTabView: View {
                 setupGlassTabBar()
             }
             
-            Button(action: { handleAddAction() }) {
-                Image(systemName: "plus")
-                    .font(.title2)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                    .padding(14)
+            if selectedTab == 0 || selectedTab == 1 { // Only Notes & Favorites
+                Button(action: { handleAddAction() }) {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .padding(14)
+                }
+                .interactiveGlassButton()
+                .padding(.trailing, 20)
+                .padding(.top, 20)
+                .transition(.opacity.combined(with: .scale))
             }
-            .interactiveGlassButton()
-            .padding(.trailing, 20)
-            .padding(.top, 20)
         } // ZStack
         .onAppear { setupViewModel() }
         .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .visible) {

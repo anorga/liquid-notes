@@ -63,9 +63,12 @@ struct SearchView: View {
                         Text("Search")
                             .font(.largeTitle)
                             .fontWeight(.bold)
+                            .foregroundStyle(.primary)
                         Spacer()
                     }
                     .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 14) // Increased spacing to mirror SettingsView section gap
 
                     VStack(spacing: 18) {
                         // Search field
@@ -105,7 +108,8 @@ struct SearchView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+                        // Apply appearance settings (glass style) specifically to search bar
+                        .liquidGlassEffect(.elevated, in: RoundedRectangle(cornerRadius: 16))
                         .padding(.horizontal, 20)
 
                         if isSearching || !searchText.isEmpty {
