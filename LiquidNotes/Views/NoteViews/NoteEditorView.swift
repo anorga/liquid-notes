@@ -30,146 +30,130 @@ struct NoteEditorView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                LiquidNotesBackground()
-                
-                VStack(spacing: 16) {
-                    TextField("Note Title", text: $title)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .textInputAutocapitalization(.sentences)
-                        .disableAutocorrection(false)
-                        .onChange(of: title) { oldValue, newValue in
-                            hasChanges = true
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
-                        .background(.clear)
-                        .modernGlassCard()
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                
-                RichTextEditor(
-                    text: $content,
-                    attributedText: $attributedContent,
-                    placeholder: "Start typing your note...",
-                    onTextChanged: {
-                        hasChanges = true
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Title + Body Card
+                    VStack(alignment: .leading, spacing: 12) {
+                        TextField("Title", text: $title)
+                            .font(.title)
+                            .fontWeight(.semibold)
+                            .textInputAutocapitalization(.sentences)
+                            .disableAutocorrection(false)
+                            .onChange(of: title) { _, _ in hasChanges = true }
+                        Divider().opacity(0.25)
+                        RichTextEditor(
+                            text: $content,
+                            attributedText: $attributedContent,
+                            placeholder: "Start typing...",
+                            onTextChanged: { hasChanges = true }
+                        )
+                        .onChange(of: attributedContent) { _, _ in hasChanges = true }
+                        .onChange(of: content) { _, _ in hasChanges = true }
+                        .frame(minHeight: 240)
                     }
-                )
-                .onChange(of: attributedContent) { oldValue, newValue in
-                    hasChanges = true
-                }
-                .onChange(of: content) { oldValue, newValue in
-                    hasChanges = true
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 20)
-                .background(.clear)
-                .modernGlassCard()
-                .padding(.horizontal, 20)
-                
-                if showingTaskList {
-                    TaskListView(
-                        tasks: Binding(
-                            get: { note.tasks ?? [] },
-                            set: { newVal in
-                                note.tasks = newVal
-                                note.updateProgress()
+                    // Reduced internal horizontal padding; added external horizontal padding to align with other sections
+                    .padding(.vertical, 18)
+                    .padding(.horizontal, 16)
+                    .modernGlassCard()
+                    .padding(.top, 20)
+                    .padding(.horizontal, 20)
+
+                    if showingTaskList {
+                        TaskListView(
+                            tasks: Binding(
+                                get: { note.tasks ?? [] },
+                                set: { newVal in
+                                    note.tasks = newVal
+                                    note.updateProgress()
+                                    hasChanges = true
+                                }
+                            ),
+                            onToggle: { index in
+                                note.toggleTask(at: index)
+                                hasChanges = true
+                            },
+                            onDelete: { index in
+                                note.removeTask(at: index)
+                                hasChanges = true
+                            },
+                            onAdd: { text in
+                                note.addTask(text)
                                 hasChanges = true
                             }
-                        ),
-                        onToggle: { index in
-                            note.toggleTask(at: index)
-                            hasChanges = true
-                        },
-                        onDelete: { index in
-                            note.removeTask(at: index)
-                            hasChanges = true
-                        },
-                        onAdd: { text in
-                            note.addTask(text)
-                            hasChanges = true
-                        }
-                    )
-                    .padding(.horizontal, 20)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    ))
-                }
-                
-                if showingTagEditor {
-                    TagListView(
-                        tags: $tempTags,
-                        onAdd: { tag in
-                            note.addTag(tag)
-                            tempTags = note.tags
-                            hasChanges = true
-                        },
-                        onRemove: { tag in
-                            note.removeTag(tag)
-                            tempTags = note.tags
-                            hasChanges = true
-                        }
-                    )
-                    .padding(.horizontal, 20)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-                }
-                
-                if !note.attachments.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Attachments")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text("\(note.attachments.count)")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.tertiary.opacity(0.2), in: Capsule())
-                        }
-                        .padding(.horizontal, 24)
-                        
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 16) {
-                                ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
-                                    if index < note.attachmentTypes.count {
-                                        AttachmentView(
-                                            data: data,
-                                            type: note.attachmentTypes[index],
-                                            onDelete: {
-                                                if index < note.attachments.count && index < note.attachmentTypes.count {
-                                                    withAnimation(.bouncy(duration: 0.4)) {
-                                                        note.removeAttachment(at: index)
-                                                        hasChanges = true
-                                                    }
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
+                        )
+                        .padding(.horizontal, 20)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
+                    }
+
+                    if showingTagEditor {
+                        TagListView(
+                            tags: $tempTags,
+                            onAdd: { tag in
+                                note.addTag(tag)
+                                tempTags = note.tags
+                                hasChanges = true
+                            },
+                            onRemove: { tag in
+                                note.removeTag(tag)
+                                tempTags = note.tags
+                                hasChanges = true
+                            }
+                        )
+                        .padding(.horizontal, 20)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                    }
+
+                    if !note.attachments.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Attachments")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+                                Spacer(minLength: 0)
                             }
                             .padding(.horizontal, 24)
-                            .padding(.vertical, 16)
+                            .padding(.top, 8)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 16) {
+                                    ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                        if index < note.attachmentTypes.count {
+                                            AttachmentView(
+                                                data: data,
+                                                type: note.attachmentTypes[index],
+                                                onDelete: {
+                                                    if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                        withAnimation(.bouncy(duration: 0.4)) {
+                                                            note.removeAttachment(at: index)
+                                                            hasChanges = true
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 16)
+                            }
                         }
+                        .background(.clear)
+                        .ambientGlassEffect()
+                        .padding(.horizontal, 20)
                     }
-                    .background(.clear)
-                    .ambientGlassEffect()
-                    .padding(.horizontal, 20)
                 }
-                
-                Spacer()
-                }
+                .padding(.bottom, 40)
             }
-            .toolbar {
+            .background(LiquidNotesBackground().ignoresSafeArea())
+        }
+        .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         cancelEdit()
@@ -263,6 +247,8 @@ struct NoteEditorView: View {
                 loadNoteData()
                 // Initialize tempTags from note
                 tempTags = note.tags
+                // Auto show tasks if tasks exist
+                if !(note.tasks?.isEmpty ?? true) { showingTaskList = true }
             }
             .onChange(of: selectedPhoto) { _, newPhoto in
                 guard let newPhoto = newPhoto else { return }
@@ -275,7 +261,6 @@ struct NoteEditorView: View {
                 }
             }
         }
-    }
     
     private func loadNoteData() {
         let wasEmpty = note.title.isEmpty && note.content.isEmpty
@@ -284,8 +269,7 @@ struct NoteEditorView: View {
         content = note.content
         attributedContent = NSAttributedString(string: note.content)
         isNewNote = wasEmpty
-        
-       
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             if !self.isNewNote {
                 self.hasChanges = false
