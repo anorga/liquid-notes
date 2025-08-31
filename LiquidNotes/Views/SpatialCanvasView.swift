@@ -2,6 +2,15 @@ import SwiftUI
 import SwiftData
 import UIKit
 
+private struct ContentSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        // Use the max observed size to avoid flicker if children report sequentially
+        value = CGSize(width: max(value.width, next.width), height: max(value.height, next.height))
+    }
+}
+
 struct SpatialCanvasView: View {
     @Environment(\.modelContext) private var modelContext
     let notes: [Note]
@@ -12,7 +21,6 @@ struct SpatialCanvasView: View {
     let onFolderTap: ((Folder) -> Void)?
     let onFolderDelete: ((Folder) -> Void)?
     let onFolderFavorite: ((Folder) -> Void)?
-    // Multi-select support
     let selectionMode: Bool
     @Binding var selectedNoteIDs: Set<UUID>
     let onToggleSelect: (Note) -> Void
@@ -20,47 +28,254 @@ struct SpatialCanvasView: View {
     @State private var showingContextMenu: Note?
     @State private var reorderedNotes: [Note] = []
     
-    private let noteWidth: CGFloat = 180
-    private let noteHeight: CGFloat = 140
+    @State private var zoomScale: CGFloat = 1.0
+    @State private var canvasOffset: CGSize = .zero
+    @State private var lastCanvasOffset: CGSize = .zero
+    @State private var showZoomIndicator = false
+    @State private var zoomIndicatorTimer: Timer?
+    @State private var contentSize: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
+    
+    @State private var isPinching = false
+    @State private var isPanning = false
+    @State private var pinchStartScale: CGFloat = 1.0
+    @State private var pinchStartOffset: CGSize = .zero
+    @State private var pinchAnchorPoint: CGPoint = .zero
+    @State private var lastSnappedDetent: CGFloat?
+    
+    private var noteWidth: CGFloat { 180 }
+    private var noteHeight: CGFloat { 140 }
     
     private var gridColumns: [GridItem] {
         let screenWidth = UIScreen.main.bounds.width
-        let totalPadding: CGFloat = 40  // horizontal padding
+        let totalPadding: CGFloat = 40
         let availableWidth = screenWidth - totalPadding
-        let maxNoteWidth = availableWidth - 20  // Extra buffer for safety
-        
-        // Use single adaptive column that can fit multiple notes per row but prevents overflow
-        return [GridItem(.adaptive(minimum: 140, maximum: maxNoteWidth), spacing: 15)]
+        let maxNoteWidth = availableWidth - 20
+        let minWidth: CGFloat = 140
+        return [GridItem(.adaptive(minimum: minWidth, maximum: maxNoteWidth), spacing: 15)]
     }
     // (GridNoteCard moved to file scope below for clarity)
 
-    // MARK: - Subviews & gestures
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
-                ForEach(notes, id: \.id) { note in
-                    GridNoteCard(
-                        note: note,
-                        selectionMode: selectionMode,
-                        isSelected: selectedNoteIDs.contains(note.id),
-                        onTap: { onTap(note) },
-                        onDelete: { onDelete(note) },
-                        onFavorite: { onFavorite(note) },
-                        onMoveRequest: { movedNote, translation in
-                            // Basic spatial move: update stored position using translation delta
-                            movedNote.positionX += Float(translation.x)
-                            movedNote.positionY += Float(translation.y)
-                            movedNote.updateModifiedDate()
-                            HapticManager.shared.noteMoved()
-                        },
-                        onToggleSelect: { onToggleSelect(note) }
+        ZStack {
+            GeometryReader { geometry in
+                ScrollView([.horizontal, .vertical], showsIndicators: false) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
+                        ForEach(notes, id: \.id) { note in
+                            let _ = note.id // Force capture to avoid observation
+                            GridNoteCard(
+                                note: note,
+                                selectionMode: selectionMode,
+                                isSelected: selectedNoteIDs.contains(note.id),
+                                onTap: { onTap(note) },
+                                onDelete: { onDelete(note) },
+                                onFavorite: { onFavorite(note) },
+                                onMoveRequest: { movedNote, translation in
+                                    let currentZoom = zoomScale
+                                    ModelMutationScheduler.shared.schedule {
+                                        movedNote.positionX += Float(translation.x / currentZoom)
+                                        movedNote.positionY += Float(translation.y / currentZoom)
+                                        movedNote.updateModifiedDate()
+                                        HapticManager.shared.noteMoved()
+                                    }
+                                },
+                                onToggleSelect: { onToggleSelect(note) }
+                            )
+                        }
+                    }
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: ContentSizeKey.self, value: proxy.size)
+                        }
                     )
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
+                .scaleEffect(zoomScale, anchor: .center)
+                .offset(canvasOffset)
+                .gesture(pinchGesture)
+                .simultaneousGesture(panGesture)
+                .onTapGesture(count: 2) { resetZoom() }
+                .onTapGesture(count: 1) {
+                    // Dismiss any open action menus when tapping background
+                    // This is handled by individual notes, but adding here as fallback
+                }
+                .onPreferenceChange(ContentSizeKey.self) { size in
+                    guard !isPinching else { return }
+                    guard size != contentSize else { return }
+                    contentSize = size
+                }
+                .onAppear { viewportSize = geometry.size }
+                .onChange(of: geometry.size) { _, newSize in 
+                    viewportSize = newSize 
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            
+            if showZoomIndicator {
+                VStack {
+                    HStack {
+                        Spacer()
+                        ZoomIndicator(scale: zoomScale)
+                            .padding()
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                    }
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
         }
+    .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: zoomScale)
         .animation(.default, value: notes.map(\.id))
+    .onDisappear { zoomIndicatorTimer?.invalidate() }
+    }
+    
+    private var pinchGesture: some Gesture {
+        MagnificationGesture()
+            .simultaneously(with: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                guard let magnification = value.first else { return }
+                
+                if !isPinching {
+                    isPinching = true
+                    pinchStartScale = zoomScale
+                    pinchStartOffset = canvasOffset
+                    if let location = value.second?.startLocation {
+                        pinchAnchorPoint = CGPoint(
+                            x: location.x - viewportSize.width/2,
+                            y: location.y - viewportSize.height/2
+                        )
+                    }
+                }
+                
+                let newScale = min(max(pinchStartScale * magnification, 0.5), 3.0)
+                zoomScale = newScale
+                
+                let scaleFactor = newScale / pinchStartScale
+                let offsetAdjustment = CGSize(
+                    width: pinchAnchorPoint.x * (1 - scaleFactor),
+                    height: pinchAnchorPoint.y * (1 - scaleFactor)
+                )
+                
+                let proposedOffset = CGSize(
+                    width: pinchStartOffset.width + offsetAdjustment.width,
+                    height: pinchStartOffset.height + offsetAdjustment.height
+                )
+                
+                canvasOffset = boundedOffset(for: proposedOffset)
+                showZoomIndicatorWithTimer()
+            }
+            .onEnded { _ in
+                isPinching = false
+                lastCanvasOffset = canvasOffset
+                
+                let detents: [CGFloat] = [0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0]
+                if let closest = detents.min(by: { abs($0 - zoomScale) < abs($1 - zoomScale) }) {
+                    let relativeDistance = abs(closest - zoomScale) / closest
+                    if relativeDistance < 0.08 && lastSnappedDetent != closest {
+                        withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.8)) {
+                            zoomScale = closest
+                            clampOffsetIfNeeded()
+                        }
+                        lastSnappedDetent = closest
+                        HapticManager.impact(.medium)
+                    } else if lastSnappedDetent != zoomScale {
+                        lastSnappedDetent = nil
+                        HapticManager.impact(.light)
+                        clampOffsetIfNeeded()
+                    }
+                }
+            }
+    }
+    
+    private var panGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard zoomScale > 1.0, !isPinching else { return }
+                
+                if !isPanning {
+                    isPanning = true
+                    let speed = sqrt(pow(value.translation.width, 2) + pow(value.translation.height, 2))
+                    if speed > 30 {
+                        HapticManager.impact(.light)
+                    }
+                }
+                
+                let proposed = CGSize(
+                    width: lastCanvasOffset.width + value.translation.width,
+                    height: lastCanvasOffset.height + value.translation.height
+                )
+                canvasOffset = boundedOffset(for: proposed)
+            }
+            .onEnded { _ in
+                isPanning = false
+                lastCanvasOffset = canvasOffset
+            }
+    }
+
+    private func boundedOffset(for proposed: CGSize) -> CGSize {
+        guard zoomScale > 1.0 else { return .zero }
+        // Effective content size after scaling
+        let scaledWidth = contentSize.width * zoomScale
+        let scaledHeight = contentSize.height * zoomScale
+        let viewWidth = viewportSize.width
+        let viewHeight = viewportSize.height
+        let horizontalExcess = max(0, (scaledWidth - viewWidth)/2)
+        let verticalExcess = max(0, (scaledHeight - viewHeight)/2)
+        let clampedX = min(max(proposed.width, -horizontalExcess), horizontalExcess)
+        let clampedY = min(max(proposed.height, -verticalExcess), verticalExcess)
+        return CGSize(width: clampedX, height: clampedY)
+    }
+
+    private func clampOffsetIfNeeded() {
+        if zoomScale <= 1.0 {
+            canvasOffset = .zero
+            lastCanvasOffset = .zero
+        } else {
+            let bounded = boundedOffset(for: canvasOffset)
+            canvasOffset = bounded
+            lastCanvasOffset = bounded
+        }
+    }
+    
+    private func resetZoom() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+            zoomScale = 1.0
+            canvasOffset = .zero
+            lastCanvasOffset = .zero
+            lastSnappedDetent = 1.0
+        }
+        HapticManager.shared.buttonTapped()
+        showZoomIndicatorWithTimer()
+    }
+    
+    private func zoomToPoint(_ point: CGPoint, scale: CGFloat) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+            zoomScale = scale
+            
+            let scaledPoint = CGPoint(
+                x: point.x * scale - viewportSize.width / 2,
+                y: point.y * scale - viewportSize.height / 2
+            )
+            
+            canvasOffset = boundedOffset(for: CGSize(width: -scaledPoint.x, height: -scaledPoint.y))
+            lastCanvasOffset = canvasOffset
+        }
+        HapticManager.shared.buttonTapped()
+        showZoomIndicatorWithTimer()
+    }
+    
+    private func showZoomIndicatorWithTimer() {
+        showZoomIndicator = true
+        zoomIndicatorTimer?.invalidate()
+        zoomIndicatorTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
+            withAnimation(.easeOut(duration: 0.3)) {
+                showZoomIndicator = false
+            }
+        }
     }
 }
 
@@ -99,34 +314,28 @@ private struct GridNoteCard: View {
     let onFavorite: () -> Void
     let onMoveRequest: (Note, CGPoint) -> Void
     let onToggleSelect: () -> Void
+    // Outer canvas scaling is applied globally now
 
     // Drag / resize state
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
     @State private var noteSize = CGSize(width: 180, height: 140)
+    @State private var showActions = false
+    
+    private var scaledNoteSize: CGSize { noteSize }
     @State private var isResizing = false
     @State private var initialSize: CGSize = .zero
 
     @ObservedObject private var themeManager = ThemeManager.shared
 
     // MARK: - Layout helpers
-    private var horizontalPadding: CGFloat {
-        let w = noteSize.width
-        if w <= 155 { return 18 }
-        if w <= 185 { return 20 }
-        return 22
-    }
-    private var verticalPadding: CGFloat {
-        let h = noteSize.height
-        if h <= 145 { return 16 }
-        if h <= 180 { return 18 }
-        return 20
-    }
-    private var showAttachmentPreview: Bool { noteSize.width >= 170 && noteSize.height >= 160 }
+    private var horizontalPadding: CGFloat { 20 }
+    private var verticalPadding: CGFloat { 18 }
+    private var showAttachmentPreview: Bool { scaledNoteSize.width >= 170 && scaledNoteSize.height >= 160 }
     private var contentLineLimit: Int { showAttachmentPreview ? 3 : (!note.tags.isEmpty ? 4 : 5) }
     private var displayedTags: [String] {
         guard !note.tags.isEmpty else { return [] }
-        let available = max(60, noteSize.width - horizontalPadding * 2 - 40)
+        let available = max(60, scaledNoteSize.width - horizontalPadding * 2 - 40)
         var used: CGFloat = 0
         var result: [String] = []
         for tag in note.tags {
@@ -150,12 +359,17 @@ private struct GridNoteCard: View {
             }
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
-            .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height, alignment: .leading)
+            .frame(width: min(scaledNoteSize.width, UIScreen.main.bounds.width - 60), height: scaledNoteSize.height, alignment: .leading)
             .overlay(alignment: .topTrailing) { topRightBadges }
+            .overlay(alignment: .bottomTrailing) {
+                if showActions && !selectionMode {
+                    actionButtons
+                }
+            }
             .overlay(alignment: .topLeading) {
                 if selectionMode {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
+                        .font(.system(size: 22, weight: .regular))
                         .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                         .padding(6)
                         .contentShape(Rectangle())
@@ -165,22 +379,44 @@ private struct GridNoteCard: View {
             }
         }
         .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
-        .scaleEffect(isDragging ? 1.08 : (isResizing ? 1.04 : 1.0))
         .offset(dragOffset)
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
         .opacity(note.isArchived ? 0.45 : 1.0)
         .saturation(note.isArchived ? 0.4 : 1.0)
         .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
-        .onTapGesture { if selectionMode { onToggleSelect() } else { HapticManager.shared.noteSelected(); onTap() } }
-        .onLongPressGesture(minimumDuration: 0.35) { if !selectionMode { onToggleSelect() } }
+        .onTapGesture { 
+            if selectionMode { 
+                onToggleSelect() 
+            } else {
+                if showActions {
+                    // Dismiss actions on tap
+                    withAnimation(.easeOut(duration: 0.2)) { showActions = false }
+                } else {
+                    HapticManager.shared.noteSelected()
+                    onTap()
+                }
+            }
+        }
+        // High priority long press for actions menu
+        .highPriorityGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    if selectionMode {
+                        onToggleSelect()
+                    } else {
+                        HapticManager.impact(.medium)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showActions.toggle()
+                        }
+                    }
+                }
+        )
         .onAppear {
             let w = CGFloat(note.width)
             let h = CGFloat(note.height)
             if w >= 140, h >= 120 { noteSize = CGSize(width: CGFloat(w), height: CGFloat(h)) }
         }
         .gesture(dragGesture)
-        .contextMenu { contextMenuContent }
-        .draggable(note.id.uuidString)
     }
 }
 
@@ -199,7 +435,7 @@ private extension GridNoteCard {
                 )
             )
             .clipShape(base)
-            .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height)
+            .frame(width: min(scaledNoteSize.width, UIScreen.main.bounds.width - 60), height: scaledNoteSize.height)
             .shadow(color: .black.opacity(themeManager.minimalMode ? 0.08 : 0.16), radius: themeManager.minimalMode ? 6 : 12, x: 0, y: themeManager.minimalMode ? 3 : 5)
             .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : 0.1), radius: themeManager.minimalMode ? 18 : 32, x: 0, y: themeManager.minimalMode ? 10 : 20)
     }
@@ -241,19 +477,23 @@ private extension GridNoteCard {
             }
             .onEnded { _ in
                 withAnimation(.bouncy(duration: 0.32, extraBounce: 0.08)) { isResizing = false }
-                note.width = Float(noteSize.width)
-                note.height = Float(noteSize.height)
-                note.updateModifiedDate()
+                ModelMutationScheduler.shared.schedule {
+                    note.width = Float(noteSize.width)
+                    note.height = Float(noteSize.height)
+                    note.updateModifiedDate()
+                }
             }
     }
 
     var dragGesture: some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
+                guard !selectionMode else { return }
                 if !isDragging { withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) { isDragging = true } }
                 dragOffset = value.translation
             }
             .onEnded { value in
+                guard !selectionMode else { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { dragOffset = .zero; isDragging = false }; return }
                 onMoveRequest(note, CGPoint(x: value.translation.width, y: value.translation.height))
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                     dragOffset = .zero
@@ -262,32 +502,16 @@ private extension GridNoteCard {
             }
     }
 
-    var contextMenuContent: some View {
-        Group {
-            Button(action: { HapticManager.shared.buttonTapped(); onFavorite() }) {
-                Label(note.isFavorited ? "Unfavorite" : "Favorite", systemImage: note.isFavorited ? "star.slash" : "star")
-            }
-            Menu("More…") {
-                Button(action: { HapticManager.shared.buttonTapped(); note.isArchived.toggle(); note.updateModifiedDate() }) {
-                    Label(note.isArchived ? "Restore" : "Archive", systemImage: note.isArchived ? "arrow.uturn.left" : "archivebox")
-                }
-                Button(role: .destructive, action: { HapticManager.shared.noteDeleted(); onDelete() }) {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-        }
-    }
 
     @ViewBuilder var noteHeader: some View {
         let hasBadges = note.isFavorited || ((note.tasks?.isEmpty) == false)
-        HStack(alignment: .top, spacing: 6) {
+    HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
-                .font(.headline)
-                .fontWeight(.semibold)
+        .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-                .padding(.trailing, hasBadges ? 60 : 0)
+        .padding(.trailing, hasBadges ? 60 : 0)
             Spacer(minLength: 4)
         }
     }
@@ -297,13 +521,13 @@ private extension GridNoteCard {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.regularMaterial)
-                    .frame(maxHeight: min(noteSize.height * 0.45, 120))
+                    .frame(maxHeight: min(scaledNoteSize.height * 0.45, 120))
                 Group {
                     if firstType.contains("gif") { AnimatedGIFView(data: firstImageData) }
                     else if let uiImage = UIImage(data: firstImageData) { Image(uiImage: uiImage).resizable() }
                 }
                 .aspectRatio(contentMode: .fill)
-                .frame(maxHeight: min(noteSize.height * 0.4, 100))
+                .frame(maxHeight: min(scaledNoteSize.height * 0.4, 100))
                 .clipped()
                 .cornerRadius(10)
                 LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
@@ -316,7 +540,7 @@ private extension GridNoteCard {
     @ViewBuilder var contentView: some View {
         if !note.content.isEmpty {
             Text(note.content)
-                .font(.callout)
+                .font(.system(size: 14))
                 .fontWeight(.regular)
                 .foregroundStyle(.primary.opacity(0.8))
                 .lineLimit(contentLineLimit)
@@ -325,7 +549,7 @@ private extension GridNoteCard {
                 .padding(.top, 2)
         } else {
             Text("No content")
-                .font(.callout)
+                .font(.system(size: 14))
                 .foregroundStyle(.tertiary)
                 .italic()
         }
@@ -383,7 +607,10 @@ private extension GridNoteCard {
                     .accessibilityLabel(Text(allDone ? "All tasks complete" : "\(incomplete) incomplete of \(tasks.count) tasks"))
                 }
                 if (note.tasks?.isEmpty ?? true) {
-                    Button { HapticManager.shared.buttonTapped(); note.addTask("New Task") } label: {
+                    Button {
+                        HapticManager.shared.buttonTapped()
+                        ModelMutationScheduler.shared.schedule { note.addTask("New Task") }
+                    } label: {
                         Image(systemName: "plus.circle")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.secondary)
@@ -423,6 +650,51 @@ private extension GridNoteCard {
             }
         }
         .padding(6)
+    }
+    
+    @ViewBuilder var actionButtons: some View {
+        HStack(spacing: 6) {
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                onFavorite()
+                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
+            }) {
+                Image(systemName: note.isFavorited ? "star.slash" : "star")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
+            
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                ModelMutationScheduler.shared.schedule {
+                    note.isArchived.toggle()
+                    note.updateModifiedDate()
+                }
+                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
+            }) {
+                Image(systemName: note.isArchived ? "arrow.uturn.left" : "archivebox")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
+            
+            Button(action: {
+                HapticManager.shared.noteDeleted()
+                onDelete()
+                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
+            }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.red)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
+        }
+        .padding(8)
+        .transition(.scale.combined(with: .opacity))
     }
 }
 
@@ -499,4 +771,26 @@ struct AnimatedGIFView: View {
     }
 }
 
-// Parallax modifier removed (simplified per feedback)
+struct ZoomIndicator: View {
+    let scale: CGFloat
+    
+    private var zoomPercentage: Int {
+        Int(scale * 100)
+    }
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: scale > 1 ? "plus.magnifyingglass" : (scale < 1 ? "minus.magnifyingglass" : "magnifyingglass"))
+                .font(.system(size: 14, weight: .medium))
+            
+            Text("\(zoomPercentage)%")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+    }
+}

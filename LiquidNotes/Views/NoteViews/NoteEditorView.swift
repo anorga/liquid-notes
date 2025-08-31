@@ -808,7 +808,7 @@ struct AttachmentView: View {
         }
         .alert("Delete Attachment", isPresented: $showingDeleteConfirmation) {
             Button("Delete", role: .destructive) {
-                onDelete()
+                ModelMutationScheduler.shared.schedule { onDelete() }
                 HapticManager.shared.buttonTapped()
             }
             Button("Cancel", role: .cancel) { }

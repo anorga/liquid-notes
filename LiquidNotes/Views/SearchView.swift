@@ -123,7 +123,7 @@ struct SearchView: View {
                                                 .overlay(Capsule().stroke(Color.secondary.opacity(0.25), lineWidth: 0.6))
                                                 .overlay(Text(term).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 10).padding(.vertical, 5))
                                                 .onTapGesture { withAnimation { searchText = term; debouncedQuery = term; isSearching = true; searchFocused = false } }
-                                                .contextMenu { Button("Remove") { removeRecent(term) } }
+                                                .contextMenu { Button("Remove") { ModelMutationScheduler.shared.schedule { removeRecent(term) } } }
                                         }
                                         if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
                                             Button(action: { addRecentSearch(searchText) }) {
