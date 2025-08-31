@@ -104,12 +104,7 @@ struct GridNoteCard: View {
     @State private var isResizing = false
     @State private var initialSize: CGSize = .zero // store size at resize gesture start
     @State private var dragStartLocation = CGPoint.zero
-    @State private var swipeOffset: CGFloat = 0
-    @State private var showSwipeActions = false
-    @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
-    @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
-    @State private var showUndo = false
-    @State private var undoWorkItem: DispatchWorkItem?
+    // Swipe & undo state removed
     @ObservedObject private var themeManager = ThemeManager.shared
 
     // Breakpoint-based padding for consistent interior spacing & to avoid icon overflow on narrow notes
@@ -155,8 +150,6 @@ struct GridNoteCard: View {
     
     var body: some View {
         ZStack {
-            leftSwipeBackground
-            rightSwipeBackground
             
             glassCard.overlay(alignment: .bottomTrailing) { resizeHandle }
             
@@ -198,7 +191,13 @@ struct GridNoteCard: View {
             }) {
                 Label(note.isFavorited ? "Unfavorite" : "Favorite", systemImage: note.isFavorited ? "star.slash" : "star")
             }
-            
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                note.isArchived.toggle()
+                note.updateModifiedDate()
+            }) {
+                Label(note.isArchived ? "Restore" : "Archive", systemImage: note.isArchived ? "arrow.uturn.left" : "archivebox")
+            }
             Button(role: .destructive, action: {
                 HapticManager.shared.noteDeleted()
                 onDelete()
@@ -206,153 +205,12 @@ struct GridNoteCard: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 4)
-                .onChanged { value in
-                    guard !isResizing else { return } // ignore when resizing
-                    if showSwipeActions { swipeOffset = value.translation.width; return }
-                    let horizontalPriority = abs(value.translation.width) > abs(value.translation.height) * 1.6
-                    if horizontalPriority && !isDragging && swipeOffset == 0 {
-                        showSwipeActions = true
-                        swipeOffset = value.translation.width
-                        return
-                    }
-                    guard !showSwipeActions else { return }
-                    if !isDragging { isDragging = true }
-                    let smoothing: CGFloat = 0.55
-                    let constrainedX = max(-12, value.translation.width * smoothing)
-                    let constrainedY = value.translation.height * 0.85
-                    dragOffset = CGSize(
-                        width: dragOffset.width * 0.35 + constrainedX * 0.65,
-                        height: dragOffset.height * 0.35 + constrainedY * 0.65
-                    )
-                }
-                .onEnded { value in
-                    guard !isResizing else { return }
-                    if showSwipeActions {
-                        withAnimation(.bouncy(duration: 0.35)) {
-                            if swipeOffset < -110 { onFavorite(); HapticManager.shared.noteFavorited() }
-                            else if swipeOffset > 110 {
-                                let wasArchived = note.isArchived
-                                note.isArchived = true
-                                HapticManager.shared.noteArchived()
-                                if enableArchiveUndo {
-                                    showUndo = true
-                                    undoWorkItem?.cancel()
-                                    let work = DispatchWorkItem { showUndo = false }
-                                    undoWorkItem = work
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
-                                }
-                                if !wasArchived { HapticManager.shared.success() }
-                            }
-                            swipeOffset = 0
-                            showSwipeActions = false
-                        }
-                        return
-                    }
-                    isDragging = false
-                    let dragDistance = sqrt(value.translation.width * value.translation.width + value.translation.height * value.translation.height)
-                    if dragDistance > 80 {
-                        onMoveRequest(note, CGPoint(x: value.translation.width, y: value.translation.height))
-                        HapticManager.shared.noteDropped()
-                    }
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffset = .zero }
-                    if dragDistance > 30 && dragDistance <= 80 { HapticManager.shared.buttonTapped() }
-                }
-        )
-        .overlay(alignment: .top) {
-            if enableSwipeAffordance && showSwipeActions {
-                HStack {
-                    if swipeOffset > 0 { Image(systemName: "archivebox.fill").foregroundStyle(.blue) }
-                    Spacer()
-                    if swipeOffset < 0 { Image(systemName: "star.fill").foregroundStyle(.yellow) }
-                }
-                .padding(10)
-                .transition(.opacity)
-            }
-        }
-    // Debug build marker removed
-        .overlay(alignment: .bottom) {
-            if showUndo {
-                HStack(spacing: 12) {
-                    Text("Archived")
-                        .font(.caption)
-                        .foregroundStyle(.primary)
-                    Button("Undo") {
-                        undoWorkItem?.cancel()
-                        note.isArchived = false
-                        showUndo = false
-                        HapticManager.shared.buttonTapped()
-                    }
-                    .font(.caption)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
-                .padding(8)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
+        // Swipe gestures, affordances, and archive undo removed per simplification feedback
     }
 }
 
 private extension GridNoteCard {
-    var leftSwipeBackground: some View {
-        Group {
-            if swipeOffset < -50 {
-                HStack(spacing: 0) {
-                    Spacer()
-                    VStack {
-                        Image(systemName: "star.fill")
-                            .font(.title2)
-                            .foregroundStyle(.yellow)
-                        Text("Favorite")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 80, height: noteSize.height)
-                    .background(
-                        LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .cornerRadius(20, corners: [.topRight, .bottomRight])
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
-                }
-                .frame(width: noteSize.width, height: noteSize.height)
-            }
-        }
-    }
-
-    var rightSwipeBackground: some View {
-        Group {
-            if swipeOffset > 50 {
-                HStack(spacing: 0) {
-                    VStack {
-                        Image(systemName: "archivebox.fill")
-                            .font(.title2)
-                        Text("Archive")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 80, height: noteSize.height)
-                    .background(
-                        LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .cornerRadius(20, corners: [.topLeft, .bottomLeft])
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-                    Spacer()
-                }
-                .frame(width: noteSize.width, height: noteSize.height)
-            }
-        }
-    }
+    // Swipe backgrounds removed
     // Extracted glass card to reduce type-check complexity.
     var glassCard: some View {
         let corner: CGFloat = themeManager.noteStyle == 0 ? 20 : 34
@@ -378,8 +236,7 @@ private extension GridNoteCard {
             .shadow(color: secondShadowColor,
                     radius: themeManager.minimalMode ? 18 : (themeManager.noteStyle == 0 ? 28 : 36),
                     x: 0, y: themeManager.minimalMode ? 10 : (themeManager.noteStyle == 0 ? 18 : 22))
-            .offset(x: swipeOffset)
-            .modifier(ParallaxIfEnabled(enabled: themeManager.noteParallax && !themeManager.reduceMotion))
+            // Swipe offset & parallax removed
     }
 
     var resizeHandle: some View {
@@ -632,12 +489,4 @@ struct AnimatedGIFView: View {
     }
 }
 
-// Helper modifier to conditionally apply subtle parallax
-private struct ParallaxIfEnabled: ViewModifier {
-    let enabled: Bool
-    func body(content: Content) -> some View {
-        if enabled {
-            content.subtleParallax(.shared, maxOffset: 4)
-        } else { content }
-    }
-}
+// Parallax modifier removed (simplified per feedback)

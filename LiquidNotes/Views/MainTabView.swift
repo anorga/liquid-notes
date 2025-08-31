@@ -15,11 +15,10 @@ struct MainTabView: View {
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingSettings = false
-    @ObservedObject private var themeManager = ThemeManager.shared
-    @State private var showThemeOverlay = false
+    // Removed quick theme overlay per simplification feedback
     
     var body: some View {
-    ZStack {
+        ZStack(alignment: .topTrailing) {
             TabView(selection: $selectedTab) {
                 Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView() }
                 
@@ -29,83 +28,27 @@ struct MainTabView: View {
                 
                 Tab("Settings", systemImage: "gearshape.fill", value: 3) { SettingsView() }
             }
-            .tabViewStyle(.sidebarAdaptable)
-            .toolbarBackgroundVisibility(.hidden, for: .tabBar)
+            .applyAdaptiveTabStyle()
             .onAppear {
                 setupGlassTabBar()
             }
             
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: { handleAddAction() }) {
-                        Image(systemName: "plus")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                            .padding(14)
-                    }
-                    .interactiveGlassButton()
-                    .padding(.trailing, 20)
-                    .padding(.top, 20)
-                }
-                Spacer()
+            Button(action: { handleAddAction() }) {
+                Image(systemName: "plus")
+                    .font(.title2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .padding(14)
             }
-        }
-        .overlay(alignment: .center) {
-            if showThemeOverlay {
-                VStack(spacing: 16) {
-                    Text("Quick Theme")
-                        .font(.headline)
-                    HStack(spacing: 10) {
-                        ForEach(GlassTheme.allCases, id: \.self) { theme in
-                            Circle()
-                                .fill(LinearGradient(colors: theme.primaryGradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Group {
-                                        if themeManager.currentTheme == theme {
-                                            Circle().fill(Color.clear).overlay(
-                                                Circle().stroke(
-                                                    LinearGradient(colors: [
-                                                        .white.opacity(0.9), .white.opacity(0.05)
-                                                    ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1.2
-                                                ).blendMode(.plusLighter)
-                                            )
-                                        }
-                                    }
-                                )
-                                .onTapGesture {
-                                    themeManager.applyTheme(theme)
-                                    HapticManager.shared.buttonTapped()
-                                }
-                        }
-                    }
-                    Button("Close") { withAnimation(.spring()) { showThemeOverlay = false } }
-                        .font(.caption)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                }
-                .padding(24)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-                .shadow(radius: 20)
-                .padding(40)
-                .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .contentShape(Rectangle())
-        .onLongPressGesture(minimumDuration: 0.7) {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) { showThemeOverlay = true }
-            HapticManager.shared.buttonTapped()
-        }
-        .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .hidden) {
+            .interactiveGlassButton()
+            .padding(.trailing, 20)
+            .padding(.top, 20)
+        } // ZStack
+        .onAppear { setupViewModel() }
+        .confirmationDialog("Create New", isPresented: $showingAddOptions, titleVisibility: .visible) {
             Button("Note", action: createNewNote)
             Button("Folder", action: createNewFolder)
             Button("Cancel", role: .cancel) { }
-        }
-        .onAppear {
-            setupViewModel()
         }
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
@@ -175,4 +118,12 @@ struct MainTabView: View {
 #Preview {
     MainTabView()
         .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
+}
+
+// MARK: - Adaptive Tab Style
+private extension View {
+    @ViewBuilder func applyAdaptiveTabStyle() -> some View {
+    // Always use standard tab style (feedback: no sidebar menu on iPad)
+    self
+    }
 }

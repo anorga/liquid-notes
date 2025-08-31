@@ -93,22 +93,14 @@ class ThemeManager: ObservableObject {
         }
     }
     
-    @Published var animateGradients: Bool {
-        didSet { UserDefaults.standard.set(animateGradients, forKey: "animateGradients") }
-    }
-    
-    @Published var themeOverlayPinned: Bool {
-        didSet { UserDefaults.standard.set(themeOverlayPinned, forKey: "themeOverlayPinned") }
-    }
-    
-    @Published var dynamicTagCycling: Bool {
-        didSet { UserDefaults.standard.set(dynamicTagCycling, forKey: "dynamicTagCycling") }
-    }
+    // Removed user-facing toggles; keep constants
+    @Published var animateGradients: Bool = true
+    @Published var themeOverlayPinned: Bool = false
+    @Published var dynamicTagCycling: Bool = true
 
     // New appearance options
-    @Published var noteParallax: Bool {
-        didSet { UserDefaults.standard.set(noteParallax, forKey: "noteParallax") }
-    }
+    // Parallax always off per simplification
+    @Published var noteParallax: Bool = false
     @Published var noteGlassDepth: Double { // 0 = subtle, 1 = vivid
         didSet { UserDefaults.standard.set(noteGlassDepth, forKey: "noteGlassDepth") }
     }
@@ -118,9 +110,8 @@ class ThemeManager: ObservableObject {
     @Published var minimalMode: Bool { // flattens shadows, reduces blur
         didSet { UserDefaults.standard.set(minimalMode, forKey: "minimalMode") }
     }
-    @Published var tagAccentSolid: Bool { // solid instead of gradient tags
-        didSet { UserDefaults.standard.set(tagAccentSolid, forKey: "tagAccentSolid") }
-    }
+    // Solid tag accent option removed; always false (use gradients)
+    @Published var tagAccentSolid: Bool = false
     @Published var showAdvancedGlass: Bool { // toggles advanced controls UI only
         didSet { UserDefaults.standard.set(showAdvancedGlass, forKey: "showAdvancedGlass") }
     }
@@ -150,14 +141,14 @@ class ThemeManager: ObservableObject {
         
         self.reduceMotion = UserDefaults.standard.bool(forKey: "reduceMotion")
         self.highContrast = UserDefaults.standard.bool(forKey: "highContrast")
-    self.animateGradients = UserDefaults.standard.object(forKey: "animateGradients") as? Bool ?? true
-    self.themeOverlayPinned = UserDefaults.standard.object(forKey: "themeOverlayPinned") as? Bool ?? false
-    self.dynamicTagCycling = UserDefaults.standard.object(forKey: "dynamicTagCycling") as? Bool ?? true
-    self.noteParallax = UserDefaults.standard.object(forKey: "noteParallax") as? Bool ?? true
+    self.animateGradients = true
+    self.themeOverlayPinned = false
+    self.dynamicTagCycling = true
+    self.noteParallax = false
     self.noteGlassDepth = UserDefaults.standard.object(forKey: "noteGlassDepth") as? Double ?? 0.75
     self.noteStyle = UserDefaults.standard.object(forKey: "noteStyle") as? Int ?? 0
     self.minimalMode = UserDefaults.standard.object(forKey: "minimalMode") as? Bool ?? false
-    self.tagAccentSolid = UserDefaults.standard.object(forKey: "tagAccentSolid") as? Bool ?? false
+    self.tagAccentSolid = false
     self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false
     }
     

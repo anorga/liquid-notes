@@ -67,7 +67,6 @@ struct TagView: View {
 
 private extension TagView {
     func animatedGradient() -> [Color] {
-        guard themeManager.dynamicTagCycling else { return themeManager.currentTheme.primaryGradient }
         let base = themeManager.currentTheme.primaryGradient
         let time = Date().timeIntervalSince1970
         let phase = sin(time.truncatingRemainder(dividingBy: 8) / 8 * .pi * 2)
@@ -78,30 +77,24 @@ private extension TagView {
     }
 
     func tagFill() -> AnyShapeStyle {
-        if themeManager.tagAccentSolid {
-            return AnyShapeStyle((themeManager.currentTheme.primaryGradient.first ?? .blue).opacity(themeManager.minimalMode ? 0.4 : 0.65))
-        } else {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: animatedGradient(),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ).opacity(themeManager.glassOpacity * (themeManager.minimalMode ? 0.55 : 0.9))
-            )
-        }
+        AnyShapeStyle(
+            LinearGradient(
+                colors: animatedGradient(),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ).opacity(themeManager.glassOpacity * (themeManager.minimalMode ? 0.55 : 0.9))
+        )
     }
 }
 
 struct TagListView: View {
     @Binding var tags: [String]
-    let availableColors: [Color] = [.blue, .green, .orange, .purple, .pink, .cyan, .mint, .indigo]
+    // Color selection removed; always uses animated gradient
     let onAdd: ((String) -> Void)?
     let onRemove: ((String) -> Void)?
     
     @State private var isAddingTag = false
     @State private var newTagText = ""
-    @State private var selectedColor: Color = .blue
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -109,111 +102,46 @@ struct TagListView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
-                
                 Spacer()
-                
                 if onAdd != nil {
-                    Button(action: {
-                        withAnimation(.bouncy(duration: 0.3)) {
-                            isAddingTag.toggle()
-                        }
-                    }) {
+                    Button(action: { withAnimation(.bouncy(duration: 0.3)) { isAddingTag.toggle() } }) {
                         Image(systemName: isAddingTag ? "xmark.circle.fill" : "plus.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.purple, .pink],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
                     }
                 }
             }
-            
             if isAddingTag, let onAdd = onAdd {
-                VStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        TextField("New tag...", text: $newTagText)
-                            .textFieldStyle(.plain)
+                HStack(spacing: 12) {
+                    TextField("New tag...", text: $newTagText)
+                        .textFieldStyle(.plain)
+                        .font(.callout)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.clear)
+                        .modernGlassCard()
+                        .onSubmit { addNewTag(onAdd: onAdd) }
+                    Button(action: { addNewTag(onAdd: onAdd) }) {
+                        Text("Add")
                             .font(.callout)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .background(.clear)
-                            .modernGlassCard()
-                            .onSubmit {
-                                addNewTag(onAdd: onAdd)
-                            }
-                        
-                        Button(action: { addNewTag(onAdd: onAdd) }) {
-                            Text("Add")
-                                .font(.callout)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(
-                                    LinearGradient(
-                                        colors: [selectedColor, selectedColor.opacity(0.7)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .clipShape(Capsule())
-                        }
-                        .disabled(newTagText.isEmpty)
+                            .background(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .clipShape(Capsule())
                     }
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(availableColors, id: \.self) { color in
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [color, color.opacity(0.6)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 28, height: 28)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(
-                                                selectedColor == color ? Color.primary : Color.clear,
-                                                lineWidth: 2
-                                            )
-                                    )
-                                    .scaleEffect(selectedColor == color ? 1.1 : 1.0)
-                                    .onTapGesture {
-                                        withAnimation(.bouncy(duration: 0.2)) {
-                                            selectedColor = color
-                                        }
-                                        HapticManager.shared.buttonTapped()
-                                    }
-                            }
-                        }
-                    }
+                    .disabled(newTagText.isEmpty)
+                    .opacity(newTagText.isEmpty ? 0.4 : 1)
                 }
-                .padding(.horizontal, 4)
-                .transition(.asymmetric(
-                    insertion: .scale.combined(with: .opacity),
-                    removal: .scale.combined(with: .opacity)
-                ))
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            
             if !tags.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(Array(tags.enumerated()), id: \.element) { index, tag in
-                            TagView(
-                                tag: tag,
-                                color: availableColors[index % availableColors.count],
-                                onDelete: onRemove != nil ? {
-                                    withAnimation(.bouncy(duration: 0.3)) {
-                                        onRemove?(tag)
-                                    }
-                                } : nil
-                            )
+                        // Use stable identity by the string itself
+                        ForEach(tags, id: \.self) { tag in
+                            TagView(tag: tag, color: .blue, onDelete: onRemove != nil ? { withAnimation(.bouncy(duration: 0.3)) { onRemove?(tag) } } : nil)
                         }
                     }
                 }
@@ -228,110 +156,15 @@ struct TagListView: View {
         .background(.clear)
         .premiumGlassCard()
     }
-    
-    private func addNewTag(onAdd: (String) -> Void) {
-        guard !newTagText.isEmpty else { return }
-        onAdd(newTagText)
-        newTagText = ""
-        withAnimation(.bouncy(duration: 0.3)) {
-            isAddingTag = false
-        }
-        HapticManager.shared.buttonTapped()
-    }
 }
 
-struct PriorityIndicator: View {
-    let priority: NotePriority
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: priority.iconName)
-                .font(.caption)
-            
-            Text(priority.rawValue.capitalized)
-                .font(.caption)
-                .fontWeight(.medium)
+private extension TagListView {
+    func addNewTag(onAdd: (String) -> Void) {
+        let trimmed = newTagText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if !tags.contains(trimmed) {
+            onAdd(trimmed)
+            newTagText = ""
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            priority.color,
-                            priority.color.opacity(0.7)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .shadow(color: priority.color.opacity(0.3), radius: 4, x: 0, y: 2)
-    }
-}
-
-struct DueDateBadge: View {
-    let date: Date
-    
-    private var daysUntilDue: Int {
-        Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
-    }
-    
-    private var badgeColor: Color {
-        if daysUntilDue < 0 {
-            return .red
-        } else if daysUntilDue == 0 {
-            return .orange
-        } else if daysUntilDue <= 3 {
-            return .yellow
-        } else {
-            return .green
-        }
-    }
-    
-    private var badgeText: String {
-        if daysUntilDue < 0 {
-            return "Overdue"
-        } else if daysUntilDue == 0 {
-            return "Today"
-        } else if daysUntilDue == 1 {
-            return "Tomorrow"
-        } else if daysUntilDue <= 7 {
-            return "\(daysUntilDue) days"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            return formatter.string(from: date)
-        }
-    }
-    
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.caption)
-            
-            Text(badgeText)
-                .font(.caption)
-                .fontWeight(.medium)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            badgeColor,
-                            badgeColor.opacity(0.7)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .shadow(color: badgeColor.opacity(0.3), radius: 4, x: 0, y: 2)
     }
 }

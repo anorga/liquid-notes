@@ -57,37 +57,8 @@ struct SettingsView: View {
     }
 
     private var archiveSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Notes Behavior", systemImage: "archivebox")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            VStack(spacing: 0) {
-                SettingToggle(
-                    title: "Show Archived Inline",
-                    description: "Display archived notes faded at the end",
-                    icon: "eye",
-                    isOn: $showArchivedInPlace
-                )
-                Divider().padding(.horizontal)
-                SettingToggle(
-                    title: "Swipe Hints",
-                    description: "Show subtle arrows on horizontal swipe",
-                    icon: "arrow.left.and.right",
-                    isOn: $enableSwipeAffordance
-                )
-                Divider().padding(.horizontal)
-                SettingToggle(
-                    title: "Archive Undo",
-                    description: "Offer undo after archiving",
-                    icon: "clock.arrow.circlepath",
-                    isOn: $enableArchiveUndo
-                )
-            }
-        }
-        .padding()
-        .background(.clear)
-        .premiumGlassCard()
+    // Simplified per feedback: removed inline archive visibility / swipe / undo options
+    EmptyView()
     }
     
     private var themeSection: some View {
@@ -190,35 +161,11 @@ struct SettingsView: View {
                     isOn: $themeManager.minimalMode
                 )
                 SettingToggle(
-                    title: "Animate Background",
-                    description: "Soft shifts in ambient gradient",
+                    title: "(Background Animation Always On)",
+                    description: "",
                     icon: "sparkles",
-                    isOn: $themeManager.animateGradients
-                )
-                SettingToggle(
-                    title: "Note Parallax",
-                    description: "Subtle device tilt on notes",
-                    icon: "gyroscope",
-                    isOn: $themeManager.noteParallax
-                )
-                SettingToggle(
-                    title: "Dynamic Tag Colors",
-                    description: "Cycle tag hues subtly",
-                    icon: "tag",
-                    isOn: $themeManager.dynamicTagCycling
-                )
-                SettingToggle(
-                    title: "Solid Tag Accents",
-                    description: "Use solid fills instead of gradients",
-                    icon: "square.filled.on.square",
-                    isOn: $themeManager.tagAccentSolid
-                )
-                SettingToggle(
-                    title: "Pin Theme Picker",
-                    description: "Keep quick theme overlay open",
-                    icon: "pin",
-                    isOn: $themeManager.themeOverlayPinned
-                )
+                    isOn: .constant(true)
+                ).hidden()
                 Divider().padding(.vertical, 6)
                 Text("Note Style")
                     .font(.subheadline)
