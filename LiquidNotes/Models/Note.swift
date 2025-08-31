@@ -25,6 +25,8 @@ final class Note {
     var height: Float = 140
     var isArchived: Bool = false
     var isFavorited: Bool = false
+    // System/internal note not shown in standard lists (e.g., Quick Tasks bucket)
+    var isSystem: Bool = false
     var tags: [String] = [] // Restored tags support
     var attachments: [Data] = []
     var attachmentTypes: [String] = []

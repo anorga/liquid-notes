@@ -260,27 +260,5 @@ class NotesViewModel {
         saveContext()
     }
 
-    // MARK: - Linking / Indexing
-    /// Recomputes link references for all notes (useful after introducing the feature or bulk edits).
-    func reindexLinks() {
-        let descriptor = FetchDescriptor<Note>()
-        guard let all = try? modelContext.fetch(descriptor) else { return }
-        var changed = false
-        // Map of lowercased title & aliases -> note id
-        var titleMap: [String: UUID] = [:]
-        for note in all {
-            let current = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !current.isEmpty { titleMap[current.lowercased()] = note.id }
-            for alias in note.aliasTitles { titleMap[alias.lowercased()] = note.id }
-        }
-        for note in all {
-            let before = note.linkedNoteTitles
-            note.updateLinkedNoteTitles()
-            if before != note.linkedNoteTitles { changed = true }
-            // Resolve to UUIDs
-            let resolved = note.linkedNoteTitles.compactMap { titleMap[$0.lowercased()] }
-            if resolved.sorted() != note.linkedNoteIDs.sorted() { note.linkedNoteIDs = Array(Set(resolved)); changed = true }
-        }
-        if changed { saveContext() }
-    }
+    // Linking reindex removed for simplification.
 }

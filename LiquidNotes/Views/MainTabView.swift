@@ -13,7 +13,9 @@ struct MainTabView: View {
     @Environment(CommandTrigger.self) private var commandTrigger
     @State private var selectedTab = 0
     @State private var selectedFolder: Folder? = nil // shared across entry points
-    @State private var showingQuickCapture = false
+    @State private var showingQuickCapture = false // quick note
+    @State private var showingQuickTaskCapture = false // single task capture
+    @State private var quickTasksNoteID: UUID? = nil // cached reference
     @State private var showingCommandPalette = false
     @State private var showingDailyReview = false
     @State private var openNoteObserver: NSObjectProtocol?
@@ -56,7 +58,7 @@ struct MainTabView: View {
             .onAppear { setupGlassTabBar() }
             
             if selectedTab == 0 || selectedTab == 1 { // Only Notes & Favorites
-                FloatingActionButton(available: fabActions) { act in handleFAB(act) }
+                creationMenu
             }
         } // ZStack
         .onAppear { setupViewModel() }
@@ -68,7 +70,7 @@ struct MainTabView: View {
     .onChange(of: commandTrigger.newQuickNote) { _, v in if v { showingQuickCapture = true; commandTrigger.newQuickNote = false } }
     .onChange(of: commandTrigger.newFullNote) { _, v in if v { createNewNote(); commandTrigger.newFullNote = false } }
     .onChange(of: commandTrigger.openDailyReview) { _, v in if v { showingDailyReview = true; commandTrigger.openDailyReview = false } }
-    .onChange(of: commandTrigger.reindex) { _, v in if v { notesViewModel?.reindexLinks(); commandTrigger.reindex = false } }
+    // Removed reindex trigger (simplification)
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
                 .presentationDetents([.medium, .large])
@@ -86,6 +88,16 @@ struct MainTabView: View {
         .sheet(isPresented: $showingDailyReview) {
             DailyReviewView()
         }
+        .sheet(isPresented: $showingQuickTaskCapture) {
+            QuickTaskCaptureView { taskText in
+                guard let vm = notesViewModel else { return }
+                let target = fetchOrCreateQuickTasksNote(using: vm)
+                target.addTask(taskText)
+                try? modelContext.save()
+                HapticManager.shared.success()
+            }
+            .presentationDetents([.fraction(0.25)])
+        }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(
                 onSelect: handleCommand
@@ -94,21 +106,33 @@ struct MainTabView: View {
         }
     }
     
-    private var fabActions: [FloatingActionButton.Action] {
-    var acts: [FloatingActionButton.Action] = [.newNote, .quickTask]
-    if selectedTab == 0 { acts.append(.newFolder) }
-        acts.append(contentsOf: [.dailyReview, .commands, .reindex])
-        return acts
-    }
-    private func handleFAB(_ action: FloatingActionButton.Action) {
-        switch action {
-        case .newNote: createNewNote()
-        case .quickTask: showingQuickCapture = true
-        case .newFolder: createNewFolder()
-        case .dailyReview: showingDailyReview = true
-        case .commands: showingCommandPalette = true
-        case .reindex: notesViewModel?.reindexLinks()
+    // MARK: - Native Creation Menu
+    private var creationMenu: some View {
+        Menu {
+            Button { HapticManager.shared.noteCreated(); createNewNote() } label: { Label("New Note", systemImage: "doc.badge.plus") }
+            Button { HapticManager.shared.buttonTapped(); showingQuickTaskCapture = true } label: { Label("Quick Task", systemImage: "checklist") }
+            if selectedTab == 0 { // Only on Notes tab
+                Button { HapticManager.shared.buttonTapped(); createNewFolder() } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+            }
+            Divider()
+            Button { HapticManager.shared.buttonTapped(); showingDailyReview = true } label: { Label("Daily Review", systemImage: "calendar") }
+            Button { HapticManager.shared.buttonTapped(); showingCommandPalette = true } label: { Label("Commands", systemImage: "command") }
+            // Reindex removed
+        } label: {
+            Image(systemName: "plus")
+                .font(.title3.weight(.semibold))
+                .padding(14)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(
+                    Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
+                .contentShape(Circle())
         }
+        .menuActionDismissBehavior(.automatic)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.trailing, 16)
+        .padding(.top, 12)
+        .accessibilityLabel("Create")
     }
     
     private func setupGlassTabBar() {
@@ -186,7 +210,7 @@ private extension MainTabView {
     case .newQuickNote: showingQuickCapture = true; analytics.increment("cmd.quickNote")
     case .newFullNote: createNewNote(); analytics.increment("cmd.fullNote")
     case .dailyReview: showingDailyReview = true; analytics.increment("cmd.dailyReview")
-    case .reindexLinks: notesViewModel?.reindexLinks(); analytics.increment("cmd.reindex")
+    // reindexLinks removed
     case .openSearch: selectedTab = 2; analytics.increment("cmd.openSearch")
     case .openTasks: selectedTab = 4; analytics.increment("cmd.openTasks")
     case .toggleFocus:
@@ -202,7 +226,7 @@ private extension MainTabView {
 
 // MARK: - Command Palette View
 struct CommandPaletteView: View {
-    enum Command: String, CaseIterable, Identifiable { case newQuickNote, newFullNote, dailyReview, reindexLinks, openSearch, openTasks, toggleFocus, newTemplate; var id: String { rawValue } }
+    enum Command: String, CaseIterable, Identifiable { case newQuickNote, newFullNote, dailyReview, openSearch, openTasks, toggleFocus, newTemplate; var id: String { rawValue } }
     let onSelect: (Command) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
@@ -241,7 +265,7 @@ struct CommandPaletteView: View {
         }
     }
     private func label(_ c: Command) -> String {
-    switch c { case .newQuickNote: return "New Quick Note"; case .newFullNote: return "New Full Note"; case .dailyReview: return "Open Daily Review"; case .reindexLinks: return "Reindex Links"; case .openSearch: return "Go to Search"; case .openTasks: return "Go to Tasks"; case .toggleFocus: return "Toggle Focus Mode"; case .newTemplate: return "New Structured Note" }
+    switch c { case .newQuickNote: return "New Quick Note"; case .newFullNote: return "New Full Note"; case .dailyReview: return "Open Daily Review"; case .openSearch: return "Go to Search"; case .openTasks: return "Go to Tasks"; case .toggleFocus: return "Toggle Focus Mode"; case .newTemplate: return "New Structured Note" }
     }
     private func shortcut(_ c: Command) -> String { "" }
 }
@@ -270,7 +294,7 @@ private extension MainTabView {
             guard let vm = notesViewModel else { return }
             Task { @MainActor in
                 let new = vm.createNote(in: selectedFolder, title: title, content: "")
-                vm.reindexLinks() // ensure link graph updates
+                // reindex removed
                 selectedNote = new
             }
         }
@@ -335,6 +359,77 @@ struct QuickCaptureView: View {
             }
             .navigationBarHidden(true)
         }
+    }
+}
+
+// MARK: - Quick Task Capture Sheet
+struct QuickTaskCaptureView: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (String) -> Void
+    @State private var taskText: String = ""
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LiquidNotesBackground().ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header removed per simplification request
+                    VStack(spacing: 16) {
+                        TextField("Task description", text: $taskText, axis: .vertical)
+                            .lineLimit(2, reservesSpace: true)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 14).padding(.vertical, 12)
+                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                        Spacer(minLength: 0)
+                        HStack {
+                            Button("Cancel") { dismiss() }
+                                .buttonStyle(.borderless)
+                            Spacer()
+                            Button {
+                                let trimmed = taskText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else { return }
+                                onSave(trimmed)
+                                dismiss()
+                            } label: {
+                                Text("Add Task")
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, 20).padding(.vertical, 10)
+                                    .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .clipShape(Capsule())
+                                    .foregroundStyle(.white)
+                            }
+                            .disabled(taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .opacity(taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// MARK: - Quick Tasks Helper
+private extension MainTabView {
+    func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
+        if let existingID = quickTasksNoteID {
+            let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == existingID })
+            if let found = try? modelContext.fetch(descriptor).first { return found }
+        }
+        // Search by reserved title
+        let title = "Quick Tasks"
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
+        if let found = try? modelContext.fetch(descriptor).first {
+            quickTasksNoteID = found.id
+            return found
+        }
+        // Create hidden aggregation note
+    let new = vm.createNote(in: selectedFolder, title: title, content: "")
+    new.isFavorited = false
+    new.isSystem = true
+        quickTasksNoteID = new.id
+        try? modelContext.save()
+        return new
     }
 }
 

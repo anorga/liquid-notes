@@ -8,6 +8,7 @@ struct TasksRollupView: View {
     @State private var showCompleted = true
     @State private var selectedPriority: NotePriority? = nil
     @State private var expandedNotes: Set<UUID> = []
+    @State private var editingTaskID: UUID? = nil
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -90,8 +91,28 @@ private extension TasksRollupView {
                 if showCompleted || !task.isCompleted {
                     HStack(spacing: 10) {
                         Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) { Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle").foregroundStyle(task.isCompleted ? Color.green : Color.secondary) }.buttonStyle(.plain)
-                        Text(task.text).strikethrough(task.isCompleted, color: .primary.opacity(0.6)).foregroundStyle(task.isCompleted ? .secondary : .primary).lineLimit(3)
+                        if editingTaskID == task.id {
+                            TextField("Task", text: Binding(
+                                get: { task.text },
+                                set: { newVal in task.text = newVal; try? modelContext.save() }
+                            ))
+                            .textFieldStyle(.plain)
+                            .disabled(task.isCompleted)
+                            .onSubmit { editingTaskID = nil }
+                            .onDisappear { editingTaskID = editingTaskID == task.id ? nil : editingTaskID }
+                        } else {
+                            Text(task.text)
+                                .strikethrough(task.isCompleted, color: .primary.opacity(0.6))
+                                .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                                .lineLimit(3)
+                                .onTapGesture { if !task.isCompleted { editingTaskID = task.id } }
+                        }
                         Spacer()
+                        if editingTaskID == task.id {
+                            Button(action: { editingTaskID = nil }) { Image(systemName: "checkmark").font(.caption) }
+                                .buttonStyle(.borderless)
+                                .transition(.opacity.combined(with: .scale))
+                        }
                         Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)

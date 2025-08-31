@@ -304,11 +304,11 @@ struct SettingsView: View {
                 .foregroundStyle(.primary)
             let a = AnalyticsManager.shared
             VStack(alignment: .leading, spacing: 10) {
-                analyticsRow("Command Palette Opens", a.value("cmd.openSearch") + a.value("cmd.openTasks") + a.value("cmd.dailyReview") + a.value("cmd.reindex") + a.value("cmd.fullNote") + a.value("cmd.quickNote"))
+                analyticsRow("Command Palette Opens", a.value("cmd.openSearch") + a.value("cmd.openTasks") + a.value("cmd.dailyReview") + a.value("cmd.fullNote") + a.value("cmd.quickNote"))
                 analyticsRow("Quick Notes Created", a.value("cmd.quickNote"))
                 analyticsRow("Full Notes Created", a.value("cmd.fullNote"))
                 analyticsRow("Daily Review Opens", a.value("cmd.dailyReview"))
-                analyticsRow("Reindexes", a.value("cmd.reindex"))
+                // Reindex metric removed
             }
             .padding(.vertical, 4)
         }

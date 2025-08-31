@@ -31,7 +31,7 @@ struct SpatialTabView: View {
                 LiquidNotesBackground()
                 
                 VStack(alignment: .leading, spacing: 0) {
-                    LNHeader(title: "Notes", subtitle: "\(allNotes.filter{ !$0.isArchived }.count) active") { EmptyView() }
+                    LNHeader(title: "Notes", subtitle: "\(allNotes.filter{ !$0.isArchived && !$0.isSystem }.count) active") { EmptyView() }
                     folderSection
                     // Slight upward pull to reduce vertical gap before first note row
                     Divider().opacity(0) // keeps layout stable
@@ -270,7 +270,10 @@ struct SpatialTabView: View {
     }
     
     // Notes already fetched in createdDate ascending order; just filter by folder/archive here.
-    private var filteredNotes: [Note] { let base = allNotes.filter { !$0.isArchived }; return selectedFolder == nil ? base : base.filter { $0.folder?.id == selectedFolder?.id } }
+    private var filteredNotes: [Note] {
+        let base = allNotes.filter { !$0.isArchived && !$0.isSystem }
+        return selectedFolder == nil ? base : base.filter { $0.folder?.id == selectedFolder?.id }
+    }
 
     // Ordered folders: favorites first (creation order via zIndex), then others (creation order)
     private var orderedFolders: [Folder] {

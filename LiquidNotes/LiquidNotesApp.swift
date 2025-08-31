@@ -29,8 +29,6 @@ struct LiquidNotesApp: App {
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Daily Review") { commandTrigger.openDailyReview.toggle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                Button("Reindex Links") { commandTrigger.reindex.toggle() }
-                    .keyboardShortcut("r", modifiers: [.command, .option])
             }
         }
     }
@@ -41,5 +39,4 @@ struct LiquidNotesApp: App {
     var newQuickNote = false
     var newFullNote = false
     var openDailyReview = false
-    var reindex = false
 }
