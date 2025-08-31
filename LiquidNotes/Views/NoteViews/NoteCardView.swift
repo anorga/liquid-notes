@@ -88,12 +88,13 @@ struct NoteCardView: View {
         .frame(width: 160, height: 120)
         .contentShape(Rectangle())
         .contextMenu {
+            let isFav = note.isFavorited
             Button(action: {
                 HapticManager.shared.buttonTapped()
-                onFavorite()
+                ModelMutationScheduler.shared.schedule { onFavorite() }
             }) {
-                Label(note.isFavorited ? "Remove from Favorites" : "Add to Favorites", 
-                      systemImage: note.isFavorited ? "star.slash" : "star")
+                Label(isFav ? "Remove from Favorites" : "Add to Favorites", 
+                      systemImage: isFav ? "star.slash" : "star")
             }
             
             Button(action: {
@@ -107,7 +108,7 @@ struct NoteCardView: View {
             
             Button(role: .destructive, action: {
                 HapticManager.shared.buttonTapped()
-                onDelete()
+                ModelMutationScheduler.shared.schedule { onDelete() }
             }) {
                 Label("Delete", systemImage: "trash")
             }

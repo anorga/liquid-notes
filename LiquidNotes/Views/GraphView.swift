@@ -93,7 +93,7 @@ struct GraphView: View {
     private func fitToView(size: CGSize) {
         // Compute bounding box of current positions
         var all: [CGPoint] = []
-        for (i, n) in nodes.enumerated() { all.append(position(for: i)) }
+        for (i, _) in nodes.enumerated() { all.append(position(for: i)) }
         guard !all.isEmpty else { return }
         let minX = all.map{ $0.x }.min() ?? 0, maxX = all.map{ $0.x }.max() ?? 0
         let minY = all.map{ $0.y }.min() ?? 0, maxY = all.map{ $0.y }.max() ?? 0
