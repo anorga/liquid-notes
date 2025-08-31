@@ -31,8 +31,8 @@ class NotesViewModel {
     
     func createNote(title: String = "", content: String = "") -> Note {
         let note = Note(title: title, content: content)
-    let descriptor = FetchDescriptor<Note>()
-    let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+        let descriptor = FetchDescriptor<Note>()
+        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
         modelContext.insert(note)
@@ -123,15 +123,71 @@ class NotesViewModel {
     // MARK: - Search and Filtering
     
     func filteredNotes(from notes: [Note]) -> [Note] {
-        if searchText.isEmpty {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return notes.filter { !$0.isArchived }
         }
-        
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Operators: #tag, is:fav, has:task, is:overdue, priority:<level>, due:yyyy-mm-dd, progress:>=NN, tag:any, tag:all
+        var requiredTags: [String] = []
+        var requireFavorite = false
+        var requireHasTask = false
+        var requireOverdue = false
+        var priorityFilter: NotePriority? = nil
+        var minProgress: Double? = nil
+        var dueBefore: Date? = nil
+        var tagModeAll = true // tag:any vs tag:all
+        var textTerms: [String] = []
+        query.split(separator: " ").forEach { tokenSub in
+            let token = String(tokenSub)
+            if token.hasPrefix("#") {
+                let tag = String(token.dropFirst())
+                if !tag.isEmpty { requiredTags.append(tag.lowercased()) }
+            } else if token.lowercased() == "is:fav" || token.lowercased() == "is:favorite" { requireFavorite = true }
+            else if token.lowercased() == "has:task" || token.lowercased() == "has:tasks" { requireHasTask = true }
+            else if token.lowercased() == "is:overdue" { requireOverdue = true }
+            else if token.lowercased().hasPrefix("priority:") {
+                let val = token.split(separator: ":").dropFirst().joined().lowercased()
+                if let p = NotePriority(rawValue: val) { priorityFilter = p }
+            }
+            else if token.lowercased().hasPrefix("progress:>") {
+                if let num = Double(token.replacingOccurrences(of: "progress:>", with: "")) { minProgress = num/100.0 }
+            }
+            else if token.lowercased().hasPrefix("due:") {
+                let dateStr = token.replacingOccurrences(of: "due:", with: "")
+                let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; if let d = f.date(from: dateStr) { dueBefore = d }
+            }
+            else if token.lowercased() == "tag:any" { tagModeAll = false }
+            else { textTerms.append(token) }
+        }
         return notes.filter { note in
-            !note.isArchived &&
-            (note.title.localizedCaseInsensitiveContains(searchText) ||
-             note.content.localizedCaseInsensitiveContains(searchText))
-             // || note.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }) // Temporarily disabled
+            if note.isArchived { return false }
+            if requireFavorite && !note.isFavorited { return false }
+            if requireHasTask && (note.tasks?.isEmpty ?? true) { return false }
+            if let pf = priorityFilter, note.priority != pf { return false }
+            if let mp = minProgress, note.progress < mp { return false }
+            if requireOverdue, let due = note.dueDate { if due > Date() { return false } } else if requireOverdue && note.dueDate == nil { return false }
+            if let db = dueBefore, let due = note.dueDate { if due > db { return false } } else if dueBefore != nil && note.dueDate == nil { return false }
+            // Tags requirement: every required tag must exist (case-insensitive)
+            if !requiredTags.isEmpty {
+                let lowered = note.tags.map { $0.lowercased() }
+                if tagModeAll {
+                    for req in requiredTags where !lowered.contains(req) { return false }
+                } else {
+                    var matchAny = false
+                    for req in requiredTags where lowered.contains(req) { matchAny = true; break }
+                    if !matchAny { return false }
+                }
+            }
+            // Text terms must each appear in title/content/tags/tasks
+            if !textTerms.isEmpty {
+                let tagsJoined = note.tags.joined(separator: " ")
+                let tasksJoined = (note.tasks ?? []).map { $0.text }.joined(separator: " ")
+                let haystack = (note.title + " " + note.content + " " + tagsJoined + " " + tasksJoined).lowercased()
+                for term in textTerms {
+                    if !haystack.contains(term.lowercased()) { return false }
+                }
+            }
+            return true
         }
     }
     
@@ -162,5 +218,34 @@ class NotesViewModel {
             print("❌ NotesViewModel: Error details: \(error.localizedDescription)")
             syncStatus = .error(error.localizedDescription)
         }
+    }
+
+    // Public wrapper to persist changes without exposing saveContext
+    func persistChanges() {
+        saveContext()
+    }
+
+    // MARK: - Linking / Indexing
+    /// Recomputes link references for all notes (useful after introducing the feature or bulk edits).
+    func reindexLinks() {
+        let descriptor = FetchDescriptor<Note>()
+        guard let all = try? modelContext.fetch(descriptor) else { return }
+        var changed = false
+        // Map of lowercased title & aliases -> note id
+        var titleMap: [String: UUID] = [:]
+        for note in all {
+            let current = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !current.isEmpty { titleMap[current.lowercased()] = note.id }
+            for alias in note.aliasTitles { titleMap[alias.lowercased()] = note.id }
+        }
+        for note in all {
+            let before = note.linkedNoteTitles
+            note.updateLinkedNoteTitles()
+            if before != note.linkedNoteTitles { changed = true }
+            // Resolve to UUIDs
+            let resolved = note.linkedNoteTitles.compactMap { titleMap[$0.lowercased()] }
+            if resolved.sorted() != note.linkedNoteIDs.sorted() { note.linkedNoteIDs = Array(Set(resolved)); changed = true }
+        }
+        if changed { saveContext() }
     }
 }

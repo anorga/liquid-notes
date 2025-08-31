@@ -14,6 +14,9 @@ struct RichTextEditor: UIViewRepresentable {
     @Binding var attributedText: NSAttributedString
     let placeholder: String
     var onTextChanged: (() -> Void)? = nil // iOS 26: Direct callback for changes
+    // Autocomplete support
+    var onLinkTrigger: ((String, CGRect, UITextView) -> Void)? = nil
+    var onLinkCancel: (() -> Void)? = nil
     
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -104,7 +107,7 @@ struct RichTextEditor: UIViewRepresentable {
             self.parent = parent
         }
         
-        func textViewDidChange(_ textView: UITextView) {
+    func textViewDidChange(_ textView: UITextView) {
             // Handle placeholder logic
             if textView.textColor == .placeholderText {
                 textView.text = ""
@@ -135,6 +138,7 @@ struct RichTextEditor: UIViewRepresentable {
                 self.parent.attributedText = textView.attributedText
                 // iOS 26: Trigger direct callback to ensure change detection
                 self.parent.onTextChanged?()
+                self.detectLinkTrigger(in: textView)
             }
         }
         
@@ -244,6 +248,38 @@ struct RichTextEditor: UIViewRepresentable {
             ], range: range)
             
             return mutableAttributedText
+        }
+
+        private func detectLinkTrigger(in textView: UITextView) {
+            let cursorLocation = textView.selectedRange.location
+            guard cursorLocation <= textView.text.count else { parent.onLinkCancel?(); return }
+            let nsText = textView.text as NSString
+            // Find range of current token (back to whitespace or newline)
+            var start = cursorLocation
+            while start > 0 {
+                let char = nsText.character(at: start - 1)
+                if Character(UnicodeScalar(char)!) == "\n" || Character(UnicodeScalar(char)!).isWhitespace { break }
+                start -= 1
+            }
+            let length = cursorLocation - start
+            guard length >= 2 else { parent.onLinkCancel?(); return }
+            let token = nsText.substring(with: NSRange(location: start, length: length))
+            if token.hasPrefix("[[") {
+                let query = String(token.dropFirst(2))
+                // Get caret rect
+                if let caret = caretRect(textView) {
+                    parent.onLinkTrigger?(query, caret, textView)
+                }
+            } else {
+                parent.onLinkCancel?()
+            }
+        }
+
+        private func caretRect(_ textView: UITextView) -> CGRect? {
+            guard let range = textView.selectedTextRange else { return nil }
+            let rect = textView.caretRect(for: range.start)
+            let converted = textView.convert(rect, to: textView.superview)
+            return converted
         }
     }
 }
