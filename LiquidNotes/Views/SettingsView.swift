@@ -7,6 +7,8 @@ struct SettingsView: View {
     @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
     @AppStorage("enableArchiveUndo") private var enableArchiveUndo = true
     @ObservedObject private var motion = MotionManager.shared
+    @AppStorage("dailyReviewReminderEnabled") private var dailyReviewReminderEnabled = false
+    @AppStorage("dailyReviewReminderHour") private var dailyReviewReminderHour = 9
     
     var body: some View {
         NavigationStack {
@@ -14,21 +16,14 @@ struct SettingsView: View {
                 LiquidNotesBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("Settings")
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                        .padding(.bottom, 5)
+                        LNHeader(title: "Settings") { EmptyView() }
 
                         VStack(spacing: 24) {
                             themeSection
                             archiveSection
                             accessibilitySection
+                            productivitySection
+                            analyticsSection
                             aboutSection
                         }
                         .padding(.horizontal, 20)
@@ -251,6 +246,83 @@ struct SettingsView: View {
         .padding()
         .background(.clear)
         .ambientGlassEffect()
+    }
+
+    private var productivitySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Productivity", systemImage: "bolt.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Daily Review Reminder",
+                    description: "Prompt to review notes each day",
+                    icon: "bell.badge",
+                    isOn: $dailyReviewReminderEnabled
+                )
+                .onChange(of: dailyReviewReminderEnabled) { _, newVal in
+                    if newVal { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) } else { NotificationScheduler.cancelDailyReview() }
+                }
+                Divider().padding(.leading, 8)
+                HStack(spacing: 16) {
+                    Image(systemName: "clock")
+                        .font(.title3)
+                        .foregroundStyle(LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Reminder Time")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                        Text("Hour of day (24h)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Stepper(value: $dailyReviewReminderHour, in: 5...22, step: 1) {
+                        Text("\(dailyReviewReminderHour):00")
+                            .font(.callout)
+                            .monospacedDigit()
+                    }
+                    .onChange(of: dailyReviewReminderHour) { _, _ in
+                        if dailyReviewReminderEnabled { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) }
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+
+    private var analyticsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Usage Analytics", systemImage: "chart.bar.fill")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            let a = AnalyticsManager.shared
+            VStack(alignment: .leading, spacing: 10) {
+                analyticsRow("Command Palette Opens", a.value("cmd.openSearch") + a.value("cmd.openTasks") + a.value("cmd.dailyReview") + a.value("cmd.reindex") + a.value("cmd.fullNote") + a.value("cmd.quickNote"))
+                analyticsRow("Quick Notes Created", a.value("cmd.quickNote"))
+                analyticsRow("Full Notes Created", a.value("cmd.fullNote"))
+                analyticsRow("Daily Review Opens", a.value("cmd.dailyReview"))
+                analyticsRow("Reindexes", a.value("cmd.reindex"))
+            }
+            .padding(.vertical, 4)
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
+    }
+}
+
+private func analyticsRow(_ title: String, _ val: Int) -> some View {
+    HStack {
+        Text(title).font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        Text("\(val)").font(.caption).fontWeight(.semibold)
     }
 }
 

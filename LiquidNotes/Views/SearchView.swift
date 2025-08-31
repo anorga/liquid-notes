@@ -58,17 +58,7 @@ struct SearchView: View {
             ZStack {
                 LiquidNotesBackground()
                 VStack(alignment: .leading, spacing: 0) {
-                    // Title
-                    HStack {
-                        Text("Search")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 14) // Increased spacing to mirror SettingsView section gap
+                    LNHeader(title: "Search") { EmptyView() }
 
                     VStack(spacing: 18) {
                         // Search field
@@ -225,9 +215,9 @@ struct DiscoveryContent: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    SearchTip(text: "Search by title, content, or tags")
-                    SearchTip(text: "Use quotes for exact phrases")
-                    SearchTip(text: "Search works across all your notes")
+                    SearchTip(text: "Operators: is:fav has:task is:overdue priority:high progress:>50")
+                    SearchTip(text: "Filter by tags: #tag, multiple tags require all; add tag:any to match any")
+                    SearchTip(text: "Due date: due:2025-09-01 (YYYY-MM-DD)")
                 }
             }
             .padding(.horizontal)

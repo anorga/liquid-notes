@@ -12,6 +12,10 @@ struct SpatialCanvasView: View {
     let onFolderTap: ((Folder) -> Void)?
     let onFolderDelete: ((Folder) -> Void)?
     let onFolderFavorite: ((Folder) -> Void)?
+    // Multi-select support
+    let selectionMode: Bool
+    @Binding var selectedNoteIDs: Set<UUID>
+    let onToggleSelect: (Note) -> Void
     
     @State private var showingContextMenu: Note?
     @State private var reorderedNotes: [Note] = []
@@ -28,86 +32,84 @@ struct SpatialCanvasView: View {
         // Use single adaptive column that can fit multiple notes per row but prevents overflow
         return [GridItem(.adaptive(minimum: 140, maximum: maxNoteWidth), spacing: 15)]
     }
-    
+    // (GridNoteCard moved to file scope below for clarity)
+
+    // MARK: - Subviews & gestures
     var body: some View {
-        ScrollView(.vertical) {
-            NotesFlowGrid(
-                notes: displayedNotes,
-                onTap: onTap,
-                onDelete: onDelete,
-                onFavorite: onFavorite,
-                onMoveRequest: handleNoteMove
-            )
+        ScrollView {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
+                ForEach(notes, id: \.id) { note in
+                    GridNoteCard(
+                        note: note,
+                        selectionMode: selectionMode,
+                        isSelected: selectedNoteIDs.contains(note.id),
+                        onTap: { onTap(note) },
+                        onDelete: { onDelete(note) },
+                        onFavorite: { onFavorite(note) },
+                        onMoveRequest: { movedNote, translation in
+                            // Basic spatial move: update stored position using translation delta
+                            movedNote.positionX += Float(translation.x)
+                            movedNote.positionY += Float(translation.y)
+                            movedNote.updateModifiedDate()
+                            HapticManager.shared.noteMoved()
+                        },
+                        onToggleSelect: { onToggleSelect(note) }
+                    )
+                }
+            }
             .padding(.horizontal, 20)
-            .padding(.top, 20)
+            .padding(.vertical, 16)
         }
-        .onAppear { if reorderedNotes.isEmpty { reorderedNotes = notes } }
-        .onChange(of: notes) { _, newNotes in reorderedNotes = newNotes }
-        .scrollIndicators(.hidden)
-    }
-    
-    private var displayedNotes: [Note] {
-        return reorderedNotes.isEmpty ? notes : reorderedNotes
-    }
-    
-    private func handleNoteMove(draggedNote: Note, targetPosition: CGPoint) {
-        // Simple reordering based on significant drag distance
-        guard let currentIndex = reorderedNotes.firstIndex(of: draggedNote) else { return }
-        
-        // If dragged far enough, move to end of list for now (can be enhanced later)
-        let dragDistance = sqrt(targetPosition.x * targetPosition.x + targetPosition.y * targetPosition.y)
-        if dragDistance > 80 {
-            withAnimation(.bouncy(duration: 0.4)) {
-                reorderedNotes.remove(at: currentIndex)
-                reorderedNotes.append(draggedNote)
-            }
-        }
+        .animation(.default, value: notes.map(\.id))
     }
 }
 
-// MARK: - Extracted Flow Grid to reduce type-check complexity in main view body
-private struct NotesFlowGrid: View {
-    let notes: [Note]
-    let onTap: (Note) -> Void
-    let onDelete: (Note) -> Void
-    let onFavorite: (Note) -> Void
-    let onMoveRequest: (Note, CGPoint) -> Void
-
-    var body: some View {
-        FlowLayout(horizontalSpacing: 15, verticalSpacing: 15) {
-            ForEach(notes, id: \.id) { note in
-                GridNoteCard(
-                    note: note,
-                    onTap: { onTap(note) },
-                    onDelete: { onDelete(note) },
-                    onFavorite: { onFavorite(note) },
-                    onMoveRequest: { dragged, point in onMoveRequest(dragged, point) }
-                )
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text("Note titled \(note.title.isEmpty ? "Untitled" : note.title)"))
-                .accessibilityHint(Text("Double tap to open. Swipe horizontally for actions."))
-            }
-        }
+// MARK: - Backwards-compatible convenience initializer (non-colliding)
+extension SpatialCanvasView {
+    init(
+        notes: [Note],
+        onTap: @escaping (Note) -> Void,
+        onDelete: @escaping (Note) -> Void,
+        onFavorite: @escaping (Note) -> Void,
+        selectionMode: Bool = false,
+        selectedNoteIDs: Binding<Set<UUID>> = .constant([]),
+        onToggleSelect: @escaping (Note) -> Void = { _ in }
+    ) {
+        self.notes = notes
+        self.folders = []
+        self.onTap = onTap
+        self.onDelete = onDelete
+        self.onFavorite = onFavorite
+        self.onFolderTap = nil
+        self.onFolderDelete = nil
+        self.onFolderFavorite = nil
+        self.selectionMode = selectionMode
+        self._selectedNoteIDs = selectedNoteIDs
+        self.onToggleSelect = onToggleSelect
     }
 }
 
-struct GridNoteCard: View {
+// MARK: - GridNoteCard (top-level)
+private struct GridNoteCard: View {
     let note: Note
+    let selectionMode: Bool
+    let isSelected: Bool
     let onTap: () -> Void
     let onDelete: () -> Void
     let onFavorite: () -> Void
     let onMoveRequest: (Note, CGPoint) -> Void
-    
-    @State private var dragOffset = CGSize.zero
+    let onToggleSelect: () -> Void
+
+    // Drag / resize state
+    @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
     @State private var noteSize = CGSize(width: 180, height: 140)
     @State private var isResizing = false
-    @State private var initialSize: CGSize = .zero // store size at resize gesture start
-    @State private var dragStartLocation = CGPoint.zero
-    // Swipe & undo state removed
+    @State private var initialSize: CGSize = .zero
+
     @ObservedObject private var themeManager = ThemeManager.shared
 
-    // Breakpoint-based padding for consistent interior spacing & to avoid icon overflow on narrow notes
+    // MARK: - Layout helpers
     private var horizontalPadding: CGFloat {
         let w = noteSize.width
         if w <= 155 { return 18 }
@@ -120,22 +122,10 @@ struct GridNoteCard: View {
         if h <= 180 { return 18 }
         return 20
     }
-
-    // Only show large attachment preview if note is big enough to not crowd title/padding
-    private var showAttachmentPreview: Bool {
-        noteSize.width >= 170 && noteSize.height >= 160
-    }
-
-    private var contentLineLimit: Int {
-        if showAttachmentPreview { return 3 }
-        if !note.tags.isEmpty { return 4 }
-        return 5
-    }
-
-    // Tag truncation logic (E): try to fit tags within available width budget
+    private var showAttachmentPreview: Bool { noteSize.width >= 170 && noteSize.height >= 160 }
+    private var contentLineLimit: Int { showAttachmentPreview ? 3 : (!note.tags.isEmpty ? 4 : 5) }
     private var displayedTags: [String] {
         guard !note.tags.isEmpty else { return [] }
-        // Rough width estimation: base 20 + 8 per char (capsules) up to available width minus padding and star/archive overlay zone
         let available = max(60, noteSize.width - horizontalPadding * 2 - 40)
         var used: CGFloat = 0
         var result: [String] = []
@@ -147,12 +137,10 @@ struct GridNoteCard: View {
         }
         return result
     }
-    
+
     var body: some View {
         ZStack {
-            
             glassCard.overlay(alignment: .bottomTrailing) { resizeHandle }
-            
             VStack(alignment: .leading, spacing: 10) {
                 noteHeader
                 attachmentPreviewView
@@ -160,91 +148,65 @@ struct GridNoteCard: View {
                 tagsRow
                 Spacer(minLength: 8)
             }
-            // Dynamic internal padding for clearer content breathing room without overflow
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height, alignment: .leading)
             .overlay(alignment: .topTrailing) { topRightBadges }
+            .overlay(alignment: .topLeading) {
+                if selectionMode {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .padding(6)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onToggleSelect() }
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
         }
-    .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
-        .scaleEffect(isDragging ? 1.08 : isResizing ? 1.04 : 1.0)
+        .frame(maxWidth: UIScreen.main.bounds.width - 60, alignment: .leading)
+        .scaleEffect(isDragging ? 1.08 : (isResizing ? 1.04 : 1.0))
         .offset(dragOffset)
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
-    .opacity(note.isArchived ? 0.45 : 1.0)
-    .saturation(note.isArchived ? 0.4 : 1.0)
-    .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
-    // Explicit animations handled in gesture bodies for resizing
-        .onTapGesture {
-            HapticManager.shared.noteSelected()
-            onTap()
-        }
+        .opacity(note.isArchived ? 0.45 : 1.0)
+        .saturation(note.isArchived ? 0.4 : 1.0)
+        .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
+        .onTapGesture { if selectionMode { onToggleSelect() } else { HapticManager.shared.noteSelected(); onTap() } }
+        .onLongPressGesture(minimumDuration: 0.35) { if !selectionMode { onToggleSelect() } }
         .onAppear {
-            // Initialize with persisted size if available
-            let persistedWidth = CGFloat(note.width)
-            let persistedHeight = CGFloat(note.height)
-            if persistedWidth >= 140, persistedHeight >= 120 { noteSize = CGSize(width: persistedWidth, height: persistedHeight) }
+            let w = CGFloat(note.width)
+            let h = CGFloat(note.height)
+            if w >= 140, h >= 120 { noteSize = CGSize(width: CGFloat(w), height: CGFloat(h)) }
         }
-        .contextMenu {
-            Button(action: {
-                HapticManager.shared.buttonTapped()
-                onFavorite()
-            }) {
-                Label(note.isFavorited ? "Unfavorite" : "Favorite", systemImage: note.isFavorited ? "star.slash" : "star")
-            }
-            Button(action: {
-                HapticManager.shared.buttonTapped()
-                note.isArchived.toggle()
-                note.updateModifiedDate()
-            }) {
-                Label(note.isArchived ? "Restore" : "Archive", systemImage: note.isArchived ? "arrow.uturn.left" : "archivebox")
-            }
-            Button(role: .destructive, action: {
-                HapticManager.shared.noteDeleted()
-                onDelete()
-            }) {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-        // Swipe gestures, affordances, and archive undo removed per simplification feedback
+        .gesture(dragGesture)
+        .contextMenu { contextMenuContent }
+        .draggable(note.id.uuidString)
     }
 }
 
+// MARK: Subviews & gestures for GridNoteCard
 private extension GridNoteCard {
-    // Swipe backgrounds removed
-    // Extracted glass card to reduce type-check complexity.
     var glassCard: some View {
         let corner: CGFloat = 26
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        let glass = Color.clear.refinedClearGlass(
-            cornerRadius: corner,
-            intensity: themeManager.noteGlassDepth
-        )
-        let firstShadowColor = Color.black.opacity(
-            themeManager.minimalMode ? 0.08 : 0.16
-        )
-        let secondShadowColor = (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(
-            themeManager.minimalMode ? 0.04 : 0.1
-        )
-        let widthCap = min(noteSize.width, UIScreen.main.bounds.width - 60)
-        return base.fill(Color.clear)
-            .overlay(glass)
+        // Use themedGlass as available in ThemeManager extensions
+        return base
+            .fill(Color.clear)
+            .overlay(
+                AnyView(
+                    EmptyView()
+                        .themedGlassCard()
+                )
+            )
             .clipShape(base)
-            .frame(width: widthCap, height: noteSize.height)
-        .shadow(color: firstShadowColor,
-            radius: themeManager.minimalMode ? 6 : 12,
-            x: 0, y: themeManager.minimalMode ? 3 : 5)
-        .shadow(color: secondShadowColor,
-            radius: themeManager.minimalMode ? 18 : 32,
-            x: 0, y: themeManager.minimalMode ? 10 : 20)
-            // Swipe offset & parallax removed
+            .frame(width: min(noteSize.width, UIScreen.main.bounds.width - 60), height: noteSize.height)
+            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.08 : 0.16), radius: themeManager.minimalMode ? 6 : 12, x: 0, y: themeManager.minimalMode ? 3 : 5)
+            .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : 0.1), radius: themeManager.minimalMode ? 18 : 32, x: 0, y: themeManager.minimalMode ? 10 : 20)
     }
 
     var resizeHandle: some View {
         ZStack {
-            Rectangle()
-                .fill(Color.clear)
-                .frame(width: 52, height: 52)
-                .contentShape(Rectangle())
+            Rectangle().fill(Color.clear).frame(width: 52, height: 52).contentShape(Rectangle())
             Image(systemName: "arrow.up.backward.and.arrow.down.forward")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -275,9 +237,7 @@ private extension GridNoteCard {
                 let proposedHeight = initialSize.height + value.translation.height
                 let newWidth = max(140, min(maxWidth, proposedWidth))
                 let newHeight = max(120, min(maxHeight, proposedHeight))
-                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.88)) {
-                    noteSize = CGSize(width: newWidth, height: newHeight)
-                }
+                withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.88)) { noteSize = CGSize(width: newWidth, height: newHeight) }
             }
             .onEnded { _ in
                 withAnimation(.bouncy(duration: 0.32, extraBounce: 0.08)) { isResizing = false }
@@ -286,13 +246,40 @@ private extension GridNoteCard {
                 note.updateModifiedDate()
             }
     }
-}
 
-// MARK: - Extracted subviews for readability & compiler performance
-private extension GridNoteCard {
+    var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                if !isDragging { withAnimation(.spring(response: 0.25, dampingFraction: 0.82)) { isDragging = true } }
+                dragOffset = value.translation
+            }
+            .onEnded { value in
+                onMoveRequest(note, CGPoint(x: value.translation.width, y: value.translation.height))
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    dragOffset = .zero
+                    isDragging = false
+                }
+            }
+    }
+
+    var contextMenuContent: some View {
+        Group {
+            Button(action: { HapticManager.shared.buttonTapped(); onFavorite() }) {
+                Label(note.isFavorited ? "Unfavorite" : "Favorite", systemImage: note.isFavorited ? "star.slash" : "star")
+            }
+            Menu("More…") {
+                Button(action: { HapticManager.shared.buttonTapped(); note.isArchived.toggle(); note.updateModifiedDate() }) {
+                    Label(note.isArchived ? "Restore" : "Archive", systemImage: note.isArchived ? "arrow.uturn.left" : "archivebox")
+                }
+                Button(role: .destructive, action: { HapticManager.shared.noteDeleted(); onDelete() }) {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+    }
+
     @ViewBuilder var noteHeader: some View {
         let hasBadges = note.isFavorited || ((note.tasks?.isEmpty) == false)
-        // Reserve horizontal space on the right so overlay badges don't collide with the title text.
         HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
                 .font(.headline)
@@ -300,15 +287,13 @@ private extension GridNoteCard {
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-                .padding(.trailing, hasBadges ? 60 : 0) // space for star + task badge row
+                .padding(.trailing, hasBadges ? 60 : 0)
             Spacer(minLength: 4)
         }
     }
 
     @ViewBuilder var attachmentPreviewView: some View {
-        if showAttachmentPreview,
-           let firstImageData = note.attachments.first,
-           let firstType = note.attachmentTypes.first {
+        if showAttachmentPreview, let firstImageData = note.attachments.first, let firstType = note.attachmentTypes.first {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.regularMaterial)
@@ -364,7 +349,6 @@ private extension GridNoteCard {
 
     @ViewBuilder var topRightBadges: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            // First row: favorite + tasks (horizontal alignment)
             HStack(spacing: 6) {
                 if note.isFavorited {
                     Image(systemName: "star.fill")
@@ -392,17 +376,33 @@ private extension GridNoteCard {
                                     : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing)
                         )
                     )
-                    .overlay(
-                        Capsule().stroke(Color.white.opacity(allDone ? 0.35 : 0.22), lineWidth: 0.6)
-                    )
+                    .overlay(Capsule().stroke(Color.white.opacity(allDone ? 0.35 : 0.22), lineWidth: 0.6))
                     .foregroundStyle(allDone ? .white : .primary.opacity(0.85))
                     .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
                     .transition(.scale.combined(with: .opacity))
                     .accessibilityLabel(Text(allDone ? "All tasks complete" : "\(incomplete) incomplete of \(tasks.count) tasks"))
                 }
+                if (note.tasks?.isEmpty ?? true) {
+                    Button { HapticManager.shared.buttonTapped(); note.addTask("New Task") } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }.buttonStyle(.plain)
+                }
+                if !(note.tasks?.isEmpty ?? true) {
+                    ZStack {
+                        Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 4)
+                        Circle()
+                            .trim(from: 0, to: note.progress)
+                            .stroke(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    .frame(width: 20, height: 20)
+                    .animation(.easeInOut(duration: 0.3), value: note.progress)
+                    .accessibilityLabel(Text("Progress \(Int(note.progress * 100)) percent"))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            // Second row (optional icons) placed below
             if !showAttachmentPreview && !note.attachments.isEmpty {
                 Image(systemName: "paperclip")
                     .font(.system(size: 11, weight: .medium))
@@ -427,17 +427,27 @@ private extension GridNoteCard {
 }
 
 #Preview {
-    SpatialCanvasView(
-        notes: [],
-        folders: [],
-        onTap: { _ in },
-        onDelete: { _ in },
-        onFavorite: { _ in },
-        onFolderTap: nil,
-        onFolderDelete: nil,
-        onFolderFavorite: nil
-    )
-    .modelContainer(for: [Note.self, Folder.self], inMemory: true)
+    struct PreviewHost: View {
+        @State private var selected: Set<UUID> = []
+
+        var body: some View {
+            SpatialCanvasView(
+                notes: [],
+                folders: [],
+                onTap: { _ in },
+                onDelete: { _ in },
+                onFavorite: { _ in },
+                onFolderTap: nil,
+                onFolderDelete: nil,
+                onFolderFavorite: nil,
+                selectionMode: false,
+                selectedNoteIDs: $selected,
+                onToggleSelect: { _ in }
+            )
+            .modelContainer(for: [Note.self, Folder.self], inMemory: true)
+        }
+    }
+    return PreviewHost()
 }
 
 struct AnimatedGIFView: View {

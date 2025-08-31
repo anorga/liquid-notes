@@ -1,32 +1,23 @@
-
 import SwiftUI
 import SwiftData
 
 struct PinnedNotesView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Note> { note in note.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse) 
+    @Query(filter: #Predicate<Note> { note in note.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse)
     private var favoritedNotes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingNoteEditor = false
+    // Multi-select support for SpatialCanvasView
+    @State private var selectedNoteIDs: Set<UUID> = []
     
     var body: some View {
         NavigationStack {
             ZStack {
                 LiquidNotesBackground()
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header aligned like Notes view
-                    HStack {
-                        Text("Favorites")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 5)
+                    LNHeader(title: "Favorites", subtitle: "\(favoritedNotes.count) items") { EmptyView() }
 
                     if favoritedNotes.isEmpty {
                         VStack {
@@ -56,7 +47,10 @@ struct PinnedNotesView: View {
                             onFavorite: { note in toggleFavorite(note) },
                             onFolderTap: nil,
                             onFolderDelete: nil,
-                            onFolderFavorite: nil
+                            onFolderFavorite: nil,
+                            selectionMode: false,
+                            selectedNoteIDs: $selectedNoteIDs,
+                            onToggleSelect: { _ in }
                         )
                     }
                 }
@@ -75,7 +69,6 @@ struct PinnedNotesView: View {
             notesViewModel = NotesViewModel(modelContext: modelContext)
         }
     }
-    
     
     private func deleteNote(_ note: Note) {
         guard let viewModel = notesViewModel else { return }
