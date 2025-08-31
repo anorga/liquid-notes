@@ -1,6 +1,8 @@
-
 import SwiftUI
 import SwiftData
+#if os(iOS)
+import UIKit
+#endif
 
 struct SpatialTabView: View {
     @Environment(\.modelContext) private var modelContext
@@ -10,7 +12,7 @@ struct SpatialTabView: View {
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingNoteEditor = false
-    @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
+    // Archived inline option removed; filters always visible
     
     var body: some View {
         NavigationStack {
@@ -68,7 +70,9 @@ struct SpatialTabView: View {
             }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents(
+                        UIDevice.current.userInterfaceIdiom == .pad ? [.large] : [.medium, .large]
+                    )
             }
         }
     }
@@ -83,21 +87,55 @@ struct SpatialTabView: View {
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
-        .opacity(showArchivedInPlace ? 1 : 0.001)
-        .animation(.easeInOut(duration: 0.3), value: showArchivedInPlace)
+    // Always visible
     }
     
     private var filteredNotes: [Note] {
         let active = allNotes.filter { !$0.isArchived }
         let archived = allNotes.filter { $0.isArchived }
-        guard showArchivedInPlace else { return active }
+    // Show only active notes by default unless user selects other filter
         switch activeFilterSelection {
         case 1: return archived
         case 2: return active + archived
         default: return active
         }
     }
-    
+    // MARK: - Actions & Helpers
+    private func setupViewModels() {
+        if notesViewModel == nil { notesViewModel = NotesViewModel(modelContext: modelContext) }
+    }
+    private func createNewNote() {
+        HapticManager.shared.noteCreated()
+        guard let viewModel = notesViewModel else { return }
+        let newNote = viewModel.createNote()
+        selectedNote = newNote
+        showingNoteEditor = true
+    }
+    private func createNewFolder() {
+        HapticManager.shared.buttonTapped()
+        guard let viewModel = notesViewModel else { return }
+        _ = viewModel.createFolder()
+    }
+    private func deleteNote(_ note: Note) {
+        guard let viewModel = notesViewModel else { return }
+        withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteNote(note) }
+    }
+    private func toggleFavorite(_ note: Note) {
+        guard let viewModel = notesViewModel else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleNoteFavorite(note) }
+        HapticManager.shared.buttonTapped()
+    }
+    private func deleteFolder(_ folder: Folder) {
+        guard let viewModel = notesViewModel else { return }
+        withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteFolder(folder) }
+    }
+    private func toggleFolderFavorite(_ folder: Folder) {
+        guard let viewModel = notesViewModel else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { viewModel.toggleFolderFavorite(folder) }
+        HapticManager.shared.buttonTapped()
+    }
+
+}
 
 private struct FilterChip: View {
     let title: String
@@ -125,67 +163,6 @@ private struct FilterChip: View {
             )
             .foregroundStyle(isOn ? .primary : .secondary)
             .onTapGesture { withAnimation(.bouncy(duration: 0.3)) { selection = index; HapticManager.shared.buttonTapped() } }
-    }
-}
-    private func setupViewModels() {
-        if notesViewModel == nil {
-            notesViewModel = NotesViewModel(modelContext: modelContext)
-        }
-        
-        // Force a refresh of the @Query by checking the model context
-    // (Removed verbose debug logging)
-    }
-    
-    private func createNewNote() {
-        HapticManager.shared.noteCreated()
-        
-        guard let viewModel = notesViewModel else { return }
-        let newNote = viewModel.createNote()
-        selectedNote = newNote
-        showingNoteEditor = true
-    }
-    
-    private func createNewFolder() {
-        HapticManager.shared.buttonTapped()
-        
-        guard let viewModel = notesViewModel else { return }
-        let _ = viewModel.createFolder()
-    }
-    
-    private func deleteNote(_ note: Note) {
-        guard let viewModel = notesViewModel else { return }
-        
-        withAnimation(.easeInOut(duration: 0.3)) {
-            viewModel.deleteNote(note)
-        }
-    }
-    
-    private func toggleFavorite(_ note: Note) {
-        guard let viewModel = notesViewModel else { return }
-        
-        withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel.toggleNoteFavorite(note)
-        }
-        
-        HapticManager.shared.buttonTapped()
-    }
-    
-    private func deleteFolder(_ folder: Folder) {
-        guard let viewModel = notesViewModel else { return }
-        
-        withAnimation(.easeInOut(duration: 0.3)) {
-            viewModel.deleteFolder(folder)
-        }
-    }
-    
-    private func toggleFolderFavorite(_ folder: Folder) {
-        guard let viewModel = notesViewModel else { return }
-        
-        withAnimation(.easeInOut(duration: 0.2)) {
-            viewModel.toggleFolderFavorite(folder)
-        }
-        
-        HapticManager.shared.buttonTapped()
     }
 }
 
