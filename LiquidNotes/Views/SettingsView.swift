@@ -88,9 +88,9 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 HStack(alignment: .center) {
                     ZStack(alignment: .topLeading) {
-                        RoundedRectangle(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, style: .continuous)
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
                             .fill(Color.clear)
-                            .refinedClearGlass(cornerRadius: themeManager.noteStyle == 0 ? 20 : 34, intensity: themeManager.noteGlassDepth)
+                            .refinedClearGlass(cornerRadius: 26, intensity: themeManager.noteGlassDepth)
                             .frame(width: 160, height: 110)
                             .overlay(alignment: .topLeading) {
                                 Text("Sample")
@@ -99,14 +99,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.primary)
                                     .padding(8)
                             }
-                            .overlay(alignment: .bottomTrailing) {
-                                if themeManager.noteStyle == 1 {
-                                    Image(systemName: "sparkles")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .padding(6)
-                                }
-                            }
+                            // Removed style embellishment icon (single unified style)
                             .shadow(color: .black.opacity(themeManager.minimalMode ? 0.05 : 0.18), radius: themeManager.minimalMode ? 4 : 12, x: 0, y: themeManager.minimalMode ? 2 : 6)
                             // Overlay stroke removed; unified border handled by refinedClearGlass
                     }
@@ -180,56 +173,8 @@ struct SettingsView: View {
                     isOn: .constant(true)
                 ).hidden()
                 Divider().padding(.vertical, 6)
-                Text("Note Style")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Note Style", selection: $themeManager.noteStyle) {
-                    Text("Rounded").tag(0)
-                    Text("Squircle").tag(1)
-                }
-                .pickerStyle(.segmented)
-                DisclosureGroup(isExpanded: $themeManager.showAdvancedGlass) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Glass Depth")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(depthLabel)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.tertiary.opacity(0.2), in: Capsule())
-                        }
-                        Slider(value: $themeManager.noteGlassDepth, in: 0.3...1.2, step: 0.05) { Text("Glass Depth") }
-                            .tint(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
-                        HStack {
-                            Text("Glass Opacity")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(Int(themeManager.glassOpacity * 100))%")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.primary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.tertiary.opacity(0.2), in: Capsule())
-                        }
-                        Slider(value: $themeManager.glassOpacity, in: 0.3...0.95, step: 0.05) { Text("Glass Opacity") }
-                            .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
-                    }
-                    .padding(.top, 4)
-                } label: {
-                    HStack {
-                        Image(systemName: "slider.horizontal.3")
-                        Text("Advanced Glass")
-                        Spacer()
-                        Image(systemName: themeManager.showAdvancedGlass ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                // Note Style picker removed; unified style applied globally
+                // Advanced glass controls removed for simplification
             }
         }
         .padding()

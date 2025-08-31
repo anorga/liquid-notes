@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import UniformTypeIdentifiers
+import ImageIO
 
 struct NoteEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -28,254 +29,229 @@ struct NoteEditorView: View {
     @State private var showingTagEditor = false
     @State private var tempTags: [String] = []
     
+    // Tracking
+    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Title + Body Card
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextField("Title", text: $title)
-                            .font(.title)
-                            .fontWeight(.semibold)
-                            .textInputAutocapitalization(.sentences)
-                            .disableAutocorrection(false)
-                            .onChange(of: title) { _, _ in hasChanges = true }
-                        Divider().opacity(0.25)
-                        RichTextEditor(
-                            text: $content,
-                            attributedText: $attributedContent,
-                            placeholder: "Start typing...",
-                            onTextChanged: { hasChanges = true }
-                        )
-                        .onChange(of: attributedContent) { _, _ in hasChanges = true }
-                        .onChange(of: content) { _, _ in hasChanges = true }
-                        .frame(minHeight: 240)
-                    }
-                    // Reduced internal horizontal padding; added external horizontal padding to align with other sections
-                    .padding(.vertical, 18)
-                    .padding(.horizontal, 16)
-                    .modernGlassCard()
-                    .padding(.top, 20)
-                    .padding(.horizontal, 20)
-
-                    if showingTaskList {
-                        TaskListView(
-                            tasks: Binding(
-                                get: { note.tasks ?? [] },
-                                set: { newVal in
-                                    note.tasks = newVal
-                                    note.updateProgress()
-                                    hasChanges = true
-                                }
-                            ),
-                            onToggle: { index in
-                                note.toggleTask(at: index)
-                                hasChanges = true
-                            },
-                            onDelete: { index in
-                                note.removeTask(at: index)
-                                hasChanges = true
-                            },
-                            onAdd: { text in
-                                note.addTask(text)
-                                hasChanges = true
-                            }
-                        )
-                        .padding(.horizontal, 20)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        ))
-                    }
-
-                    if showingTagEditor {
-                        TagListView(
-                            tags: $tempTags,
-                            onAdd: { tag in
-                                note.addTag(tag)
-                                tempTags = note.tags
-                                hasChanges = true
-                            },
-                            onRemove: { tag in
-                                note.removeTag(tag)
-                                tempTags = note.tags
-                                hasChanges = true
-                            }
-                        )
-                        .padding(.horizontal, 20)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
-                    }
-
-                    if !note.attachments.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Attachments")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 16) {
-                                    ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
-                                        if index < note.attachmentTypes.count {
-                                            AttachmentView(
-                                                data: data,
-                                                type: note.attachmentTypes[index],
-                                                onDelete: {
-                                                    if index < note.attachments.count && index < note.attachmentTypes.count {
-                                                        withAnimation(.bouncy(duration: 0.4)) {
-                                                            note.removeAttachment(at: index)
-                                                            hasChanges = true
-                                                        }
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 16)
-                            }
-                        }
-                        .background(.clear)
-                        .ambientGlassEffect()
-                        .padding(.horizontal, 20)
-                    }
-                }
-                .padding(.bottom, 40)
-            }
-            .background(LiquidNotesBackground().ignoresSafeArea())
-        }
-        .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        cancelEdit()
-                    }
+            // Title + Body Card
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Title", text: $title)
+                    .font(.title)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.primary)
+                    .textInputAutocapitalization(.sentences)
+                    .disableAutocorrection(false)
+                    .onChange(of: title) { _, _ in hasChanges = true }
+                Divider().opacity(0.25)
+                RichTextEditor(
+                    text: $content,
+                    attributedText: $attributedContent,
+                    placeholder: "Start typing...",
+                    onTextChanged: { hasChanges = true }
+                )
+                .onChange(of: attributedContent) { _, _ in hasChanges = true }
+                .onChange(of: content) { _, _ in hasChanges = true }
+                .frame(minHeight: 240)
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            withAnimation(.bouncy(duration: 0.3)) {
-                                showingTaskList.toggle()
+                .padding(.vertical, 18)
+                .padding(.horizontal, 16)
+                .modernGlassCard()
+                .padding(.top, 20)
+                .padding(.horizontal, 20)
+
+                if showingTaskList {
+                TaskListView(
+                    tasks: Binding(
+                        get: { note.tasks ?? [] },
+                        set: { newVal in
+                            note.tasks = newVal
+                            note.updateProgress()
+                            hasChanges = true
+                        }
+                    ),
+                    onToggle: { index in
+                        note.toggleTask(at: index)
+                        hasChanges = true
+                    },
+                    onDelete: { index in
+                        note.removeTask(at: index)
+                        hasChanges = true
+                    },
+                    onAdd: { text in
+                        note.addTask(text)
+                        hasChanges = true
+                    }
+                )
+                .padding(.horizontal, 20)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
+                }
+
+                if showingTagEditor {
+                TagListView(
+                    tags: $tempTags,
+                    onAdd: { tag in
+                        note.addTag(tag)
+                        tempTags = note.tags
+                        hasChanges = true
+                    },
+                    onRemove: { tag in
+                        note.removeTag(tag)
+                        tempTags = note.tags
+                        hasChanges = true
+                    }
+                )
+                .padding(.horizontal, 20)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .leading).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                }
+
+                if !note.attachments.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Attachments")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(Array(zip(note.attachments.indices, note.attachments)), id: \.0) { index, data in
+                                if index < note.attachmentTypes.count {
+                                    AttachmentView(
+                                        data: data,
+                                        type: note.attachmentTypes[index],
+                                        onDelete: {
+                                            if index < note.attachments.count && index < note.attachmentTypes.count {
+                                                withAnimation(.bouncy(duration: 0.4)) {
+                                                    note.removeAttachment(at: index)
+                                                    hasChanges = true
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
                             }
-                        }) {
-                            Image(systemName: showingTaskList ? "checklist.checked" : "checklist")
-                                .font(.title3)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: showingTaskList ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                    }
+                }
+                .background(.clear)
+                .ambientGlassEffect()
+                .padding(.horizontal, 20)
+                }
+            }
+            .padding(.bottom, 40)
+        }
+        .background(LiquidNotesBackground().ignoresSafeArea())
+    .navigationTitle("") // empty title without showing quotes
+    .navigationBarTitleDisplayMode(.inline)
+    .navigationBarBackButtonHidden(true) // Cancel handles dismissal
+    .toolbarRole(.editor)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") { cancelEdit() }
+                    .fontWeight(.semibold)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack(spacing: 12) {
+                    Button(action: { withAnimation(.bouncy(duration: 0.3)) { showingTaskList.toggle() } }) {
+                        Image(systemName: showingTaskList ? "checklist.checked" : "checklist")
+                            .font(.title3)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: showingTaskList ? [.green, .mint] : [Color.gray, Color.gray.opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        Button(action: {
-                            withAnimation(.bouncy(duration: 0.3)) {
-                                showingTagEditor.toggle()
-                            }
-                        }) {
-                            Image(systemName: showingTagEditor ? "tag.fill" : "tag")
-                                .font(.title3)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: showingTagEditor ? [.purple, .pink] : [Color.gray, Color.gray.opacity(0.6)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    Button(action: { withAnimation(.bouncy(duration: 0.3)) { showingTagEditor.toggle() } }) {
+                        Image(systemName: showingTagEditor ? "tag.fill" : "tag")
+                            .font(.title3)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: showingTagEditor ? [.purple, .pink] : [Color.gray, Color.gray.opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        Button(action: {
-                            showingGiphyPicker = true
-                        }) {
-                            Image(systemName: "face.smiling")
-                                .font(.title3)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    Button(action: { showingGiphyPicker = true }) {
+                        Image(systemName: "face.smiling")
+                            .font(.title3)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.blue, .cyan],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        PhotosPicker(
-                            selection: $selectedPhoto,
-                            matching: .any(of: [.images, .livePhotos]),
-                            photoLibrary: .shared()
-                        ) {
-                            Image(systemName: "photo.badge.plus")
-                                .font(.title3)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.green, .mint],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    PhotosPicker(selection: $selectedPhoto, matching: .any(of: [.images, .livePhotos]), photoLibrary: .shared()) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.title3)
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.green, .mint],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 )
-                        }
-                        .buttonStyle(.borderless)
-                        
-                        Button("Save") {
-                            saveNote()
-                            dismiss()
-                        }
+                            )
+                    }
+                    .buttonStyle(.borderless)
+                    Button("Save") { saveNote(); dismiss() }
                         .font(.headline)
                         .fontWeight(.semibold)
                         .disabled(!hasChanges && !isNewNote)
                         .foregroundStyle((hasChanges || isNewNote) ? Color.accentColor : Color.secondary)
                         .scaleEffect((hasChanges || isNewNote) ? 1.05 : 1.0)
                         .animation(.bouncy(duration: 0.3), value: hasChanges)
-                    }
-                }
-            }
-            .onAppear {
-                loadNoteData()
-                // Initialize tempTags from note
-                tempTags = note.tags
-                // Auto show tasks if tasks exist
-                if !(note.tasks?.isEmpty ?? true) { showingTaskList = true }
-            }
-            .onChange(of: selectedPhoto) { _, newPhoto in
-                guard let newPhoto = newPhoto else { return }
-                loadPhotoData(from: newPhoto)
-            }
-            .sheet(isPresented: $showingGiphyPicker) {
-                GiphyPicker(isPresented: $showingGiphyPicker) { gifData in
-                    note.addAttachment(data: gifData, type: "image/gif")
-                    hasChanges = true
                 }
             }
         }
+        .onAppear {
+            loadNoteData()
+            tempTags = note.tags
+            if !(note.tasks?.isEmpty ?? true) { showingTaskList = true }
+        }
+        .onChange(of: selectedPhoto) { _, newPhoto in
+            guard let newPhoto = newPhoto else { return }
+            loadPhotoData(from: newPhoto)
+        }
+        .sheet(isPresented: $showingGiphyPicker) {
+            GiphyPicker(isPresented: $showingGiphyPicker) { gifData in
+                note.addAttachment(data: gifData, type: "image/gif")
+                hasChanges = true
+            }
+        }
+        // End of NavigationStack content
+        // Added missing brace to properly close the body computed property scope
+        // This prevents helper methods from being treated as local functions
+    } // closes NavigationStack
+    } // closes body
     
     private func loadNoteData() {
         let wasEmpty = note.title.isEmpty && note.content.isEmpty
-        
         title = note.title
         content = note.content
         attributedContent = NSAttributedString(string: note.content)
         isNewNote = wasEmpty
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if !self.isNewNote {
-                self.hasChanges = false
-            } else {
-                self.hasChanges = true
-            }
+            self.hasChanges = self.isNewNote
         }
     }
     

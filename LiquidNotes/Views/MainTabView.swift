@@ -29,9 +29,27 @@ struct MainTabView: View {
                 Tab("Settings", systemImage: "gearshape.fill", value: 3) { SettingsView() }
             }
             .applyAdaptiveTabStyle()
-            .onAppear {
-                setupGlassTabBar()
-            }
+            .background(
+                // Glass backdrop for iPhone where system tab bar may appear plain
+                Group {
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        GeometryReader { proxy in
+                            VStack { Spacer() }
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                                .background(Color.clear)
+                                .overlay(alignment: .bottom) {
+                                    Rectangle()
+                                        .fill(Color.clear)
+                                        .glassTabBar()
+                                        .frame(height: 72)
+                                        .allowsHitTesting(false)
+                                }
+                        }
+                        .ignoresSafeArea(edges: .bottom)
+                    }
+                }
+            )
+            .onAppear { setupGlassTabBar() }
             
             if selectedTab == 0 || selectedTab == 1 { // Only Notes & Favorites
                 Button(action: { handleAddAction() }) {
@@ -68,6 +86,9 @@ struct MainTabView: View {
     private func setupGlassTabBar() {
         let appearance = UITabBarAppearance()
         appearance.configureWithTransparentBackground()
+        if #available(iOS 15.0, *) {
+            appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        }
         appearance.backgroundColor = UIColor.clear
         
         appearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
@@ -84,6 +105,8 @@ struct MainTabView: View {
         
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+    UITabBar.appearance().clipsToBounds = false
+    UITabBar.appearance().isTranslucent = true
         
         if #available(iOS 17.0, *) {
             UITabBar.appearance().barTintColor = UIColor.clear

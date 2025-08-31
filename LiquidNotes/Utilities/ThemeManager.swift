@@ -104,9 +104,6 @@ class ThemeManager: ObservableObject {
     @Published var noteGlassDepth: Double { // 0 = subtle, 1 = vivid
         didSet { UserDefaults.standard.set(noteGlassDepth, forKey: "noteGlassDepth") }
     }
-    @Published var noteStyle: Int { // 0 = rounded, 1 = squircle
-        didSet { UserDefaults.standard.set(noteStyle, forKey: "noteStyle") }
-    }
     @Published var minimalMode: Bool { // flattens shadows, reduces blur
         didSet { UserDefaults.standard.set(minimalMode, forKey: "minimalMode") }
     }
@@ -119,16 +116,18 @@ class ThemeManager: ObservableObject {
     // Combined slider convenience (0.0 - 1.0). Setting it adjusts both glassOpacity and noteGlassDepth proportionally.
     var glassIntensity: Double {
         get {
-            // normalize depth (noteGlassDepth default center 0.75) and opacity (0.3-0.95)
-            let normOpacity = (glassOpacity - 0.3) / 0.65 // 0..1
-            let normDepth = noteGlassDepth / 1.2 // 0..1 (depth slider upper bound earlier 1.2)
-            return (normOpacity * 0.55 + normDepth * 0.45)
+            // Simplified: treat intensity as direct opacity curve favoring clarity at low end
+            // Map glassOpacity (0.3...0.95) to 0...1 with slight easing
+            let t = (glassOpacity - 0.3) / 0.65
+            return max(0, min(1, t))
         }
         set {
             let clamped = max(0, min(1, newValue))
-            // Map back: bias opacity slightly more for readability
-            glassOpacity = 0.3 + (clamped * 0.65)
-            noteGlassDepth = 0.3 + (clamped * 0.9) // keep within 0.3...1.2
+            // Ease-in for opacity so early slider movement stays clearer (more transparent)
+            let eased = pow(clamped, 1.2)
+            glassOpacity = 0.3 + eased * 0.65
+            // Derive depth more subtly so it increases slower for clearer subtle end
+            noteGlassDepth = 0.3 + eased * 0.6
         }
     }
     
@@ -146,7 +145,6 @@ class ThemeManager: ObservableObject {
     self.dynamicTagCycling = true
     self.noteParallax = false
     self.noteGlassDepth = UserDefaults.standard.object(forKey: "noteGlassDepth") as? Double ?? 0.75
-    self.noteStyle = UserDefaults.standard.object(forKey: "noteStyle") as? Int ?? 0
     self.minimalMode = UserDefaults.standard.object(forKey: "minimalMode") as? Bool ?? false
     self.tagAccentSolid = false
     self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false

@@ -213,29 +213,29 @@ private extension GridNoteCard {
     // Swipe backgrounds removed
     // Extracted glass card to reduce type-check complexity.
     var glassCard: some View {
-        let corner: CGFloat = themeManager.noteStyle == 0 ? 20 : 34
+        let corner: CGFloat = 26
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
         let glass = Color.clear.refinedClearGlass(
             cornerRadius: corner,
-            intensity: themeManager.noteGlassDepth * (themeManager.noteStyle == 0 ? 1.0 : 1.08)
+            intensity: themeManager.noteGlassDepth
         )
         let firstShadowColor = Color.black.opacity(
-            themeManager.minimalMode ? 0.08 : (themeManager.noteStyle == 0 ? 0.15 : 0.18)
+            themeManager.minimalMode ? 0.08 : 0.16
         )
         let secondShadowColor = (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(
-            themeManager.minimalMode ? 0.04 : (themeManager.noteStyle == 0 ? 0.08 : 0.12)
+            themeManager.minimalMode ? 0.04 : 0.1
         )
         let widthCap = min(noteSize.width, UIScreen.main.bounds.width - 60)
         return base.fill(Color.clear)
             .overlay(glass)
             .clipShape(base)
             .frame(width: widthCap, height: noteSize.height)
-            .shadow(color: firstShadowColor,
-                    radius: themeManager.minimalMode ? 6 : (themeManager.noteStyle == 0 ? 10 : 14),
-                    x: 0, y: themeManager.minimalMode ? 3 : 5)
-            .shadow(color: secondShadowColor,
-                    radius: themeManager.minimalMode ? 18 : (themeManager.noteStyle == 0 ? 28 : 36),
-                    x: 0, y: themeManager.minimalMode ? 10 : (themeManager.noteStyle == 0 ? 18 : 22))
+        .shadow(color: firstShadowColor,
+            radius: themeManager.minimalMode ? 6 : 12,
+            x: 0, y: themeManager.minimalMode ? 3 : 5)
+        .shadow(color: secondShadowColor,
+            radius: themeManager.minimalMode ? 18 : 32,
+            x: 0, y: themeManager.minimalMode ? 10 : 20)
             // Swipe offset & parallax removed
     }
 

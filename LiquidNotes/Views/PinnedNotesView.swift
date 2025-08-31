@@ -15,8 +15,8 @@ struct PinnedNotesView: View {
         NavigationStack {
             ZStack {
                 LiquidNotesBackground()
-                
                 VStack(alignment: .leading, spacing: 0) {
+                    // Header aligned like Notes view
                     HStack {
                         Text("Favorites")
                             .font(.largeTitle)
@@ -27,63 +27,42 @@ struct PinnedNotesView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
                     .padding(.bottom, 5)
-                    
-                if !favoritedNotes.isEmpty {
-                    SpatialCanvasView(
-                        notes: favoritedNotes,
-                        folders: [],
-                        onTap: { note in
-                            selectedNote = note
-                            showingNoteEditor = true
-                            HapticManager.shared.noteSelected()
-                        },
-                        onDelete: { note in
-                            deleteNote(note)
-                        },
-                        onFavorite: { note in
-                            toggleFavorite(note)
-                        },
-                        onFolderTap: nil,
-                        onFolderDelete: nil,
-                        onFolderFavorite: nil
-                    )
-                }
-                }
-                .overlay(alignment: .center) {
+
                     if favoritedNotes.isEmpty {
-                        VStack(spacing: 14) {
-                            Image(systemName: "star.slash")
-                                .font(.system(size: 58))
-                                .foregroundStyle(.tertiary)
-                            Text("No Favorited Notes")
-                                .font(.title2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text("Tap the star on a note to pin it here for quick access.")
-                                .font(.callout)
-                                .foregroundStyle(.tertiary)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: 280)
+                        VStack {
+                            Spacer()
+                            VStack(spacing: 8) {
+                                Text("No favorites yet")
+                                    .font(.title2)
+                                    .foregroundStyle(.tertiary)
+                                Text("Tap the star on a note to add it here")
+                                    .font(.body)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            Spacer()
                         }
-                        .padding(32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                .fill(.ultraThinMaterial.opacity(0.6))
-                                .blendMode(.plusLighter)
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        SpatialCanvasView(
+                            notes: favoritedNotes,
+                            folders: [],
+                            onTap: { note in
+                                selectedNote = note
+                                showingNoteEditor = true
+                                HapticManager.shared.noteSelected()
+                            },
+                            onDelete: { note in deleteNote(note) },
+                            onFavorite: { note in toggleFavorite(note) },
+                            onFolderTap: nil,
+                            onFolderDelete: nil,
+                            onFolderFavorite: nil
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 0.6)
-                        )
-                        .padding(.horizontal, 24)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(Text("No favorited notes. Mark notes with a star to show them here."))
                     }
                 }
             }
             .navigationBarHidden(true)
-            .onAppear {
-                setupViewModels()
-            }
+            .onAppear { setupViewModels() }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
                     .presentationDetents([.medium, .large])
