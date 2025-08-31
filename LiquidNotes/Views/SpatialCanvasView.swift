@@ -692,6 +692,17 @@ private extension GridNoteCard {
                     .padding(8)
                     .background(Circle().fill(.ultraThinMaterial))
             }
+            Button(action: {
+                HapticManager.shared.buttonTapped()
+                NotificationCenter.default.post(name: .requestMoveSingleNote, object: note)
+                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
+            }) {
+                Image(systemName: "folder")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+            }
         }
         .padding(8)
         .transition(.scale.combined(with: .opacity))

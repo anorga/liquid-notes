@@ -12,6 +12,7 @@ struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(CommandTrigger.self) private var commandTrigger
     @State private var selectedTab = 0
+    @State private var selectedFolder: Folder? = nil // shared across entry points
     @State private var showingQuickCapture = false
     @State private var showingCommandPalette = false
     @State private var showingDailyReview = false
@@ -25,7 +26,7 @@ struct MainTabView: View {
     var body: some View {
     ZStack(alignment: .center) {
             TabView(selection: $selectedTab) {
-                Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView() }
+                Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
                 Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
                 Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
                 Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
@@ -75,7 +76,7 @@ struct MainTabView: View {
         .sheet(isPresented: $showingQuickCapture) {
             QuickCaptureView { title, body, tags in
                 guard let vm = notesViewModel else { return }
-                let note = vm.createNote(title: title, content: body)
+                let note = vm.createNote(in: selectedFolder, title: title, content: body)
                 tags.forEach { note.addTag($0) }
                 note.updateLinkedNoteTitles()
                 selectedNote = note // optionally jump into full editor
@@ -145,12 +146,19 @@ struct MainTabView: View {
         if notesViewModel == nil {
             notesViewModel = NotesViewModel(modelContext: modelContext)
         }
+        // Auto-select first folder if none selected (so new notes default correctly)
+        if selectedFolder == nil {
+            let folderDescriptor = FetchDescriptor<Folder>()
+            if let folders = try? modelContext.fetch(folderDescriptor), let first = folders.first {
+                selectedFolder = first
+            }
+        }
     }
     
     private func createNewNote() {
         HapticManager.shared.noteCreated()
     guard let viewModel = notesViewModel else { return }
-        let newNote = viewModel.createNote()
+    let newNote = viewModel.createNote(in: selectedFolder)
         do {
             try modelContext.save()
         } catch {
@@ -164,7 +172,9 @@ struct MainTabView: View {
         HapticManager.shared.buttonTapped()
         
         guard let viewModel = notesViewModel else { return }
-        let _ = viewModel.createFolder()
+    let created = viewModel.createFolder()
+    // If no selection yet, or user is on default nil selection, switch to the newly created folder
+    if selectedFolder == nil { selectedFolder = created }
     }
 }
 
@@ -259,7 +269,7 @@ private extension MainTabView {
             if notesViewModel == nil { setupViewModel() }
             guard let vm = notesViewModel else { return }
             Task { @MainActor in
-                let new = vm.createNote(title: title, content: "")
+                let new = vm.createNote(in: selectedFolder, title: title, content: "")
                 vm.reindexLinks() // ensure link graph updates
                 selectedNote = new
             }

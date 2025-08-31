@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 struct SpatialTabView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
-    @Query(sort: \Folder.modifiedDate, order: .reverse) private var folders: [Folder]
+    @Query private var folders: [Folder]
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
@@ -18,6 +18,7 @@ struct SpatialTabView: View {
     @State private var selectedNoteIDs: Set<UUID> = []
     @State private var showingMoveSheet: Bool = false
     @State private var moveTargetFolder: Folder? = nil
+    @State private var movingSingleNote: Note? = nil
     @AppStorage("foldersCollapsed") private var foldersCollapsed: Bool = false
     @State private var batchActionAnimating: Bool = false
     @State private var dropHoverFolderID: UUID? = nil
@@ -71,7 +72,30 @@ struct SpatialTabView: View {
             .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
+                NotificationCenter.default.addObserver(forName: .requestMoveSingleNote, object: nil, queue: .main) { noteObj in
+                    if let note = noteObj.object as? Note {
+                        movingSingleNote = note
+                        showingMoveSheet = true
+                    }
+                }
+                // Ensure at least one default folder exists
+                if folders.isEmpty, let vm = notesViewModel {
+                    let created = vm.createFolder(name: "Folder")
+                    // Immediately bind selection to the newly created default
+                    selectedFolder = created
+                }
+                // Normalize any legacy default names
+                var renamedAny = false
+                folders.filter { $0.name == "New Folder" }.forEach { legacy in
+                    legacy.name = "Folder"
+                    legacy.updateModifiedDate()
+                    renamedAny = true
+                }
+                if renamedAny { notesViewModel?.persistChanges() }
+                // Ensure we have a selection (default to first ordered folder)
+                ensureFolderSelection()
             }
+            .onChange(of: folders) { _ in ensureFolderSelection() }
             .onDisappear { clearSelection() }
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
@@ -93,26 +117,37 @@ struct SpatialTabView: View {
     private var folderBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(folders) { folder in
-                    folderChip(folder)
+                if orderedFolders.isEmpty {
+                    // No folders yet (very first launch) – allow creating one
+                    Button { createNewFolder() } label: {
+                        Image(systemName: "plus")
+                            .font(.caption)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }.buttonStyle(.plain)
+                } else {
+                    // Always show every folder as full chip (including first)
+                    ForEach(orderedFolders) { folder in folderChip(folder) }
+                    // Persistent + button
+                    Button { createNewFolder() } label: {
+                        Image(systemName: "plus")
+                            .font(.caption)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }.buttonStyle(.plain)
                 }
-                Button {
-                    newFolderName = ""
-                    withAnimation { renamingFolder = nil }
-                    createNewFolder()
-                } label: {
-                    Label("New Folder", systemImage: "folder.badge.plus")
-                        .font(.caption2)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 6)
         }
     }
-    @State private var selectedFolder: Folder? = nil
+    // Selected folder now externally bindable so other creation entry points (FAB, Quick Capture, Commands) honor current folder
+    @Binding var selectedFolder: Folder?
+
+    // Custom init providing a default binding (nil) for existing call sites
+    init(selectedFolder: Binding<Folder?> = .constant(nil)) {
+        self._selectedFolder = selectedFolder
+    }
     private func folderChip(_ folder: Folder) -> some View {
         let isSelectedFolder = selectedFolder?.id == folder.id
         let isRenaming = renamingFolder?.id == folder.id
@@ -230,6 +265,13 @@ struct SpatialTabView: View {
     }
     
     private var filteredNotes: [Note] { let base = allNotes.filter { !$0.isArchived }; return selectedFolder == nil ? base : base.filter { $0.folder?.id == selectedFolder?.id } }
+
+    // Ordered folders: favorites first (creation order via zIndex), then others (creation order)
+    private var orderedFolders: [Folder] {
+        let fav = folders.filter { $0.isFavorited }.sorted { $0.zIndex < $1.zIndex }
+        let non = folders.filter { !$0.isFavorited }.sorted { $0.zIndex < $1.zIndex }
+        return fav + non
+    }
     // Batch action bar
     private var batchActionBar: some View {
         HStack(spacing: 14) {
@@ -284,7 +326,9 @@ struct SpatialTabView: View {
     private func createNewNote() {
         HapticManager.shared.noteCreated()
         guard let viewModel = notesViewModel else { return }
-        let newNote = viewModel.createNote()
+    let newNote = viewModel.createNote(in: selectedFolder)
+    // If no folder was selected (e.g. just created default implicitly), bind to note's folder
+    if selectedFolder == nil, let f = newNote.folder { selectedFolder = f }
         selectedNote = newNote
         showingNoteEditor = true
     }
@@ -350,10 +394,26 @@ struct SpatialTabView: View {
     private func batchMove(to folder: Folder?) {
         guard let viewModel = notesViewModel else { return }
         let selected = allNotes.filter { selectedNoteIDs.contains($0.id) }
-        DispatchQueue.main.async {
+        ModelMutationScheduler.shared.schedule {
             withAnimation { selected.forEach { note in note.folder = folder; note.updateModifiedDate() } }
             viewModel.persistChanges()
-            clearSelection()
+            DispatchQueue.main.async { clearSelection() }
+        }
+    }
+    private func moveSingle(note: Note, to folder: Folder?) {
+        guard let viewModel = notesViewModel else { return }
+        ModelMutationScheduler.shared.schedule {
+            withAnimation { note.folder = folder; note.updateModifiedDate() }
+            viewModel.persistChanges()
+        }
+    }
+    private func ensureFolderSelection() {
+        // If current selection is nil or the selected folder was deleted, choose the first ordered folder (if any)
+        if let current = selectedFolder, folders.contains(where: { $0.id == current.id }) {
+            return // still valid
+        }
+        if selectedFolder == nil || !folders.contains(where: { $0.id == selectedFolder?.id }) {
+            if let first = orderedFolders.first { selectedFolder = first }
         }
     }
     private func handleDrop(providers: [NSItemProvider], into folder: Folder) -> Bool {
@@ -364,17 +424,21 @@ struct SpatialTabView: View {
                     if let data = item as? Data, let idString = String(data: data, encoding: .utf8), let uuid = UUID(uuidString: idString) {
                         DispatchQueue.main.async {
                             if let note = allNotes.first(where: { $0.id == uuid }) {
-                                note.folder = folder
-                                note.updateModifiedDate()
-                                notesViewModel?.persistChanges()
+                                ModelMutationScheduler.shared.schedule {
+                                    note.folder = folder
+                                    note.updateModifiedDate()
+                                    notesViewModel?.persistChanges()
+                                }
                             }
                         }
                     } else if let str = item as? String, let uuid = UUID(uuidString: str) {
                         DispatchQueue.main.async {
                             if let note = allNotes.first(where: { $0.id == uuid }) {
-                                note.folder = folder
-                                note.updateModifiedDate()
-                                notesViewModel?.persistChanges()
+                                ModelMutationScheduler.shared.schedule {
+                                    note.folder = folder
+                                    note.updateModifiedDate()
+                                    notesViewModel?.persistChanges()
+                                }
                             }
                         }
                     }
@@ -388,14 +452,21 @@ struct SpatialTabView: View {
         NavigationStack {
             List {
                 Section("Move to") {
-                    Button("No Folder") { batchMove(to: nil); showingMoveSheet = false }
-                    ForEach(folders) { folder in
-                        Button(folder.name) { batchMove(to: folder); showingMoveSheet = false }
+                    if movingSingleNote != nil {
+                        Button("No Folder") { moveSingle(note: movingSingleNote!, to: nil); showingMoveSheet = false; movingSingleNote = nil }
+                        ForEach(folders) { folder in
+                            Button(folder.name) { moveSingle(note: movingSingleNote!, to: folder); showingMoveSheet = false; movingSingleNote = nil }
+                        }
+                    } else {
+                        Button("No Folder") { batchMove(to: nil); showingMoveSheet = false }
+                        ForEach(folders) { folder in
+                            Button(folder.name) { batchMove(to: folder); showingMoveSheet = false }
+                        }
                     }
                 }
             }
-            .navigationTitle("Move Notes")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingMoveSheet = false } } }
+            .navigationTitle(movingSingleNote == nil ? "Move Notes" : "Move Note")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingMoveSheet = false; movingSingleNote = nil } } }
         }
     }
 
@@ -431,6 +502,11 @@ private struct FilterChip: View {
 }
 
 #Preview {
-    SpatialTabView()
+    @State var selectedFolder: Folder? = nil
+    return SpatialTabView(selectedFolder: .constant(nil))
         .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
+}
+
+extension Notification.Name {
+    static let requestMoveSingleNote = Notification.Name("requestMoveSingleNote")
 }
