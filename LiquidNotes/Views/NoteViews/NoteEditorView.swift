@@ -54,10 +54,9 @@ struct NoteEditorView: View {
     var body: some View {
         ScrollView { editorContent }
             .padding(.bottom, 56)
-            .safeAreaInset(edge: .top, spacing: 0) { 
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Removed full-width material background to eliminate dark mode bar appearance
                 customToolbar
-                    .background(.ultraThinMaterial)
-                    .overlay(Divider(), alignment: .bottom)
             }
             .overlay(alignment: .topLeading) { linkOverlay }
             .background(LiquidNotesBackground().ignoresSafeArea())
@@ -303,7 +302,7 @@ struct NoteEditorView: View {
             .imageScale(.medium)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            // Removed background material & rounded rectangle to keep toolbar fully transparent
             .padding(.horizontal, 8)
             .padding(.top, 4)
         }
