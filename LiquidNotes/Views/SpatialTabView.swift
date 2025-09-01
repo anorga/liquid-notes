@@ -361,8 +361,22 @@ struct SpatialTabView: View {
     }
     private func deleteFolder(_ folder: Folder) {
         guard let viewModel = notesViewModel else { return }
+        // Disallow deleting the final remaining folder to avoid churn / auto recreation.
+        if folders.count <= 1 { 
+            HapticManager.shared.buttonTapped() // subtle feedback for ignored action
+            return 
+        }
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteFolder(folder) }
+            // If deletion removed the last folder, ensure a default is present and adopt it.
+            if folders.isEmpty {
+                if let newDefault = viewModel.ensureDefaultFolderAndReassignOrphans() {
+                    selectedFolder = newDefault
+                }
+            } else {
+                // If current selection was this folder, clear so ensureFolderSelection() will pick another
+                if selectedFolder?.id == folder.id { selectedFolder = nil; ensureFolderSelection() }
+            }
         }
     }
     private func toggleFolderFavorite(_ folder: Folder) {

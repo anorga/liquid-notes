@@ -164,6 +164,12 @@ struct MainTabView: View {
             try modelContext.save()
         } catch {
         }
+        // If user deleted all folders previously, createNote(in:) will have auto-created
+        // a default folder and assigned it to the new note. Adopt that folder as the
+        // current selection so the note is visibly inside a folder context.
+        if selectedFolder == nil, let autoFolder = newNote.folder {
+            selectedFolder = autoFolder
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.selectedNote = newNote
         }
