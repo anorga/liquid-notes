@@ -25,7 +25,7 @@ final class Folder {
     @Relationship(deleteRule: .nullify, inverse: \Note.folder)
     var notes: [Note]?
     
-    init(name: String = "New Folder") {
+    init(name: String = "Folder") {
         self.id = UUID()
         self.name = name
         self.createdDate = Date()

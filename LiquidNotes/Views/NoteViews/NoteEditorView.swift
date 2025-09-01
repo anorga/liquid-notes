@@ -38,10 +38,7 @@ struct NoteEditorView: View {
     @State private var tempDueDate: Date? = nil
     @State private var tempPriority: NotePriority = .normal
 
-    // Focus & observers
-    @State private var focusMode = false
-    @State private var focusObserver: NSObjectProtocol?
-    @State private var templateObserver: NSObjectProtocol?
+    // Removed focus mode & template observers (simplification)
 
     // Link autocomplete
     @State private var linkQuery: String = ""
@@ -54,10 +51,9 @@ struct NoteEditorView: View {
     var body: some View {
         ScrollView { editorContent }
             .padding(.bottom, 56)
-            .safeAreaInset(edge: .top, spacing: 0) { 
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Removed full-width material background to eliminate dark mode bar appearance
                 customToolbar
-                    .background(.ultraThinMaterial)
-                    .overlay(Divider(), alignment: .bottom)
             }
             .overlay(alignment: .topLeading) { linkOverlay }
             .background(LiquidNotesBackground().ignoresSafeArea())
@@ -75,10 +71,10 @@ struct NoteEditorView: View {
         Group {
             VStack(spacing: 24) {
                 titleAndBodyCard
-                if showingMetadata && !focusMode { metadataSection }
-                if showingTaskList && !focusMode { taskListSection }
-                if showingTagEditor && !focusMode { tagEditorSection }
-                if !note.attachments.isEmpty && !focusMode { attachmentsSection }
+                if showingMetadata { metadataSection }
+                if showingTaskList { taskListSection }
+                if showingTagEditor { tagEditorSection }
+                if !note.attachments.isEmpty { attachmentsSection }
                 BacklinksSection(currentNote: note, allNotes: allNotes)
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
@@ -204,7 +200,7 @@ struct NoteEditorView: View {
             ),
             onToggle: { index in note.toggleTask(at: index); hasChanges = true },
             onDelete: { index in note.removeTask(at: index); hasChanges = true },
-            onAdd: { text in note.addTask(text); hasChanges = true }
+            onAdd: { text, dueDate in note.addTask(text, dueDate: dueDate); hasChanges = true }
         )
         .padding(.horizontal, 20)
         .transition(.asymmetric(
@@ -270,7 +266,6 @@ struct NoteEditorView: View {
                 // Scrollable action cluster ensures ends stay visible
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        iconButton(system: focusMode ? "eye.slash" : "eye", colors: [.teal, .blue], accessibilityLabel: focusMode ? "Exit Focus" : "Enter Focus") { withAnimation(.easeInOut) { focusMode.toggle() } }
                         iconButton(system: showingTaskList ? "checklist.checked" : "checklist", colors: showingTaskList ? [.green, .mint] : [.gray, .gray.opacity(0.6)], accessibilityLabel: showingTaskList ? "Hide Tasks" : "Show Tasks") { withAnimation(.bouncy(duration:0.3)) { showingTaskList.toggle() } }
                         iconButton(system: showingTagEditor ? "tag.fill" : "tag", colors: showingTagEditor ? [.purple, .pink] : [.gray, .gray.opacity(0.6)], accessibilityLabel: showingTagEditor ? "Hide Tags" : "Show Tags") { withAnimation(.bouncy(duration:0.3)) { showingTagEditor.toggle() } }
                         iconButton(system: "face.smiling", colors: [.blue, .cyan], accessibilityLabel: "Insert GIF") { showingGiphyPicker = true }
@@ -303,7 +298,7 @@ struct NoteEditorView: View {
             .imageScale(.medium)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            // Removed background material & rounded rectangle to keep toolbar fully transparent
             .padding(.horizontal, 8)
             .padding(.top, 4)
         }
@@ -362,12 +357,10 @@ struct NoteEditorView: View {
     }
     private func onAppearSetup() {
         loadNoteData(); tempTags = note.tags; if !(note.tasks?.isEmpty ?? true) { showingTaskList = true }
-        focusObserver = NotificationCenter.default.addObserver(forName: .lnToggleFocusMode, object: nil, queue: .main) { _ in withAnimation { focusMode.toggle() } }
-        templateObserver = NotificationCenter.default.addObserver(forName: .lnInsertTemplate, object: nil, queue: .main) { _ in insertTemplate() }
+    // Focus mode & template insertion removed
     }
     private func onDisappearCleanup() {
-        if let o = focusObserver { NotificationCenter.default.removeObserver(o) }
-        if let o = templateObserver { NotificationCenter.default.removeObserver(o) }
+    // Observers removed
     }
     private func loadNoteData() {
         let wasEmpty = note.title.isEmpty && note.content.isEmpty
@@ -440,23 +433,7 @@ struct NoteEditorView: View {
     }
 }
 
-private extension NoteEditorView {
-    func insertTemplate() {
-        let template = """
-        ## Summary
-        - 
-        
-        ## Key Points
-        - 
-        - 
-        
-        ## Next Actions
-        - [ ] 
-        """
-        content = content + template
-        hasChanges = true
-    }
-}
+// Template insertion removed
 
 // MARK: - Link Overlay
 private extension NoteEditorView {

@@ -292,6 +292,7 @@ struct SearchResults: View {
     private var filteredNotes: [Note] {
         guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         return notes.filter { note in
+            if note.isSystem { return false }
             // Filter by archive state
             switch filterSelection {
             case 0: if note.isArchived { return false }

@@ -8,6 +8,9 @@ struct TasksRollupView: View {
     @State private var showCompleted = true
     @State private var selectedPriority: NotePriority? = nil
     @State private var expandedNotes: Set<UUID> = []
+    @State private var editingTaskID: UUID? = nil
+    @State private var showingDuePicker = false
+    @State private var duePickerTask: TaskItem? = nil
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -26,18 +29,44 @@ struct TasksRollupView: View {
             }
             .background(LiquidNotesBackground().ignoresSafeArea())
         }
+        .sheet(isPresented: $showingDuePicker) {
+            DueDateCalendarPicker(initialDate: duePickerTask?.dueDate) { selected in
+                if let task = duePickerTask { task.dueDate = selected; try? modelContext.save() }
+            }
+            .presentationDetents([.medium])
+        }
     }
     private var filteredNotes: [Note] {
-        allNotes.filter { n in
-            !(n.tasks?.isEmpty ?? true)
-        }.filter { n in
-            search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || n.title.localizedCaseInsensitiveContains(search) || (n.tasks ?? []).contains { $0.text.localizedCaseInsensitiveContains(search) }
-        }.filter { n in
-            if let p = selectedPriority { return n.priority == p } else { return true }
-        }.sorted { lhs, rhs in
-            // Sort by priority then progress asc then modifiedDate desc
-            let priorityOrder: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
-            if lhs.priority != rhs.priority { return priorityOrder[lhs.priority, default: 4] < priorityOrder[rhs.priority, default: 4] }
+        // Break chained operations into clear steps to aid compiler type-checking
+        let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withTasks = allNotes.filter { note in
+            guard let tasks = note.tasks else { return false }
+            return !tasks.isEmpty
+        }
+        let searchFiltered: [Note]
+        if trimmed.isEmpty {
+            searchFiltered = withTasks
+        } else {
+            searchFiltered = withTasks.filter { note in
+                if note.title.localizedCaseInsensitiveContains(trimmed) { return true }
+                if let tasks = note.tasks, tasks.contains(where: { $0.text.localizedCaseInsensitiveContains(trimmed) }) { return true }
+                return false
+            }
+        }
+        let priorityFiltered: [Note]
+        if let p = selectedPriority {
+            priorityFiltered = searchFiltered.filter { $0.priority == p }
+        } else {
+            priorityFiltered = searchFiltered
+        }
+        // Sort with Quick Tasks (system notes) always first, then by priority (custom order), then progress ascending, then modifiedDate desc
+        let priorityOrder: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
+        return priorityFiltered.sorted { lhs, rhs in
+            // Quick Tasks (system) first
+            if lhs.isSystem != rhs.isSystem { return lhs.isSystem && !rhs.isSystem }
+            let lp = priorityOrder[lhs.priority, default: 4]
+            let rp = priorityOrder[rhs.priority, default: 4]
+            if lp != rp { return lp < rp }
             if lhs.progress != rhs.progress { return lhs.progress < rhs.progress }
             return lhs.modifiedDate > rhs.modifiedDate
         }
@@ -74,7 +103,7 @@ private extension TasksRollupView {
                     HStack(spacing: 10) {
                         priorityBadge(note.priority)
                         progressBadge(note)
-                        if let due = note.dueDate { Text(due, style: .date).font(.caption2).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.orange.opacity(0.15))).foregroundStyle(.orange) }
+                        if let due = note.dueDate { Text(due.ln_dayDistanceString()).font(.caption2).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.orange.opacity(0.15))).foregroundStyle(.orange) }
                     }
                 }
                 Spacer()
@@ -89,10 +118,104 @@ private extension TasksRollupView {
             ForEach(Array((note.tasks ?? []).enumerated()), id: \.element.id) { idx, task in
                 if showCompleted || !task.isCompleted {
                     HStack(spacing: 10) {
-                        Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) { Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle").foregroundStyle(task.isCompleted ? Color.green : Color.secondary) }.buttonStyle(.plain)
-                        Text(task.text).strikethrough(task.isCompleted, color: .primary.opacity(0.6)).foregroundStyle(task.isCompleted ? .secondary : .primary).lineLimit(3)
-                        Spacer()
-                        Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                        if editingTaskID == task.id {
+                            // Editing layout: completion toggle left, then editable text field
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            TextField("Task", text: Binding(
+                                get: { task.text },
+                                set: { newVal in task.text = newVal; try? modelContext.save() }
+                            ))
+                            .textFieldStyle(.plain)
+                            .disabled(task.isCompleted)
+                            .onSubmit { editingTaskID = nil }
+                            .onDisappear { editingTaskID = editingTaskID == task.id ? nil : editingTaskID }
+                            if let due = task.dueDate {
+                                let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
+                                Text(due.ln_dayDistanceString())
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 4)
+                                    .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
+                                    .foregroundStyle(isOverdue ? .red : .orange)
+                            }
+                            Spacer(minLength: 4)
+                            Button {
+                                duePickerTask = task
+                                showingDuePicker = true
+                            } label: {
+                                Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if task.dueDate != nil {
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                }
+                            }
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            // Name edit confirm button (after delete)
+                            Button(action: { editingTaskID = nil }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            // Normal layout: completion toggle at start
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            if editingTaskID == task.id {
+                                EmptyView()
+                            }
+                            if editingTaskID != task.id {
+                                Text(task.text)
+                                    .strikethrough(task.isCompleted, color: .primary.opacity(0.6))
+                                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                                    .lineLimit(3)
+                                    .onTapGesture { if !task.isCompleted { editingTaskID = task.id } }
+                            }
+                            if let due = task.dueDate {
+                                let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
+                                Text(due.ln_dayDistanceString())
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 4)
+                                    .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
+                                    .foregroundStyle(isOverdue ? .red : .orange)
+                            }
+                            Spacer()
+                            Button {
+                                duePickerTask = task
+                                showingDuePicker = true
+                            } label: {
+                                Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if task.dueDate != nil {
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                }
+                            }
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            if editingTaskID == task.id {
+                                // Name edit confirm button (placed after delete)
+                                Button(action: { editingTaskID = nil }) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                }
+                                .buttonStyle(.plain)
+                                .transition(.opacity.combined(with: .scale))
+                            }
+                        }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
