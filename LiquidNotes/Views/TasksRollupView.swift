@@ -19,16 +19,34 @@ struct TasksRollupView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 LNHeader(title: "Tasks", subtitle: "\(filteredNotes.count) notes") { EmptyView() }
-                filters
-                ScrollView {
-                    LazyVStack(spacing: 14) {
-                        ForEach(filteredNotes, id: \.id) { note in
-                            Section {
-                                if isExpanded(note) { taskList(note) }
-                            } header: { noteHeader(note) }
+                
+                if filteredNotes.isEmpty {
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            Text("No tasks yet")
+                                .font(.title2)
+                                .foregroundStyle(.tertiary)
+                            Text("Tap + to create your first task")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
-                    }.padding(.horizontal, 18).padding(.top, 12)
-                    Spacer(minLength: 40)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    filters
+                    ScrollView {
+                        LazyVStack(spacing: 14) {
+                            ForEach(filteredNotes, id: \.id) { note in
+                                Section {
+                                    if isExpanded(note) { taskList(note) }
+                                } header: { noteHeader(note) }
+                            }
+                        }.padding(.horizontal, 18).padding(.top, 12)
+                        Spacer(minLength: 40)
+                    }
                 }
             }
             .background(LiquidNotesBackground().ignoresSafeArea())
