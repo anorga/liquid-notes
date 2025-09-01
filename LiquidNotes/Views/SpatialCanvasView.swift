@@ -44,20 +44,13 @@ struct SpatialCanvasView: View {
     @State private var pinchAnchorPoint: CGPoint = .zero
     @State private var lastSnappedDetent: CGFloat?
     
-    // Standardized card dimensions (only overall pinch-zoom scales visuals)
-    private var cardBaseWidth: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 200 : 160 }
+    // Equal-spacing adaptive layout configuration
+    private let gapSpacing: CGFloat = 16
+    private var targetColumns: Int { UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2 }
+    @State private var computedCardWidth: CGFloat = 160
     private var cardBaseHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
-    private var minColumns: Int { UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2 }
-    private var columnSpacing: CGFloat { 18 }
-    
     private var gridColumns: [GridItem] {
-        // Compute dynamic column count while enforcing minimum columns per device.
-        let width = viewportSize.width == 0 ? UIScreen.main.bounds.width : viewportSize.width
-        let horizontalPadding: CGFloat = 40 // matches outer .padding(.horizontal, 20)
-        let available = max(0, width - horizontalPadding)
-        var count = Int( (available + columnSpacing) / (cardBaseWidth + columnSpacing) )
-        if count < minColumns { count = minColumns }
-        return Array(repeating: GridItem(.fixed(cardBaseWidth), spacing: columnSpacing, alignment: .topLeading), count: count)
+        Array(repeating: GridItem(.flexible(minimum: 60), spacing: gapSpacing, alignment: .topLeading), count: targetColumns)
     }
     // Removed automatic centering compensation; we now use an explicit top inset passed from parent.
     // (GridNoteCard moved to file scope below for clarity)
@@ -66,7 +59,7 @@ struct SpatialCanvasView: View {
         ZStack {
             GeometryReader { geometry in
                 ScrollView(.vertical, showsIndicators: false) {
-                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gapSpacing) {
                         ForEach(notes, id: \.id) { note in
                             let _ = note.id // Force capture to avoid observation
                             GridNoteCard(
@@ -85,7 +78,9 @@ struct SpatialCanvasView: View {
                                         HapticManager.shared.noteMoved()
                                     }
                                 },
-                                onToggleSelect: { onToggleSelect(note) }
+                                onToggleSelect: { onToggleSelect(note) },
+                                cardWidth: computedCardWidth,
+                                cardHeight: cardBaseHeight
                             )
                         }
                     }
@@ -95,7 +90,7 @@ struct SpatialCanvasView: View {
                                 .preference(key: ContentSizeKey.self, value: proxy.size)
                         }
                     )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, gapSpacing) // outer gap equals inter-item spacing
                     .padding(.top, topContentInset)
                     .padding(.bottom, 12)
                 }
@@ -113,9 +108,13 @@ struct SpatialCanvasView: View {
                     guard size != contentSize else { return }
                     contentSize = size
                 }
-                .onAppear { viewportSize = geometry.size }
-                .onChange(of: geometry.size) { _, newSize in 
-                    viewportSize = newSize 
+                .onAppear {
+                    viewportSize = geometry.size
+                    recalcCardWidth(totalWidth: geometry.size.width)
+                }
+                .onChange(of: geometry.size) { _, newSize in
+                    viewportSize = newSize
+                    recalcCardWidth(totalWidth: newSize.width)
                 }
             }
             
@@ -244,6 +243,18 @@ struct SpatialCanvasView: View {
             }
         }
     }
+    
+    private func recalcCardWidth(totalWidth: CGFloat) {
+        // Subtract horizontal padding (we used gapSpacing on both sides)
+        let inner = totalWidth - (gapSpacing * 2)
+        guard inner > 0 else { return }
+        // width = (inner - (columns-1)*gap)/columns
+        let raw = (inner - CGFloat(targetColumns - 1) * gapSpacing) / CGFloat(targetColumns)
+        // Floor to pixel grid for crisp rendering
+        let scale = UIScreen.main.scale
+        let rounded = floor(raw * scale) / scale
+        if abs(rounded - computedCardWidth) > 0.5 { computedCardWidth = rounded }
+    }
 }
 
 // MARK: - Backwards-compatible convenience initializer (non-colliding)
@@ -283,14 +294,14 @@ private struct GridNoteCard: View {
     let onFavorite: () -> Void
     let onMoveRequest: (Note, CGPoint) -> Void
     let onToggleSelect: () -> Void
+    let cardWidth: CGFloat
+    let cardHeight: CGFloat
     // Outer canvas scaling is applied globally now
 
     // Drag state (resizing removed for uniform layout)
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
     @State private var showActions = false
-    private var cardWidth: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 200 : 160 }
-    private var cardHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
 
     @ObservedObject private var themeManager = ThemeManager.shared
 
