@@ -548,15 +548,7 @@ private extension GridNoteCard {
                 .foregroundStyle(allDone ? .white : .primary.opacity(0.85))
                 .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
                 .transition(.scale.combined(with: .opacity))
-                if overdueCount > 0 {
-                    Text("\(overdueCount)⚠︎")
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.red.opacity(0.25)))
-                        .foregroundStyle(.red)
-                        .transition(.scale.combined(with: .opacity))
-                } else if let upcoming = upcoming {
+                if overdueCount == 0, let upcoming = upcoming {
                     let dayString = upcoming.ln_dayDistanceString()
                     Text(dayString)
                         .font(.system(size: 9, weight: .semibold))
