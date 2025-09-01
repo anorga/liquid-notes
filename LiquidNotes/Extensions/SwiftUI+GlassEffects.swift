@@ -17,7 +17,7 @@ extension View {
     
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         let theme = ThemeManager.shared
-        if #available(iOS 26.0, *) {
+        // if #available(iOS 26.0, *) {
             switch variant {
             case .regular:
                 return AnyView(self.background(
@@ -178,36 +178,36 @@ extension View {
                     }
                 ))
             }
-        } else {
-            // iOS 17+: Apple-style glass borders with system adaptation
-            return AnyView(self.background(
-                ZStack {
-                    shape.fill(
-                        LinearGradient(
-                            colors: theme.currentTheme.primaryGradient,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ).opacity(theme.glassOpacity * 0.65)
-                    )
-                    if theme.highContrast {
-                        shape.stroke(Color.primary.opacity(0.55), lineWidth: 1.2)
-                    } else {
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .primary.opacity(0.18),
-                                    .primary.opacity(0.05),
-                                    .secondary.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.8
-                        )
-                    }
-                }
-            ))
-        }
+        // } else {
+        //     // iOS 17+: Apple-style glass borders with system adaptation
+        //     return AnyView(self.background(
+        //         ZStack {
+        //             shape.fill(
+        //                 LinearGradient(
+        //                     colors: theme.currentTheme.primaryGradient,
+        //                     startPoint: .topLeading,
+        //                     endPoint: .bottomTrailing
+        //                 ).opacity(theme.glassOpacity * 0.65)
+        //             )
+        //             if theme.highContrast {
+        //                 shape.stroke(Color.primary.opacity(0.55), lineWidth: 1.2)
+        //             } else {
+        //                 shape.stroke(
+        //                     LinearGradient(
+        //                         colors: [
+        //                             .primary.opacity(0.18),
+        //                             .primary.opacity(0.05),
+        //                             .secondary.opacity(0.1)
+        //                         ],
+        //                         startPoint: .topLeading,
+        //                         endPoint: .bottomTrailing
+        //                     ),
+        //                     lineWidth: 0.8
+        //                 )
+        //             }
+        //         }
+        //     ))
+        // }
     }
     
     /// Convenience overload for common shapes  
