@@ -13,6 +13,7 @@ private struct ContentSizeKey: PreferenceKey {
 
 struct SpatialCanvasView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let notes: [Note]
     let folders: [Folder]
     let onTap: (Note) -> Void
@@ -47,9 +48,15 @@ struct SpatialCanvasView: View {
     // Equal-spacing adaptive layout configuration
     // Slightly tighter gaps to give cards more width
     private let gapSpacing: CGFloat = 12
-    private var targetColumns: Int { UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2 }
+    private var targetColumns: Int { 
+        // Use size class for adaptive layout instead of device type
+        horizontalSizeClass == .regular ? 4 : 2 
+    }
     @State private var computedCardWidth: CGFloat = 160
-    private var cardBaseHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
+    private var cardBaseHeight: CGFloat { 
+        // Keep height based on device for consistency, or could also use size class
+        horizontalSizeClass == .regular ? 210 : 190 
+    }
     private var gridColumns: [GridItem] {
         Array(repeating: GridItem(.flexible(minimum: 60), spacing: gapSpacing, alignment: .topLeading), count: targetColumns)
     }
@@ -116,6 +123,10 @@ struct SpatialCanvasView: View {
                 .onChange(of: geometry.size) { _, newSize in
                     viewportSize = newSize
                     recalcCardWidth(totalWidth: newSize.width)
+                }
+                .onChange(of: horizontalSizeClass) { _, _ in
+                    // Recalculate card width when size class changes (iPad window resize)
+                    recalcCardWidth(totalWidth: geometry.size.width)
                 }
             }
             
