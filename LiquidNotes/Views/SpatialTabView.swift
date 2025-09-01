@@ -25,6 +25,7 @@ struct SpatialTabView: View {
     @State private var dropHoverFolderID: UUID? = nil
     @State private var showingDailyReview = false
     @State private var showingCreationPopover = false
+    @State private var showingQuickTaskCapture = false
     // Archived inline option removed; filters always visible
     
     var body: some View {
@@ -114,6 +115,16 @@ struct SpatialTabView: View {
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
             .sheet(isPresented: $showingDailyReview) {
                 DailyReviewView()
+            }
+            .sheet(isPresented: $showingQuickTaskCapture) {
+                QuickTaskCaptureView { taskText, due in
+                    guard let vm = notesViewModel else { return }
+                    let target = fetchOrCreateQuickTasksNote(using: vm)
+                    target.addTask(taskText, dueDate: due)
+                    try? modelContext.save()
+                    HapticManager.shared.success()
+                }
+                .presentationDetents([.fraction(0.3)])
             }
         }
     }
@@ -530,6 +541,21 @@ struct SpatialTabView: View {
                 
                 Divider()
                 
+                Button { showingQuickTaskCapture = true; showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("Quick Task")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
                 Button { createNewFolder(); showingCreationPopover = false } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "folder.badge.plus")
@@ -563,6 +589,20 @@ struct SpatialTabView: View {
         }
         .padding(.trailing, 20)
         .padding(.top, 20)
+    }
+    
+    private func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
+        let title = "Quick Tasks"
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
+        if let found = try? modelContext.fetch(descriptor).first {
+            return found
+        }
+        
+        let new = vm.createNote(in: selectedFolder, title: title, content: "")
+        new.isFavorited = false
+        new.isSystem = true
+        try? modelContext.save()
+        return new
     }
 
 }
