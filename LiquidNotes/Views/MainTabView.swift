@@ -54,7 +54,7 @@ struct MainTabView: View {
             )
             .onAppear { setupGlassTabBar() }
             
-            if selectedTab == 0 || selectedTab == 1 { // Only Notes & Favorites
+            if selectedTab == 0 || selectedTab == 1 || selectedTab == 4 { // Notes, Favorites & Tasks
                 creationMenu
             }
         } // ZStack
@@ -86,30 +86,73 @@ struct MainTabView: View {
     
     // MARK: - Native Creation Menu
     private var creationMenu: some View {
-        Menu {
-            Button { HapticManager.shared.noteCreated(); createNewNote() } label: { Label("New Note", systemImage: "doc.badge.plus") }
-            Button { HapticManager.shared.buttonTapped(); showingQuickTaskCapture = true } label: { Label("Quick Task", systemImage: "checklist") }
-            if selectedTab == 0 { // Only on Notes tab
-                Button { HapticManager.shared.buttonTapped(); createNewFolder() } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+        Group {
+            if selectedTab == 1 { // Favorites tab - direct action
+                Button {
+                    HapticManager.shared.noteCreated()
+                    createNewFavoritedNote()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.blue)
+                        .padding(14)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(
+                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .accessibilityLabel("Create Favorite Note")
+            } else if selectedTab == 4 { // Tasks tab - direct quick task action
+                Button {
+                    HapticManager.shared.buttonTapped()
+                    showingQuickTaskCapture = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.blue)
+                        .padding(14)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(
+                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .accessibilityLabel("Create Quick Task")
+            } else { // Other tabs - show menu
+                Menu {
+                    Button { HapticManager.shared.noteCreated(); createNewNote() } label: { Label("New Note", systemImage: "doc.badge.plus") }
+                    Button { HapticManager.shared.buttonTapped(); showingQuickTaskCapture = true } label: { Label("Quick Task", systemImage: "checklist") }
+                    if selectedTab == 0 { // Only on Notes tab
+                        Button { HapticManager.shared.buttonTapped(); createNewFolder() } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+                    }
+                    Divider()
+                    Button { HapticManager.shared.buttonTapped(); showingDailyReview = true } label: { Label("Daily Review", systemImage: "calendar") }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.semibold))
+                        .padding(14)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(
+                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        )
+                        .contentShape(Circle())
+                }
+                .menuActionDismissBehavior(.automatic)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, 16)
+                .padding(.top, 12)
+                .accessibilityLabel("Create")
             }
-            Divider()
-            Button { HapticManager.shared.buttonTapped(); showingDailyReview = true } label: { Label("Daily Review", systemImage: "calendar") }
-            // Reindex removed
-        } label: {
-            Image(systemName: "plus")
-                .font(.title3.weight(.semibold))
-                .padding(14)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                )
-                .contentShape(Circle())
         }
-        .menuActionDismissBehavior(.automatic)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.trailing, 16)
-        .padding(.top, 12)
-        .accessibilityLabel("Create")
     }
     
     private func setupGlassTabBar() {
@@ -170,6 +213,32 @@ struct MainTabView: View {
         if selectedFolder == nil, let autoFolder = newNote.folder {
             selectedFolder = autoFolder
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.selectedNote = newNote
+        }
+    }
+    
+    private func createNewFavoritedNote() {
+        guard let viewModel = notesViewModel else { return }
+        
+        // Create new note and immediately mark it as favorited
+        let newNote = viewModel.createNote(in: selectedFolder, title: "", content: "")
+        newNote.isFavorited = true
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving favorited note: \(error)")
+        }
+        
+        // If user deleted all folders previously, createNote(in:) will have auto-created
+        // a default folder and assigned it to the new note. Adopt that folder as the
+        // current selection so the note is visibly inside a folder context.
+        if selectedFolder == nil, let autoFolder = newNote.folder {
+            selectedFolder = autoFolder
+        }
+        
+        // Open the note in the editor immediately
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.selectedNote = newNote
         }

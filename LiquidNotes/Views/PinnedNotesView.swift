@@ -26,7 +26,7 @@ struct PinnedNotesView: View {
                                 Text("No favorites yet")
                                     .font(.title2)
                                     .foregroundStyle(.tertiary)
-                                Text("Tap the star on a note to add it here")
+                                Text("Create your first favorite note")
                                     .font(.body)
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)

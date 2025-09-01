@@ -11,48 +11,29 @@ struct TasksRollupView: View {
     @State private var editingTaskID: UUID? = nil
     @State private var showingDuePicker = false
     @State private var duePickerTask: TaskItem? = nil
-    @State private var showingQuickTaskCapture = false
-    @State private var notesViewModel: NotesViewModel?
-    @State private var quickTasksNoteID: UUID? = nil
     var body: some View {
         NavigationStack {
-            ZStack {
-                VStack(spacing: 0) {
-                    LNHeader(title: "Tasks", subtitle: "\(filteredNotes.count) notes") { EmptyView() }
-                    filters
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            ForEach(filteredNotes, id: \.id) { note in
-                                Section {
-                                    if isExpanded(note) { taskList(note) }
-                                } header: { noteHeader(note) }
-                            }
-                        }.padding(.horizontal, 18).padding(.top, 12)
-                        Spacer(minLength: 40)
-                    }
+            VStack(spacing: 0) {
+                LNHeader(title: "Tasks", subtitle: "\(filteredNotes.count) notes") { EmptyView() }
+                filters
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        ForEach(filteredNotes, id: \.id) { note in
+                            Section {
+                                if isExpanded(note) { taskList(note) }
+                            } header: { noteHeader(note) }
+                        }
+                    }.padding(.horizontal, 18).padding(.top, 12)
+                    Spacer(minLength: 40)
                 }
-                .background(LiquidNotesBackground().ignoresSafeArea())
-                
-                // Creation menu
-                creationMenu
             }
+            .background(LiquidNotesBackground().ignoresSafeArea())
         }
-        .onAppear { setupViewModel() }
         .sheet(isPresented: $showingDuePicker) {
             DueDateCalendarPicker(initialDate: duePickerTask?.dueDate) { selected in
                 if let task = duePickerTask { task.dueDate = selected; try? modelContext.save() }
             }
             .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showingQuickTaskCapture) {
-            QuickTaskCaptureView { taskText, due in
-                guard let vm = notesViewModel else { return }
-                let target = fetchOrCreateQuickTasksNote(using: vm)
-                target.addTask(taskText, dueDate: due)
-                try? modelContext.save()
-                HapticManager.shared.success()
-            }
-            .presentationDetents([.fraction(0.3)])
         }
     }
     private var filteredNotes: [Note] {
@@ -93,58 +74,6 @@ struct TasksRollupView: View {
 }
 
 private extension TasksRollupView {
-    // MARK: - Creation Menu
-    var creationMenu: some View {
-        Button {
-            HapticManager.shared.buttonTapped()
-            showingQuickTaskCapture = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.blue)
-                .padding(14)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(
-                    Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                )
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.trailing, 16)
-        .padding(.top, 12)
-        .accessibilityLabel("Create Quick Task")
-    }
-    
-    // MARK: - Setup
-    func setupViewModel() {
-        if notesViewModel == nil {
-            notesViewModel = NotesViewModel(modelContext: modelContext)
-        }
-    }
-    
-    // MARK: - Quick Tasks Helper
-    func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
-        if let existingID = quickTasksNoteID {
-            let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == existingID })
-            if let found = try? modelContext.fetch(descriptor).first { return found }
-        }
-        // Search by reserved title
-        let title = "Quick Tasks"
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
-        if let found = try? modelContext.fetch(descriptor).first {
-            quickTasksNoteID = found.id
-            return found
-        }
-        // Create hidden aggregation note
-        let new = vm.createNote(in: nil, title: title, content: "")
-        new.isFavorited = false
-        new.isSystem = true
-        quickTasksNoteID = new.id
-        try? modelContext.save()
-        return new
-    }
-    
     var filters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
