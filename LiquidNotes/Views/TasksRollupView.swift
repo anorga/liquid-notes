@@ -101,7 +101,7 @@ private extension TasksRollupView {
                     HStack(spacing: 10) {
                         priorityBadge(note.priority)
                         progressBadge(note)
-                        if let due = note.dueDate { Text(due, style: .relative).font(.caption2).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.orange.opacity(0.15))).foregroundStyle(.orange) }
+                        if let due = note.dueDate { Text(due.ln_dayDistanceString()).font(.caption2).padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.orange.opacity(0.15))).foregroundStyle(.orange) }
                     }
                 }
                 Spacer()
@@ -116,8 +116,13 @@ private extension TasksRollupView {
             ForEach(Array((note.tasks ?? []).enumerated()), id: \.element.id) { idx, task in
                 if showCompleted || !task.isCompleted {
                     HStack(spacing: 10) {
-                        Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) { Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle").foregroundStyle(task.isCompleted ? Color.green : Color.secondary) }.buttonStyle(.plain)
                         if editingTaskID == task.id {
+                            // Editing layout: completion toggle left, then editable text field
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
                             TextField("Task", text: Binding(
                                 get: { task.text },
                                 set: { newVal in task.text = newVal; try? modelContext.save() }
@@ -126,42 +131,89 @@ private extension TasksRollupView {
                             .disabled(task.isCompleted)
                             .onSubmit { editingTaskID = nil }
                             .onDisappear { editingTaskID = editingTaskID == task.id ? nil : editingTaskID }
+                            if let due = task.dueDate {
+                                let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
+                                Text(due.ln_dayDistanceString())
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 4)
+                                    .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
+                                    .foregroundStyle(isOverdue ? .red : .orange)
+                            }
+                            Spacer(minLength: 4)
+                            Button {
+                                duePickerTask = task
+                                showingDuePicker = true
+                            } label: {
+                                Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if task.dueDate != nil {
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                }
+                            }
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            // Name edit confirm button (after delete)
+                            Button(action: { editingTaskID = nil }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            }
+                            .buttonStyle(.plain)
                         } else {
-                            Text(task.text)
-                                .strikethrough(task.isCompleted, color: .primary.opacity(0.6))
-                                .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                                .lineLimit(3)
-                                .onTapGesture { if !task.isCompleted { editingTaskID = task.id } }
-                        }
-                        if let due = task.dueDate {
-                            let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
-                            Text(due, style: .relative)
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
-                                .foregroundStyle(isOverdue ? .red : .orange)
-                        }
-                        Spacer()
-                        Button {
-                            duePickerTask = task
-                            showingDuePicker = true
-                        } label: {
-                            Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            if task.dueDate != nil {
-                                Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                            // Normal layout: completion toggle at start
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            if editingTaskID == task.id {
+                                EmptyView()
+                            }
+                            if editingTaskID != task.id {
+                                Text(task.text)
+                                    .strikethrough(task.isCompleted, color: .primary.opacity(0.6))
+                                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                                    .lineLimit(3)
+                                    .onTapGesture { if !task.isCompleted { editingTaskID = task.id } }
+                            }
+                            if let due = task.dueDate {
+                                let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
+                                Text(due.ln_dayDistanceString())
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 4)
+                                    .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
+                                    .foregroundStyle(isOverdue ? .red : .orange)
+                            }
+                            Spacer()
+                            Button {
+                                duePickerTask = task
+                                showingDuePicker = true
+                            } label: {
+                                Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                if task.dueDate != nil {
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                }
+                            }
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            if editingTaskID == task.id {
+                                // Name edit confirm button (placed after delete)
+                                Button(action: { editingTaskID = nil }) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                }
+                                .buttonStyle(.plain)
+                                .transition(.opacity.combined(with: .scale))
                             }
                         }
-                        if editingTaskID == task.id {
-                            Button(action: { editingTaskID = nil }) { Image(systemName: "checkmark").font(.caption) }
-                                .buttonStyle(.borderless)
-                                .transition(.opacity.combined(with: .scale))
-                        }
-                        Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))

@@ -536,14 +536,8 @@ private extension GridNoteCard {
                             .transition(.scale.combined(with: .opacity))
                             .accessibilityLabel(Text("\(overdueCount) overdue tasks"))
                     } else if let upcoming = upcoming {
-                        let isToday = Calendar.current.isDateInToday(upcoming)
-                        Group {
-                            if isToday {
-                                Text("Today")
-                            } else {
-                                Text(upcoming, style: .relative)
-                            }
-                        }
+                        let dayString = upcoming.ln_dayDistanceString()
+                        Text(dayString)
                         .font(.system(size: 9, weight: .semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)

@@ -382,7 +382,7 @@ struct QuickTaskCaptureView: View {
                             .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
                         HStack(spacing: 12) {
                             if let d = dueDate {
-                                Text("Due: \(d, style: .relative)")
+                                Text("Due: \(d.ln_dayDistanceString())")
                                     .font(.caption2)
                                     .padding(.horizontal, 10).padding(.vertical, 6)
                                     .background(Capsule().fill(Color.orange.opacity(0.2)))

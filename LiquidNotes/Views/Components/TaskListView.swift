@@ -159,6 +159,9 @@ struct TaskRowView: View {
 
     @State private var isHovered = false
     @State private var showingCalendar = false
+    @State private var isEditingText = false
+    @State private var draftText: String = ""
+    @FocusState private var isTaskFieldFocused: Bool
 
     private var isOverdue: Bool {
         if let due = task.dueDate {
@@ -168,34 +171,36 @@ struct TaskRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button(action: onToggle) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(
-                        task.isCompleted ?
-                        LinearGradient(
-                            colors: [.green, .mint],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ) :
-                        LinearGradient(
-                            colors: [.gray, .gray.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .scaleEffect(task.isCompleted ? 1.1 : 1.0)
-                    .animation(.bouncy(duration: 0.3), value: task.isCompleted)
+                    .font(.callout)
+                    .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
             }
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(task.text)
-                    .foregroundStyle(.primary)
-                    .strikethrough(task.isCompleted, color: .primary.opacity(0.5))
+                if isEditingText {
+                    TextField("Task", text: Binding(
+                        get: { draftText },
+                        set: { draftText = $0 }
+                    ), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .focused($isTaskFieldFocused)
+                    .onAppear { draftText = task.text; DispatchQueue.main.async { isTaskFieldFocused = true } }
+                    .onSubmit { commitEdit() }
+                    .submitLabel(.done)
+                    .onChange(of: draftText) { _, _ in }
+                } else {
+                    Text(task.text)
+                        .foregroundStyle(.primary)
+                        .strikethrough(task.isCompleted, color: .primary.opacity(0.5))
+                        .onTapGesture { if !task.isCompleted { enterEdit() } }
+                }
                 if let due = task.dueDate {
-                    Text(Calendar.current.isDateInToday(due) ? "Today" : due.formatted(.relative(presentation: .numeric)))
+                    let dayText = due.ln_dayDistanceString()
+                    Text(dayText)
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .padding(.horizontal, 8)
@@ -214,18 +219,25 @@ struct TaskRowView: View {
                     .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
             }
             .buttonStyle(.plain)
-            if isHovered {
-                Button(action: onDelete) {
-                    Image(systemName: "trash.circle.fill")
+            Button(action: onDelete) {
+                Image(systemName: "trash.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.red.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+            .transition(.scale.combined(with: .opacity))
+            if isEditingText {
+                Button(action: commitEdit) {
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.callout)
-                        .foregroundStyle(.red.opacity(0.8))
+                        .foregroundStyle(.green)
                 }
                 .buttonStyle(.plain)
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(.clear)
@@ -247,6 +259,21 @@ struct TaskRowView: View {
             }
             .presentationDetents([.medium])
         }
+        .onChange(of: isTaskFieldFocused) { _, focused in
+            if !focused && isEditingText { commitEdit() }
+        }
+    }
+}
+
+private extension TaskRowView {
+    func enterEdit() {
+        draftText = task.text
+        withAnimation(.easeInOut(duration: 0.2)) { isEditingText = true }
+    }
+    func commitEdit() {
+        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != task.text { task.text = trimmed }
+        withAnimation(.easeInOut(duration: 0.2)) { isEditingText = false }
     }
 }
 
