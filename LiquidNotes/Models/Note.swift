@@ -102,8 +102,8 @@ final class Note {
         updateModifiedDate()
     }
     
-    func addTask(_ text: String) {
-    let task = TaskItem(text: text, note: self)
+    func addTask(_ text: String, dueDate: Date? = nil) {
+    let task = TaskItem(text: text, note: self, dueDate: dueDate)
     // Defensive copy to avoid simultaneous access when UI enumerates tasks
     var copy = tasks ?? []
     copy.append(task)
@@ -179,14 +179,16 @@ final class TaskItem {
     var text: String = ""
     var isCompleted: Bool = false
     var createdDate: Date = Date()
+    var dueDate: Date? = nil
     @Relationship var note: Note?
     
-    init(text: String, isCompleted: Bool = false, note: Note? = nil) {
+    init(text: String, isCompleted: Bool = false, note: Note? = nil, dueDate: Date? = nil) {
         self.id = UUID()
         self.text = text
         self.isCompleted = isCompleted
         self.createdDate = Date()
         self.note = note
+        self.dueDate = dueDate
     }
 }
 

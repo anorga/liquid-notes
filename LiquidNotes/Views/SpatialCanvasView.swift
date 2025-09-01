@@ -503,6 +503,10 @@ private extension GridNoteCard {
                 if let tasks = note.tasks, !tasks.isEmpty {
                     let incomplete = tasks.filter { !$0.isCompleted }.count
                     let allDone = incomplete == 0
+                    let upcoming = tasks.filter { !$0.isCompleted && $0.dueDate != nil }
+                        .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+                        .first?.dueDate
+                    let overdueCount = tasks.filter { !$0.isCompleted && ($0.dueDate.map { Calendar.current.startOfDay(for: $0) < Calendar.current.startOfDay(for: Date()) } ?? false) }.count
                     HStack(spacing: 4) {
                         Image(systemName: allDone ? "checkmark.circle.fill" : "checklist")
                             .font(.system(size: 11, weight: .semibold))
@@ -522,6 +526,32 @@ private extension GridNoteCard {
                     .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
                     .transition(.scale.combined(with: .opacity))
                     .accessibilityLabel(Text(allDone ? "All tasks complete" : "\(incomplete) incomplete of \(tasks.count) tasks"))
+                    if overdueCount > 0 {
+                        Text("\(overdueCount)⚠︎")
+                            .font(.system(size: 9, weight: .semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.red.opacity(0.25)))
+                            .foregroundStyle(.red)
+                            .transition(.scale.combined(with: .opacity))
+                            .accessibilityLabel(Text("\(overdueCount) overdue tasks"))
+                    } else if let upcoming = upcoming {
+                        let isToday = Calendar.current.isDateInToday(upcoming)
+                        Group {
+                            if isToday {
+                                Text("Today")
+                            } else {
+                                Text(upcoming, style: .relative)
+                            }
+                        }
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.orange.opacity(0.22)))
+                        .foregroundStyle(.orange)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityLabel(Text("Next due date"))
+                    }
                 }
                 if (note.tasks?.isEmpty ?? true) {
                     Button {

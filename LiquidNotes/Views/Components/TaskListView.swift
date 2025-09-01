@@ -4,10 +4,12 @@ struct TaskListView: View {
     @Binding var tasks: [TaskItem]
     let onToggle: (Int) -> Void
     let onDelete: (Int) -> Void
-    let onAdd: (String) -> Void
+    let onAdd: (String, Date?) -> Void
     
     @State private var newTaskText = ""
     @State private var isAddingTask = false
+    @State private var newTaskDueDate: Date? = nil
+    @State private var showingCalendar = false // calendar for new task creation (future use if switching from Menu)
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -54,7 +56,25 @@ struct TaskListView: View {
                         .onSubmit {
                             addNewTask()
                         }
-                    
+                    Menu {
+                        DatePicker(
+                            "Due Date",
+                            selection: Binding(
+                                get: { newTaskDueDate ?? Date() },
+                                set: { newVal in newTaskDueDate = newVal }
+                            ),
+                            displayedComponents: .date
+                        )
+                        if newTaskDueDate != nil {
+                            Button(role: .destructive) { newTaskDueDate = nil } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                        }
+                    } label: {
+                        Image(systemName: newTaskDueDate == nil ? "calendar.badge.plus" : "calendar")
+                            .font(.title3)
+                            .foregroundStyle(.primary)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
                     Button(action: addNewTask) {
                         Text("Add")
                             .font(.callout)
@@ -82,19 +102,26 @@ struct TaskListView: View {
             
             ScrollView {
                 VStack(spacing: 8) {
-                    ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
+                    let sorted = tasks.enumerated().sorted { lhs, rhs in
+                        let l = lhs.element
+                        let r = rhs.element
+                        switch (l.dueDate, r.dueDate) {
+                        case let (ld?, rd?): if ld != rd { return ld < rd }
+                        case (_?, nil): return true
+                        case (nil, _?): return false
+                        default: break
+                        }
+                        if l.isCompleted != r.isCompleted { return !l.isCompleted && r.isCompleted }
+                        return l.createdDate < r.createdDate
+                    }
+                    ForEach(Array(sorted.indices), id: \.self) { i in
+                        let pair = sorted[i]
+                        let index = pair.offset
+                        let task = pair.element
                         TaskRowView(
                             task: task,
-                            onToggle: {
-                                withAnimation(.bouncy(duration: 0.3)) {
-                                    onToggle(index)
-                                }
-                            },
-                            onDelete: {
-                                withAnimation(.bouncy(duration: 0.4)) {
-                                    onDelete(index)
-                                }
-                            }
+                            onToggle: { withAnimation(.bouncy(duration: 0.3)) { onToggle(index) } },
+                            onDelete: { withAnimation(.bouncy(duration: 0.4)) { onDelete(index) } }
                         )
                     }
                 }
@@ -115,8 +142,9 @@ struct TaskListView: View {
     
     private func addNewTask() {
         guard !newTaskText.isEmpty else { return }
-        onAdd(newTaskText)
+        onAdd(newTaskText, newTaskDueDate)
         newTaskText = ""
+        newTaskDueDate = nil
         withAnimation(.bouncy(duration: 0.3)) {
             isAddingTask = false
         }
@@ -128,9 +156,17 @@ struct TaskRowView: View {
     let task: TaskItem
     let onToggle: () -> Void
     let onDelete: () -> Void
-    
+
     @State private var isHovered = false
-    
+    @State private var showingCalendar = false
+
+    private var isOverdue: Bool {
+        if let due = task.dueDate {
+            return Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date()) && !task.isCompleted
+        }
+        return false
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onToggle) {
@@ -153,16 +189,31 @@ struct TaskRowView: View {
                     .animation(.bouncy(duration: 0.3), value: task.isCompleted)
             }
             .buttonStyle(.plain)
-            
-            Text(task.text)
-                .font(.callout)
-                .fontWeight(task.isCompleted ? .regular : .medium)
-                .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                .strikethrough(task.isCompleted, color: .secondary)
-                .animation(.easeInOut(duration: 0.2), value: task.isCompleted)
-            
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.text)
+                    .foregroundStyle(.primary)
+                    .strikethrough(task.isCompleted, color: .primary.opacity(0.5))
+                if let due = task.dueDate {
+                    Text(Calendar.current.isDateInToday(due) ? "Today" : due.formatted(.relative(presentation: .numeric)))
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(isOverdue ? Color.red.opacity(0.18) : Color.orange.opacity(0.10))
+                        )
+                        .foregroundStyle(isOverdue ? Color.red : Color.orange)
+                        .accessibilityLabel(isOverdue ? "Task overdue" : "Due date")
+                }
+            }
             Spacer()
-            
+            Button { showingCalendar = true } label: {
+                Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+            }
+            .buttonStyle(.plain)
             if isHovered {
                 Button(action: onDelete) {
                     Image(systemName: "trash.circle.fill")
@@ -186,12 +237,15 @@ struct TaskRowView: View {
         )
         .modernGlassCard()
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovered = hovering
-            }
+            withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering }
         }
-        .onTapGesture {
-            onToggle()
+        .onTapGesture { onToggle() }
+        .sheet(isPresented: $showingCalendar) {
+            DueDateCalendarPicker(initialDate: task.dueDate) { selected in
+                task.dueDate = selected
+                showingCalendar = false
+            }
+            .presentationDetents([.medium])
         }
     }
 }

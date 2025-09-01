@@ -89,14 +89,14 @@ struct MainTabView: View {
             DailyReviewView()
         }
         .sheet(isPresented: $showingQuickTaskCapture) {
-            QuickTaskCaptureView { taskText in
+            QuickTaskCaptureView { taskText, due in
                 guard let vm = notesViewModel else { return }
                 let target = fetchOrCreateQuickTasksNote(using: vm)
-                target.addTask(taskText)
+                target.addTask(taskText, dueDate: due)
                 try? modelContext.save()
                 HapticManager.shared.success()
             }
-            .presentationDetents([.fraction(0.25)])
+            .presentationDetents([.fraction(0.3)])
         }
         .sheet(isPresented: $showingCommandPalette) {
             CommandPaletteView(
@@ -365,20 +365,38 @@ struct QuickCaptureView: View {
 // MARK: - Quick Task Capture Sheet
 struct QuickTaskCaptureView: View {
     @Environment(\.dismiss) private var dismiss
-    let onSave: (String) -> Void
+    let onSave: (String, Date?) -> Void
     @State private var taskText: String = ""
+    @State private var dueDate: Date? = nil
+    @State private var showingPicker = false
     var body: some View {
         NavigationStack {
             ZStack {
                 LiquidNotesBackground().ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header removed per simplification request
                     VStack(spacing: 16) {
                         TextField("Task description", text: $taskText, axis: .vertical)
                             .lineLimit(2, reservesSpace: true)
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 14).padding(.vertical, 12)
                             .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                        HStack(spacing: 12) {
+                            if let d = dueDate {
+                                Text("Due: \(d, style: .relative)")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Capsule().fill(Color.orange.opacity(0.2)))
+                                    .foregroundStyle(.orange)
+                            }
+                            Button { showingPicker = true } label: {
+                                Image(systemName: dueDate == nil ? "calendar.badge.plus" : "calendar.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(dueDate == nil ? Color.secondary : Color.orange)
+                                    .padding(8)
+                                    .background(.ultraThinMaterial, in: Circle())
+                            }
+                            Spacer()
+                        }
                         Spacer(minLength: 0)
                         HStack {
                             Button("Cancel") { dismiss() }
@@ -387,7 +405,7 @@ struct QuickTaskCaptureView: View {
                             Button {
                                 let trimmed = taskText.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !trimmed.isEmpty else { return }
-                                onSave(trimmed)
+                                onSave(trimmed, dueDate)
                                 dismiss()
                             } label: {
                                 Text("Add Task")
@@ -405,6 +423,10 @@ struct QuickTaskCaptureView: View {
                 }
             }
             .navigationBarHidden(true)
+        }
+        .sheet(isPresented: $showingPicker) {
+            DueDateCalendarPicker(initialDate: dueDate) { selected in dueDate = selected }
+                .presentationDetents([.medium])
         }
     }
 }

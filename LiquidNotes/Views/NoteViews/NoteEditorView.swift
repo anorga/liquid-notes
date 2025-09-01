@@ -204,7 +204,7 @@ struct NoteEditorView: View {
             ),
             onToggle: { index in note.toggleTask(at: index); hasChanges = true },
             onDelete: { index in note.removeTask(at: index); hasChanges = true },
-            onAdd: { text in note.addTask(text); hasChanges = true }
+            onAdd: { text, dueDate in note.addTask(text, dueDate: dueDate); hasChanges = true }
         )
         .padding(.horizontal, 20)
         .transition(.asymmetric(
