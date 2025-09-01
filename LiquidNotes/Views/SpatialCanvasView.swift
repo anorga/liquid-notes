@@ -302,7 +302,7 @@ private struct GridNoteCard: View {
     // Drag state (resizing removed for uniform layout)
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging = false
-    @State private var showActions = false
+    // Removed custom long-press overlay actions; using native context menu
 
     @ObservedObject private var themeManager = ThemeManager.shared
 
@@ -353,11 +353,7 @@ private struct GridNoteCard: View {
             .padding(.vertical, verticalPadding)
             .frame(width: cardWidth, height: cardHeight, alignment: .leading)
             // Removed top-right overlay badges; now using bottom bar inside stack
-            .overlay(alignment: .bottomTrailing) {
-                if showActions && !selectionMode {
-                    actionButtons
-                }
-            }
+            // Removed custom overlay action buttons
             .overlay(alignment: .topLeading) {
                 if selectionMode {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -380,29 +376,38 @@ private struct GridNoteCard: View {
             if selectionMode { 
                 onToggleSelect() 
             } else {
-                if showActions {
-                    // Dismiss actions on tap
-                    withAnimation(.easeOut(duration: 0.2)) { showActions = false }
-                } else {
-                    HapticManager.shared.noteSelected()
-                    onTap()
-                }
+                HapticManager.shared.noteSelected()
+                onTap()
             }
         }
-        // High priority long press for actions menu
-        .highPriorityGesture(
-            LongPressGesture(minimumDuration: 0.5)
-                .onEnded { _ in
-                    if selectionMode {
-                        onToggleSelect()
-                    } else {
-                        HapticManager.impact(.medium)
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            showActions.toggle()
-                        }
+        // Native iOS context menu replacing custom long-press UI
+        .contextMenu(menuItems: {
+            if !selectionMode {
+                Button(action: {
+                    HapticManager.shared.buttonTapped()
+                    onFavorite()
+                }) { Label(note.isFavorited ? "Unfavorite" : "Favorite", systemImage: note.isFavorited ? "star.slash" : "star") }
+
+                Button(action: {
+                    HapticManager.shared.buttonTapped()
+                    ModelMutationScheduler.shared.schedule {
+                        note.isArchived.toggle()
+                        note.updateModifiedDate()
                     }
-                }
-        )
+                }) { Label(note.isArchived ? "Unarchive" : "Archive", systemImage: note.isArchived ? "arrow.uturn.left" : "archivebox") }
+
+                Button(action: {
+                    HapticManager.shared.buttonTapped()
+                    NotificationCenter.default.post(name: .requestMoveSingleNote, object: note)
+                }) { Label("Move to Folder", systemImage: "folder") }
+
+                Divider()
+                Button(role: .destructive, action: {
+                    HapticManager.shared.noteDeleted()
+                    onDelete()
+                }) { Label("Delete", systemImage: "trash") }
+            }
+        })
     .onAppear { /* uniform size: ignore persisted custom note.width/height */ }
         .gesture(dragGesture)
     }
@@ -592,61 +597,6 @@ private extension GridNoteCard {
     .padding(.top, 0)
     }
     
-    @ViewBuilder var actionButtons: some View {
-        HStack(spacing: 6) {
-            Button(action: {
-                HapticManager.shared.buttonTapped()
-                onFavorite()
-                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
-            }) {
-                Image(systemName: note.isFavorited ? "star.slash" : "star")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-            }
-            
-            Button(action: {
-                HapticManager.shared.buttonTapped()
-                ModelMutationScheduler.shared.schedule {
-                    note.isArchived.toggle()
-                    note.updateModifiedDate()
-                }
-                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
-            }) {
-                Image(systemName: note.isArchived ? "arrow.uturn.left" : "archivebox")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-            }
-            
-            Button(action: {
-                HapticManager.shared.noteDeleted()
-                onDelete()
-                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
-            }) {
-                Image(systemName: "trash")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.red)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-            }
-            Button(action: {
-                HapticManager.shared.buttonTapped()
-                NotificationCenter.default.post(name: .requestMoveSingleNote, object: note)
-                withAnimation(.easeOut(duration: 0.2)) { showActions = false }
-            }) {
-                Image(systemName: "folder")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-            }
-        }
-        .padding(8)
-        .transition(.scale.combined(with: .opacity))
-    }
 }
 
 #Preview {
