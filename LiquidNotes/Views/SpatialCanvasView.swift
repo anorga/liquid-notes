@@ -307,7 +307,7 @@ private struct GridNoteCard: View {
     @ObservedObject private var themeManager = ThemeManager.shared
 
     // MARK: - Layout helpers
-    private var horizontalPadding: CGFloat { 14 }
+    private var horizontalPadding: CGFloat { 14 } // unified edge padding
     private var verticalPadding: CGFloat { 14 }
     private var showAttachmentPreview: Bool { true }
     private var contentLineLimit: Int { 3 }
@@ -315,9 +315,9 @@ private struct GridNoteCard: View {
     private var isLongTitle: Bool { note.title.count > 24 } // tighter threshold for layout adjustments
     private var dynamicAttachmentHeight: CGFloat {
         guard showAttachmentPreview, note.attachments.first != nil else { return 0 }
-        // More aggressive shrink for long titles to keep title within bounds
-        if isLongTitle && !note.content.isEmpty { return 60 }
-        return 90
+        // Smaller baseline to maintain consistent padding around all elements
+        if isLongTitle && !note.content.isEmpty { return 55 }
+        return 78
     }
     private var dynamicContentLineLimit: Int {
         // When title is long and attachment present, reduce body lines so layout stays balanced
@@ -341,12 +341,12 @@ private struct GridNoteCard: View {
     var body: some View {
         ZStack {
             glassCard
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 noteHeader
                 contentView
                 attachmentPreviewView
                 tagsRow
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
                 bottomBar
             }
             .padding(.horizontal, horizontalPadding)
@@ -489,7 +489,7 @@ private extension GridNoteCard {
                 .lineLimit(dynamicContentLineLimit)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(2)
-                .padding(.top, 2)
+                .padding(.top, 0)
         } else {
             Text("No content")
                 .font(.system(size: 14))
@@ -510,7 +510,7 @@ private extension GridNoteCard {
                 }
             }
             .frame(maxHeight: 26)
-            .padding(.top, 2)
+            .padding(.top, 0)
         }
     }
 
@@ -598,7 +598,7 @@ private extension GridNoteCard {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 2)
+    .padding(.top, 0)
     }
     
     @ViewBuilder var actionButtons: some View {
