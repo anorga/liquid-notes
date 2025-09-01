@@ -318,8 +318,8 @@ private struct GridNoteCard: View {
             glassCard
             VStack(alignment: .leading, spacing: 10) {
                 noteHeader
-                attachmentPreviewView
                 contentView
+                attachmentPreviewView
                 tagsRow
                 Spacer(minLength: 8)
             }
@@ -496,8 +496,6 @@ private extension GridNoteCard {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .padding(6)
-                        .background(Circle().fill(.ultraThinMaterial))
-                        .clipShape(Circle())
                         .transition(.scale.combined(with: .opacity))
                 }
                 if let tasks = note.tasks, !tasks.isEmpty {
