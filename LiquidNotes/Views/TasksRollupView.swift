@@ -11,6 +11,10 @@ struct TasksRollupView: View {
     @State private var editingTaskID: UUID? = nil
     @State private var showingDuePicker = false
     @State private var duePickerTask: TaskItem? = nil
+    @State private var showingQuickTaskCapture = false
+    @State private var newTaskText = ""
+    @State private var newTaskDueDate: Date? = nil
+    @State private var showingTaskDuePicker = false
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -28,12 +32,79 @@ struct TasksRollupView: View {
                 }
             }
             .background(LiquidNotesBackground().ignoresSafeArea())
+            .overlay(alignment: .topTrailing) { floatingCreationButton }
         }
         .sheet(isPresented: $showingDuePicker) {
             DueDateCalendarPicker(initialDate: duePickerTask?.dueDate) { selected in
                 if let task = duePickerTask { task.dueDate = selected; try? modelContext.save() }
             }
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showingQuickTaskCapture) {
+            NavigationStack {
+                ZStack {
+                    LiquidNotesBackground().ignoresSafeArea()
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(spacing: 16) {
+                            TextField("Task description", text: $newTaskText, axis: .vertical)
+                                .lineLimit(2, reservesSpace: true)
+                                .textFieldStyle(.plain)
+                                .padding(.horizontal, 14).padding(.vertical, 12)
+                                .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                            HStack(spacing: 12) {
+                                if let d = newTaskDueDate {
+                                    Text("Due: \(d.ln_dayDistanceString())")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(Capsule().fill(Color.orange.opacity(0.2)))
+                                        .foregroundStyle(.orange)
+                                }
+                                Button { showingTaskDuePicker = true } label: {
+                                    Image(systemName: newTaskDueDate == nil ? "calendar.badge.plus" : "calendar.circle.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(newTaskDueDate == nil ? Color.secondary : Color.orange)
+                                        .padding(8)
+                                        .background(.ultraThinMaterial, in: Circle())
+                                }
+                                Spacer()
+                            }
+                            Spacer(minLength: 0)
+                            HStack {
+                                Button("Cancel") { showingQuickTaskCapture = false }
+                                    .buttonStyle(.borderless)
+                                Spacer()
+                                Button {
+                                    let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    guard !trimmed.isEmpty else { return }
+                                    let quickTasksNote = fetchOrCreateQuickTasksNote()
+                                    quickTasksNote.addTask(trimmed, dueDate: newTaskDueDate)
+                                    try? modelContext.save()
+                                    HapticManager.shared.success()
+                                    showingQuickTaskCapture = false
+                                    newTaskText = ""
+                                    newTaskDueDate = nil
+                                } label: {
+                                    Text("Add Task")
+                                        .fontWeight(.semibold)
+                                        .padding(.horizontal, 20).padding(.vertical, 10)
+                                        .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .clipShape(Capsule())
+                                        .foregroundStyle(.white)
+                                }
+                                .disabled(newTaskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .opacity(newTaskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                            }
+                        }
+                        .padding(20)
+                    }
+                }
+                .navigationBarHidden(true)
+            }
+            .presentationDetents([.fraction(0.3)])
+        }
+        .sheet(isPresented: $showingTaskDuePicker) {
+            DueDateCalendarPicker(initialDate: newTaskDueDate) { selected in newTaskDueDate = selected }
+                .presentationDetents([.medium])
         }
     }
     private var filteredNotes: [Note] {
@@ -251,6 +322,49 @@ private extension TasksRollupView {
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Capsule().fill(note.progress >= 1 ? Color.green.opacity(0.25) : Color.secondary.opacity(0.15)))
         .foregroundStyle(note.progress >= 1 ? .green : .secondary)
+    }
+    
+    private var floatingCreationButton: some View {
+        Button { 
+            showingQuickTaskCapture = true
+            HapticManager.shared.buttonTapped()
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.blue)
+                .frame(width: 56, height: 56)
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 20)
+        .padding(.top, 20)
+    }
+    
+    private func fetchOrCreateQuickTasksNote() -> Note {
+        let title = "Quick Tasks"
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
+        if let found = try? modelContext.fetch(descriptor).first {
+            return found
+        }
+        
+        let new = Note(title: title, content: "")
+        new.isFavorited = false
+        new.isSystem = true
+        
+        let folderDescriptor = FetchDescriptor<Folder>()
+        if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
+            new.folder = first
+        } else {
+            let defaultFolder = Folder(name: "Folder")
+            modelContext.insert(defaultFolder)
+            new.folder = defaultFolder
+        }
+        
+        modelContext.insert(new)
+        try? modelContext.save()
+        return new
     }
 }
 

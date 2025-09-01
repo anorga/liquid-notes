@@ -23,41 +23,13 @@ struct MainTabView: View {
     // Removed quick theme overlay per simplification feedback
     
     var body: some View {
-    ZStack(alignment: .center) {
-            TabView(selection: $selectedTab) {
-                Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
-                Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
-                Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
-                Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
-                Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
-            }
-            .applyAdaptiveTabStyle()
-            .background(
-                // Glass backdrop for iPhone where system tab bar may appear plain
-                Group {
-                    if UIDevice.current.userInterfaceIdiom == .phone {
-                        GeometryReader { proxy in
-                            VStack { Spacer() }
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .background(Color.clear)
-                                .overlay(alignment: .bottom) {
-                                    Rectangle()
-                                        .fill(Color.clear)
-                                        .glassTabBar()
-                                        .frame(height: 72)
-                                        .allowsHitTesting(false)
-                                }
-                        }
-                        .ignoresSafeArea(edges: .bottom)
-                    }
-                }
-            )
-            .onAppear { setupGlassTabBar() }
-            
-            if selectedTab == 0 || selectedTab == 1 || selectedTab == 4 { // Notes, Favorites & Tasks
-                creationMenu
-            }
-        } // ZStack
+        TabView(selection: $selectedTab) {
+            Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
+            Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
+            Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
+            Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
+            Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
+        }
         .onAppear { setupViewModel() }
     .onAppear { registerOpenNoteObserver() }
     .onAppear { registerCreateAndLinkObserver() }
@@ -84,107 +56,7 @@ struct MainTabView: View {
         }
     }
     
-    // MARK: - Native Creation Menu
-    private var creationMenu: some View {
-        Group {
-            if selectedTab == 1 { // Favorites tab - direct action
-                Button {
-                    HapticManager.shared.noteCreated()
-                    createNewFavoritedNote()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.blue)
-                        .padding(14)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(
-                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        )
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, 16)
-                .padding(.top, 12)
-                .accessibilityLabel("Create Favorite Note")
-            } else if selectedTab == 4 { // Tasks tab - direct quick task action
-                Button {
-                    HapticManager.shared.buttonTapped()
-                    showingQuickTaskCapture = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.blue)
-                        .padding(14)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(
-                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        )
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, 16)
-                .padding(.top, 12)
-                .accessibilityLabel("Create Quick Task")
-            } else { // Other tabs - show menu
-                Menu {
-                    Button { HapticManager.shared.noteCreated(); createNewNote() } label: { Label("New Note", systemImage: "doc.badge.plus") }
-                    Button { HapticManager.shared.buttonTapped(); showingQuickTaskCapture = true } label: { Label("Quick Task", systemImage: "checklist") }
-                    if selectedTab == 0 { // Only on Notes tab
-                        Button { HapticManager.shared.buttonTapped(); createNewFolder() } label: { Label("New Folder", systemImage: "folder.badge.plus") }
-                    }
-                    Divider()
-                    Button { HapticManager.shared.buttonTapped(); showingDailyReview = true } label: { Label("Daily Review", systemImage: "calendar") }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3.weight(.semibold))
-                        .padding(14)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(
-                            Circle().stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        )
-                        .contentShape(Circle())
-                }
-                .menuActionDismissBehavior(.automatic)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, 16)
-                .padding(.top, 12)
-                .accessibilityLabel("Create")
-            }
-        }
-    }
     
-    private func setupGlassTabBar() {
-        let appearance = UITabBarAppearance()
-        appearance.configureWithTransparentBackground()
-        if #available(iOS 15.0, *) {
-            appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
-        }
-        appearance.backgroundColor = UIColor.clear
-        
-        appearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
-        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
-            .foregroundColor: UIColor.secondaryLabel,
-            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
-        ]
-        
-        appearance.stackedLayoutAppearance.selected.iconColor = UIColor.label
-        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
-            .foregroundColor: UIColor.label,
-            .font: UIFont.systemFont(ofSize: 10, weight: .semibold)
-        ]
-        
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
-    UITabBar.appearance().clipsToBounds = false
-    UITabBar.appearance().isTranslucent = true
-        
-        if #available(iOS 17.0, *) {
-            UITabBar.appearance().barTintColor = UIColor.clear
-            UITabBar.appearance().isTranslucent = true
-        }
-    }
     
     private func setupViewModel() {
         if notesViewModel == nil {
@@ -276,7 +148,6 @@ private extension MainTabView {
             guard let vm = notesViewModel else { return }
             Task { @MainActor in
                 let new = vm.createNote(in: selectedFolder, title: title, content: "")
-                // reindex removed
                 selectedNote = new
             }
         }
@@ -382,10 +253,3 @@ private extension MainTabView {
         .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
 }
 
-// MARK: - Adaptive Tab Style
-private extension View {
-    @ViewBuilder func applyAdaptiveTabStyle() -> some View {
-    // Always use standard tab style (feedback: no sidebar menu on iPad)
-    self
-    }
-}

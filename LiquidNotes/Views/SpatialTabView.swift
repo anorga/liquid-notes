@@ -23,6 +23,8 @@ struct SpatialTabView: View {
     @AppStorage("foldersCollapsed") private var foldersCollapsed: Bool = false
     @State private var batchActionAnimating: Bool = false
     @State private var dropHoverFolderID: UUID? = nil
+    @State private var showingDailyReview = false
+    @State private var showingCreationActionSheet = false
     // Archived inline option removed; filters always visible
     
     var body: some View {
@@ -74,6 +76,7 @@ struct SpatialTabView: View {
                 }
                 .overlay(alignment: .bottom) { if selectionMode { batchActionBar.transition(.move(edge: .bottom).combined(with: .opacity)) } }
             }
+            .overlay(alignment: .topTrailing) { floatingCreationButton }
             .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
@@ -109,6 +112,15 @@ struct SpatialTabView: View {
                     )
             }
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
+            .sheet(isPresented: $showingDailyReview) {
+                DailyReviewView()
+            }
+            .confirmationDialog("Create", isPresented: $showingCreationActionSheet) {
+                Button("New Note") { createNewNote() }
+                Button("New Folder") { createNewFolder() }
+                Button("Daily Review") { showingDailyReview = true }
+                Button("Cancel", role: .cancel) { }
+            }
         }
     }
 
@@ -491,6 +503,24 @@ struct SpatialTabView: View {
             .navigationTitle(movingSingleNote == nil ? "Move Notes" : "Move Note")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingMoveSheet = false; movingSingleNote = nil } } }
         }
+    }
+    
+    private var floatingCreationButton: some View {
+        Button { 
+            showingCreationActionSheet = true
+            HapticManager.shared.buttonTapped()
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.blue)
+                .frame(width: 56, height: 56)
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 20)
+        .padding(.top, 20)
     }
 
 }

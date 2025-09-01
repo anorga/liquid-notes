@@ -56,6 +56,7 @@ struct PinnedNotesView: View {
                     }
                 }
             }
+            .overlay(alignment: .topTrailing) { floatingCreationButton }
             .navigationBarHidden(true)
             .onAppear { setupViewModels() }
             .sheet(item: $selectedNote) { note in
@@ -99,6 +100,42 @@ struct PinnedNotesView: View {
         }
         
         HapticManager.shared.buttonTapped()
+    }
+    
+    private func createNewFavoritedNote() {
+        guard let viewModel = notesViewModel else { return }
+        
+        let newNote = viewModel.createNote(title: "", content: "")
+        newNote.isFavorited = true
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving favorited note: \(error)")
+        }
+        
+        selectedNote = newNote
+        showingNoteEditor = true
+        
+        HapticManager.shared.noteCreated()
+    }
+    
+    private var floatingCreationButton: some View {
+        Button { 
+            createNewFavoritedNote()
+            HapticManager.shared.buttonTapped()
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.blue)
+                .frame(width: 56, height: 56)
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 20)
+        .padding(.top, 20)
     }
 }
 
