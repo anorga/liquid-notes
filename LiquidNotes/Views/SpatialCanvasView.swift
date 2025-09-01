@@ -45,7 +45,8 @@ struct SpatialCanvasView: View {
     @State private var lastSnappedDetent: CGFloat?
     
     // Equal-spacing adaptive layout configuration
-    private let gapSpacing: CGFloat = 16
+    // Slightly tighter gaps to give cards more width
+    private let gapSpacing: CGFloat = 12
     private var targetColumns: Int { UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2 }
     @State private var computedCardWidth: CGFloat = 160
     private var cardBaseHeight: CGFloat { UIDevice.current.userInterfaceIdiom == .pad ? 210 : 190 }
@@ -310,6 +311,19 @@ private struct GridNoteCard: View {
     private var verticalPadding: CGFloat { 14 }
     private var showAttachmentPreview: Bool { true }
     private var contentLineLimit: Int { 3 }
+    // Dynamic adjustments: shrink attachment & content lines if title is long to prevent visual overflow
+    private var isLongTitle: Bool { note.title.count > 24 } // tighter threshold for layout adjustments
+    private var dynamicAttachmentHeight: CGFloat {
+        guard showAttachmentPreview, note.attachments.first != nil else { return 0 }
+        // More aggressive shrink for long titles to keep title within bounds
+        if isLongTitle && !note.content.isEmpty { return 60 }
+        return 90
+    }
+    private var dynamicContentLineLimit: Int {
+        // When title is long and attachment present, reduce body lines so layout stays balanced
+        if isLongTitle && dynamicAttachmentHeight < 90 { return 2 }
+        return contentLineLimit
+    }
     private var displayedTags: [String] {
         guard !note.tags.isEmpty else { return [] }
     let available = max(60, cardWidth - horizontalPadding * 2 - 40)
@@ -332,12 +346,13 @@ private struct GridNoteCard: View {
                 contentView
                 attachmentPreviewView
                 tagsRow
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
+                bottomBar
             }
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .frame(width: cardWidth, height: cardHeight, alignment: .leading)
-            .overlay(alignment: .topTrailing) { topRightBadges }
+            // Removed top-right overlay badges; now using bottom bar inside stack
             .overlay(alignment: .bottomTrailing) {
                 if showActions && !selectionMode {
                     actionButtons
@@ -435,11 +450,12 @@ private extension GridNoteCard {
         let hasBadges = note.isFavorited || ((note.tasks?.isEmpty) == false)
     HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: isLongTitle ? 15 : 16, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
+                .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
-                .padding(.trailing, hasBadges ? 60 : 0)
+                .layoutPriority(1)
             Spacer(minLength: 4)
         }
     }
@@ -452,12 +468,14 @@ private extension GridNoteCard {
                     else if let uiImage = UIImage(data: firstImageData) { Image(uiImage: uiImage).resizable() }
                 }
                 .aspectRatio(contentMode: .fill)
-                .frame(height: 90)
+                .frame(height: dynamicAttachmentHeight)
                 .clipped()
                 .cornerRadius(12)
-                LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
-                    .blendMode(.overlay)
-                    .cornerRadius(12)
+                if dynamicAttachmentHeight > 0 {
+                    LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
+                        .blendMode(.overlay)
+                        .cornerRadius(12)
+                }
             }
         }
     }
@@ -468,7 +486,7 @@ private extension GridNoteCard {
                 .font(.system(size: 14))
                 .fontWeight(.regular)
                 .foregroundStyle(.primary.opacity(0.8))
-                .lineLimit(contentLineLimit)
+                .lineLimit(dynamicContentLineLimit)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(2)
                 .padding(.top, 2)
@@ -496,107 +514,91 @@ private extension GridNoteCard {
         }
     }
 
-    @ViewBuilder var topRightBadges: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            HStack(spacing: 6) {
-                if note.isFavorited {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .padding(6)
-                        .transition(.scale.combined(with: .opacity))
-                }
-                if let tasks = note.tasks, !tasks.isEmpty {
-                    let incomplete = tasks.filter { !$0.isCompleted }.count
-                    let allDone = incomplete == 0
-                    let upcoming = tasks.filter { !$0.isCompleted && $0.dueDate != nil }
-                        .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
-                        .first?.dueDate
-                    let overdueCount = tasks.filter { !$0.isCompleted && ($0.dueDate.map { Calendar.current.startOfDay(for: $0) < Calendar.current.startOfDay(for: Date()) } ?? false) }.count
-                    HStack(spacing: 4) {
-                        Image(systemName: allDone ? "checkmark.circle.fill" : "checklist")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(allDone ? "Done" : "\(incomplete)/\(tasks.count)")
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule().fill(
-                            allDone ? LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
-                    )
-                    .overlay(Capsule().stroke(Color.white.opacity(allDone ? 0.35 : 0.22), lineWidth: 0.6))
-                    .foregroundStyle(allDone ? .white : .primary.opacity(0.85))
-                    .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
+    // Repositioned icons into a bottom bar instead of top-right overlay
+    @ViewBuilder var bottomBar: some View {
+        HStack(spacing: 8) {
+            if note.isFavorited {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .transition(.scale.combined(with: .opacity))
-                    .accessibilityLabel(Text(allDone ? "All tasks complete" : "\(incomplete) incomplete of \(tasks.count) tasks"))
-                    if overdueCount > 0 {
-                        Text("\(overdueCount)⚠︎")
-                            .font(.system(size: 9, weight: .semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.red.opacity(0.25)))
-                            .foregroundStyle(.red)
-                            .transition(.scale.combined(with: .opacity))
-                            .accessibilityLabel(Text("\(overdueCount) overdue tasks"))
-                    } else if let upcoming = upcoming {
-                        let dayString = upcoming.ln_dayDistanceString()
-                        Text(dayString)
+            }
+            if let tasks = note.tasks, !tasks.isEmpty {
+                let incomplete = tasks.filter { !$0.isCompleted }.count
+                let allDone = incomplete == 0
+                let upcoming = tasks.filter { !$0.isCompleted && $0.dueDate != nil }
+                    .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+                    .first?.dueDate
+                let overdueCount = tasks.filter { !$0.isCompleted && ($0.dueDate.map { Calendar.current.startOfDay(for: $0) < Calendar.current.startOfDay(for: Date()) } ?? false) }.count
+                HStack(spacing: 4) {
+                    Image(systemName: allDone ? "checkmark.circle.fill" : "checklist")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(allDone ? "Done" : "\(incomplete)/\(tasks.count)")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(
+                        allDone ? LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.02)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                )
+                .overlay(Capsule().stroke(Color.white.opacity(allDone ? 0.35 : 0.22), lineWidth: 0.6))
+                .foregroundStyle(allDone ? .white : .primary.opacity(0.85))
+                .shadow(color: allDone ? Color.green.opacity(0.25) : .clear, radius: allDone ? 6 : 0, x: 0, y: 2)
+                .transition(.scale.combined(with: .opacity))
+                if overdueCount > 0 {
+                    Text("\(overdueCount)⚠︎")
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.red.opacity(0.25)))
+                        .foregroundStyle(.red)
+                        .transition(.scale.combined(with: .opacity))
+                } else if let upcoming = upcoming {
+                    let dayString = upcoming.ln_dayDistanceString()
+                    Text(dayString)
                         .font(.system(size: 9, weight: .semibold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color.orange.opacity(0.22)))
                         .foregroundStyle(.orange)
                         .transition(.scale.combined(with: .opacity))
-                        .accessibilityLabel(Text("Next due date"))
-                    }
-                }
-                if (note.tasks?.isEmpty ?? true) {
-                    Button {
-                        HapticManager.shared.buttonTapped()
-                        ModelMutationScheduler.shared.schedule { note.addTask("New Task") }
-                    } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
-                }
-                if !(note.tasks?.isEmpty ?? true) {
-                    ZStack {
-                        Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 4)
-                        Circle()
-                            .trim(from: 0, to: note.progress)
-                            .stroke(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                    }
-                    .frame(width: 20, height: 20)
-                    .animation(.easeInOut(duration: 0.3), value: note.progress)
-                    .accessibilityLabel(Text("Progress \(Int(note.progress * 100)) percent"))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            if !showAttachmentPreview && !note.attachments.isEmpty {
-                Image(systemName: "paperclip")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(5)
-                    .background(Circle().fill(.ultraThinMaterial))
-                    .clipShape(Circle())
-                    .transition(.opacity.combined(with: .scale))
-                    .onTapGesture { onTap() }
+            if (note.tasks?.isEmpty ?? true) {
+                Button {
+                    HapticManager.shared.buttonTapped()
+                    ModelMutationScheduler.shared.schedule { note.addTask("New Task") }
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }.buttonStyle(.plain)
             }
+            if !(note.tasks?.isEmpty ?? true) {
+                ZStack {
+                    Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 4)
+                    Circle()
+                        .trim(from: 0, to: note.progress)
+                        .stroke(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 20, height: 20)
+                .animation(.easeInOut(duration: 0.3), value: note.progress)
+            }
+            Spacer(minLength: 0)
             if note.isArchived {
                 Text("Archived")
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 2)
     }
     
     @ViewBuilder var actionButtons: some View {
