@@ -35,8 +35,43 @@ class NotesViewModel {
         let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
+        // Assign to default folder if one exists (or create it if none present)
+        let folderDescriptor = FetchDescriptor<Folder>()
+        if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
+            note.folder = first
+        } else {
+            // Create a default folder named "Folder" and assign
+            let defaultFolder = Folder(name: "Folder")
+            modelContext.insert(defaultFolder)
+            note.folder = defaultFolder
+        }
         modelContext.insert(note)
         
+        saveContext()
+        return note
+    }
+
+    /// Creates a note optionally in a provided folder; if folder supplied we do NOT auto-create or reassign.
+    func createNote(in folder: Folder?, title: String = "", content: String = "") -> Note {
+        let note = Note(title: title, content: content)
+        let descriptor = FetchDescriptor<Note>()
+        let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
+        let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
+        note.zIndex = maxZIndex + 1
+        if let folder = folder {
+            note.folder = folder
+        } else {
+            // fall back to existing default assignment logic
+            let folderDescriptor = FetchDescriptor<Folder>()
+            if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
+                note.folder = first
+            } else {
+                let defaultFolder = Folder(name: "Folder")
+                modelContext.insert(defaultFolder)
+                note.folder = defaultFolder
+            }
+        }
+        modelContext.insert(note)
         saveContext()
         return note
     }
@@ -74,7 +109,7 @@ class NotesViewModel {
     
     // MARK: - Folder Operations
     
-    func createFolder(name: String = "New Folder") -> Folder {
+    func createFolder(name: String = "Folder") -> Folder {
         let folder = Folder(name: name)
         
         // Ensure new folders get the highest z-index
@@ -84,7 +119,7 @@ class NotesViewModel {
         folder.zIndex = maxZIndex + 1
         
         modelContext.insert(folder)
-        saveContext()
+    saveContext()
         return folder
     }
     
@@ -225,27 +260,5 @@ class NotesViewModel {
         saveContext()
     }
 
-    // MARK: - Linking / Indexing
-    /// Recomputes link references for all notes (useful after introducing the feature or bulk edits).
-    func reindexLinks() {
-        let descriptor = FetchDescriptor<Note>()
-        guard let all = try? modelContext.fetch(descriptor) else { return }
-        var changed = false
-        // Map of lowercased title & aliases -> note id
-        var titleMap: [String: UUID] = [:]
-        for note in all {
-            let current = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !current.isEmpty { titleMap[current.lowercased()] = note.id }
-            for alias in note.aliasTitles { titleMap[alias.lowercased()] = note.id }
-        }
-        for note in all {
-            let before = note.linkedNoteTitles
-            note.updateLinkedNoteTitles()
-            if before != note.linkedNoteTitles { changed = true }
-            // Resolve to UUIDs
-            let resolved = note.linkedNoteTitles.compactMap { titleMap[$0.lowercased()] }
-            if resolved.sorted() != note.linkedNoteIDs.sorted() { note.linkedNoteIDs = Array(Set(resolved)); changed = true }
-        }
-        if changed { saveContext() }
-    }
+    // Linking reindex removed for simplification.
 }

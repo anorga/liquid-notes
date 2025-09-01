@@ -3,7 +3,7 @@ import SwiftData
 
 struct PinnedNotesView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Note> { note in note.isFavorited == true }, sort: \Note.modifiedDate, order: .reverse)
+    @Query(filter: #Predicate<Note> { note in note.isFavorited == true && note.isSystem == false }, sort: \Note.modifiedDate, order: .reverse)
     private var favoritedNotes: [Note]
     
     @State private var notesViewModel: NotesViewModel?
@@ -50,7 +50,8 @@ struct PinnedNotesView: View {
                             onFolderFavorite: nil,
                             selectionMode: false,
                             selectedNoteIDs: $selectedNoteIDs,
-                            onToggleSelect: { _ in }
+                            onToggleSelect: { _ in },
+                            topContentInset: 12
                         )
                     }
                 }

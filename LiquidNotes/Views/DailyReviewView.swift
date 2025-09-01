@@ -63,7 +63,7 @@ private struct SectionCard: View {
                                 }
                             }
                             Spacer()
-                            if let due = note.dueDate { Text(due, style: .date).font(.caption2).foregroundStyle(.secondary) }
+                            if let due = note.dueDate { Text(due.ln_dayDistanceString()).font(.caption2).foregroundStyle(.secondary) }
                         }
                         .padding(.horizontal, 10).padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.07)))
