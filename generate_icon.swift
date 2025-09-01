@@ -3,8 +3,41 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import CryptoKit
 
 struct IconGenerator {
+    // Attempt to load a user-provided 1024x1024 (or any size) PNG named icon_source.png
+    static func loadSourceIcon() -> CGImage? {
+        let fm = FileManager.default
+        let path = fm.currentDirectoryPath + "/icon_source.png"
+        if fm.fileExists(atPath: path), let nsImage = NSImage(contentsOf: URL(fileURLWithPath: path)) {
+            // Normalize to 1024x1024 canvas (keeping aspect, letterboxing with transparency)
+            guard let rep = nsImage.representations.first else { return nil }
+            let target: CGFloat = 1024
+            let w = CGFloat(rep.pixelsWide)
+            let h = CGFloat(rep.pixelsHigh)
+            if let cg = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                if w == target && h == target { return cg }
+                let colorSpace = CGColorSpaceCreateDeviceRGB()
+                guard let ctx = CGContext(data: nil, width: Int(target), height: Int(target), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return cg }
+                ctx.clear(CGRect(x: 0, y: 0, width: target, height: target))
+                let env = ProcessInfo.processInfo.environment
+                let cropFill = env["ICON_CROP_FILL"] == "1"
+                // scaleForLetterbox fits entire image; scaleForFill covers and crops
+                let scaleFit = min(target / w, target / h)
+                let scaleFill = max(target / w, target / h)
+                let scale = cropFill ? scaleFill : scaleFit
+                let drawW = w * scale
+                let drawH = h * scale
+                // Center position; if cropFill true, some parts will be clipped when drawn outside canvas
+                let drawRect = CGRect(x: (target - drawW)/2, y: (target - drawH)/2, width: drawW, height: drawH)
+                ctx.interpolationQuality = .high
+                ctx.draw(cg, in: drawRect)
+                return ctx.makeImage()
+            }
+        }
+        return nil
+    }
     static func createModernIcon() -> CGImage? {
         let width = 1024
         let height = 1024
@@ -151,10 +184,25 @@ struct IconGenerator {
     }
 }
 
-if let cgImage = IconGenerator.createModernIcon() {
-    // Target pixel sizes for required iOS/iPadOS icons (distinct set, duplicates allowed)
-    let explicitList: [Int] = [20,29,40,58,60,76,80,87,120,152,167,180,1024] // removed non-standard 83 size
+// Determine asset directory robustly relative to script location and CWD
+let scriptURL = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+let scriptDir = scriptURL.deletingLastPathComponent()
+let fm = FileManager.default
+let candidatePaths: [URL] = [
+    scriptDir.appendingPathComponent("LiquidNotes/Assets.xcassets/AppIcon.appiconset"),
+    scriptDir.deletingLastPathComponent().appendingPathComponent("LiquidNotes/Assets.xcassets/AppIcon.appiconset"),
+    URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("LiquidNotes/Assets.xcassets/AppIcon.appiconset"),
+    URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("Assets.xcassets/AppIcon.appiconset")
+]
+let assetDir = candidatePaths.first { fm.fileExists(atPath: $0.path) } ?? candidatePaths[2]
+print("ℹ️ Using asset directory: \(assetDir.path)")
 
+let usedSource = IconGenerator.loadSourceIcon() != nil
+let baseImage: CGImage? = IconGenerator.loadSourceIcon() ?? IconGenerator.createModernIcon()
+print("ℹ️ Source mode: \(usedSource ? "icon_source.png" : "procedural fallback")")
+
+if let cgImage = baseImage {
+    let explicitList: [Int] = [20,29,40,58,60,76,80,87,120,152,167,180,1024]
     func resized(_ image: CGImage, to pixel: Int) -> CGImage? {
         if image.width == pixel { return image }
         guard let ctx = CGContext(data: nil,
@@ -169,22 +217,29 @@ if let cgImage = IconGenerator.createModernIcon() {
         return ctx.makeImage()
     }
 
-    let fm = FileManager.default
-    let baseDir = fm.currentDirectoryPath + "/LiquidNotes/Assets.xcassets/AppIcon.appiconset"
-    var generated: [String] = []
+    let encoder = { (data: Data) -> String in
+        if #available(macOS 10.15, *) {
+            let digest = SHA256.hash(data: data)
+            return digest.compactMap { String(format: "%02x", $0) }.joined().prefix(12) + "…"
+        } else { return "hash-n/a" }
+    }
+
+    var summary: [String] = []
     for p in explicitList {
-        if let scaled = resized(cgImage, to: p) {
-            let rep = NSBitmapImageRep(cgImage: scaled)
-            if let data = rep.representation(using: .png, properties: [:]) {
-                let name = "icon-\(p).png"
-                let path = baseDir + "/" + name
-                do { try data.write(to: URL(fileURLWithPath: path)); generated.append(name) } catch {
-                    fputs("Failed writing \(name): \(error)\n", stderr)
-                }
-            }
+        guard let scaled = resized(cgImage, to: p) else { continue }
+        let rep = NSBitmapImageRep(cgImage: scaled)
+        guard let data = rep.representation(using: .png, properties: [:]) else { continue }
+        let name = "icon-\(p).png"
+        let pathURL = assetDir.appendingPathComponent(name)
+        do {
+            try data.write(to: pathURL, options: .atomic)
+            summary.append("\(name)(\(data.count/1024)KB, sha \(encoder(data)))")
+        } catch {
+            fputs("Failed writing \(name): \(error)\n", stderr)
         }
     }
-    print("✅ Generated icons: \(generated.joined(separator: ", "))")
+    print("✅ Regenerated: \n  • " + summary.joined(separator: "\n  • "))
+    print("Done. If Xcode still shows old artwork, Clean Build Folder (Shift+Cmd+K) and reinstall, or bump build number.")
 } else {
-    print("❌ Failed to generate icon")
+    print("❌ Failed to generate icon (no usable base image)")
 }
