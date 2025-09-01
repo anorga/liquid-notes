@@ -24,7 +24,7 @@ struct SpatialTabView: View {
     @State private var batchActionAnimating: Bool = false
     @State private var dropHoverFolderID: UUID? = nil
     @State private var showingDailyReview = false
-    @State private var showingCreationActionSheet = false
+    @State private var showingCreationPopover = false
     // Archived inline option removed; filters always visible
     
     var body: some View {
@@ -114,12 +114,6 @@ struct SpatialTabView: View {
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
             .sheet(isPresented: $showingDailyReview) {
                 DailyReviewView()
-            }
-            .confirmationDialog("Create", isPresented: $showingCreationActionSheet) {
-                Button("New Note") { createNewNote() }
-                Button("New Folder") { createNewFolder() }
-                Button("Daily Review") { showingDailyReview = true }
-                Button("Cancel", role: .cancel) { }
             }
         }
     }
@@ -507,7 +501,7 @@ struct SpatialTabView: View {
     
     private var floatingCreationButton: some View {
         Button { 
-            showingCreationActionSheet = true
+            showingCreationPopover = true
             HapticManager.shared.buttonTapped()
         } label: {
             Image(systemName: "plus")
@@ -519,6 +513,54 @@ struct SpatialTabView: View {
                 .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .popover(isPresented: $showingCreationPopover, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                Button { createNewNote(); showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "note.text.badge.plus")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("New Note")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
+                Button { createNewFolder(); showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "folder.badge.plus")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("New Folder")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
+                Button { showingDailyReview = true; showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "calendar.day.timeline.leading")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("Daily Review")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(minWidth: 160)
+            .presentationCompactAdaptation(.popover)
+        }
         .padding(.trailing, 20)
         .padding(.top, 20)
     }
