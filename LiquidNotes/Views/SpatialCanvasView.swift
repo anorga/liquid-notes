@@ -436,20 +436,17 @@ private extension GridNoteCard {
     @ViewBuilder var attachmentPreviewView: some View {
         if showAttachmentPreview, let firstImageData = note.attachments.first, let firstType = note.attachmentTypes.first {
             ZStack(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.regularMaterial)
-                    .frame(height: 90)
                 Group {
                     if firstType.contains("gif") { AnimatedGIFView(data: firstImageData) }
                     else if let uiImage = UIImage(data: firstImageData) { Image(uiImage: uiImage).resizable() }
                 }
                 .aspectRatio(contentMode: .fill)
-                .frame(height: 80)
+                .frame(height: 90)
                 .clipped()
-                .cornerRadius(10)
+                .cornerRadius(12)
                 LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
                     .blendMode(.overlay)
-                    .cornerRadius(10)
+                    .cornerRadius(12)
             }
         }
     }
