@@ -10,13 +10,10 @@ import SwiftData
 
 struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(CommandTrigger.self) private var commandTrigger
     @State private var selectedTab = 0
     @State private var selectedFolder: Folder? = nil // shared across entry points
-    @State private var showingQuickCapture = false // quick note
     @State private var showingQuickTaskCapture = false // single task capture
     @State private var quickTasksNoteID: UUID? = nil // cached reference
-    @State private var showingCommandPalette = false
     @State private var showingDailyReview = false
     @State private var openNoteObserver: NSObjectProtocol?
     @State private var createAndLinkObserver: NSObjectProtocol?
@@ -66,24 +63,11 @@ struct MainTabView: View {
     .onAppear { registerCreateAndLinkObserver() }
     .onDisappear { if let obs = openNoteObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = createAndLinkObserver { NotificationCenter.default.removeObserver(obs) } }
-    .onChange(of: commandTrigger.openPalette) { _, v in if v { showingCommandPalette = true; commandTrigger.openPalette = false } }
-    .onChange(of: commandTrigger.newQuickNote) { _, v in if v { showingQuickCapture = true; commandTrigger.newQuickNote = false } }
-    .onChange(of: commandTrigger.newFullNote) { _, v in if v { createNewNote(); commandTrigger.newFullNote = false } }
-    .onChange(of: commandTrigger.openDailyReview) { _, v in if v { showingDailyReview = true; commandTrigger.openDailyReview = false } }
+    // Command system removed
     // Removed reindex trigger (simplification)
         .sheet(item: $selectedNote) { note in
             NoteEditorView(note: note)
                 .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showingQuickCapture) {
-            QuickCaptureView { title, body, tags in
-                guard let vm = notesViewModel else { return }
-                let note = vm.createNote(in: selectedFolder, title: title, content: body)
-                tags.forEach { note.addTag($0) }
-                note.updateLinkedNoteTitles()
-                selectedNote = note // optionally jump into full editor
-            }
-            .presentationDetents([.fraction(0.38), .medium])
         }
         .sheet(isPresented: $showingDailyReview) {
             DailyReviewView()
@@ -98,12 +82,6 @@ struct MainTabView: View {
             }
             .presentationDetents([.fraction(0.3)])
         }
-        .sheet(isPresented: $showingCommandPalette) {
-            CommandPaletteView(
-                onSelect: handleCommand
-            )
-            .presentationDetents([.fraction(0.4), .large])
-        }
     }
     
     // MARK: - Native Creation Menu
@@ -116,7 +94,6 @@ struct MainTabView: View {
             }
             Divider()
             Button { HapticManager.shared.buttonTapped(); showingDailyReview = true } label: { Label("Daily Review", systemImage: "calendar") }
-            Button { HapticManager.shared.buttonTapped(); showingCommandPalette = true } label: { Label("Commands", systemImage: "command") }
             // Reindex removed
         } label: {
             Image(systemName: "plus")
@@ -202,79 +179,9 @@ struct MainTabView: View {
     }
 }
 
-// MARK: - Command Handling
-private extension MainTabView {
-    func handleCommand(_ command: CommandPaletteView.Command) {
-    let analytics = AnalyticsManager.shared
-        switch command {
-    case .newQuickNote: showingQuickCapture = true; analytics.increment("cmd.quickNote")
-    case .newFullNote: createNewNote(); analytics.increment("cmd.fullNote")
-    case .dailyReview: showingDailyReview = true; analytics.increment("cmd.dailyReview")
-    // reindexLinks removed
-    case .openSearch: selectedTab = 2; analytics.increment("cmd.openSearch")
-    case .openTasks: selectedTab = 4; analytics.increment("cmd.openTasks")
-    case .toggleFocus:
-        NotificationCenter.default.post(name: .lnToggleFocusMode, object: nil)
-        analytics.increment("cmd.toggleFocus")
-    case .newTemplate:
-        createNewNote()
-        NotificationCenter.default.post(name: .lnInsertTemplate, object: nil)
-        analytics.increment("cmd.newTemplate")
-        }
-    }
-}
-
-// MARK: - Command Palette View
-struct CommandPaletteView: View {
-    enum Command: String, CaseIterable, Identifiable { case newQuickNote, newFullNote, dailyReview, openSearch, openTasks, toggleFocus, newTemplate; var id: String { rawValue } }
-    let onSelect: (Command) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-    private var filtered: [Command] { if query.isEmpty { return Command.allCases } else { return Command.allCases.filter { $0.rawValue.localizedCaseInsensitiveContains(query) } } }
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                LiquidNotesBackground().ignoresSafeArea()
-                VStack(spacing: 0) {
-                    LNHeader(title: "Commands") { EmptyView() }
-                    VStack(spacing: 14) {
-                        TextField("Type a command…", text: $query)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.elevated, in: RoundedRectangle(cornerRadius: 14))
-                            .padding(.top, 8)
-                            .padding(.horizontal, 8)
-                        List(filtered) { cmd in
-                            Button(action: { onSelect(cmd); dismiss() }) {
-                                HStack {
-                                    Text(label(cmd)).font(.body)
-                                    Spacer()
-                                    Text(shortcut(cmd)).font(.caption2).foregroundStyle(.secondary)
-                                }
-                            }
-                            .listRowBackground(Color.clear)
-                        }
-                        .listStyle(.plain)
-                        .padding(.top, 4)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 4)
-                }
-            }
-            .navigationBarHidden(true)
-        }
-    }
-    private func label(_ c: Command) -> String {
-    switch c { case .newQuickNote: return "New Quick Note"; case .newFullNote: return "New Full Note"; case .dailyReview: return "Open Daily Review"; case .openSearch: return "Go to Search"; case .openTasks: return "Go to Tasks"; case .toggleFocus: return "Toggle Focus Mode"; case .newTemplate: return "New Structured Note" }
-    }
-    private func shortcut(_ c: Command) -> String { "" }
-}
-
 // MARK: - Notification Handling
 extension Notification.Name { static let lnOpenNoteRequested = Notification.Name("lnOpenNoteRequested") }
 extension Notification.Name { static let lnCreateAndLinkNoteRequested = Notification.Name("lnCreateAndLinkNoteRequested") }
-extension Notification.Name { static let lnToggleFocusMode = Notification.Name("lnToggleFocusMode") }
-extension Notification.Name { static let lnInsertTemplate = Notification.Name("lnInsertTemplate") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {
@@ -301,66 +208,6 @@ private extension MainTabView {
     }
 }
 
-// MARK: - Quick Capture Sheet
-struct QuickCaptureView: View {
-    @Environment(\.dismiss) private var dismiss
-    let onSave: (String, String, [String]) -> Void
-    @State private var title: String = ""
-    // Renamed from `body` to avoid clashing with the computed View `body`
-    @State private var noteBody: String = ""
-    @State private var tagsText: String = ""
-    @State private var isSaving = false
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                LiquidNotesBackground().ignoresSafeArea()
-                VStack(alignment: .leading, spacing: 0) {
-                    LNHeader(title: "Quick Capture") { EmptyView() }
-                    VStack(spacing: 16) {
-                        TextField("Title", text: $title)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
-                        TextField("Quick note…", text: $noteBody, axis: .vertical)
-                            .lineLimit(3, reservesSpace: true)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
-                        TextField("Tags (comma)", text: $tagsText)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
-                        Spacer(minLength: 0)
-                        HStack {
-                            Button("Cancel") { dismiss() }
-                                .buttonStyle(.borderless)
-                            Spacer()
-                            Button {
-                                guard !isSaving else { return }
-                                isSaving = true
-                                let tagList = tagsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-                                onSave(title, noteBody, tagList)
-                                HapticManager.shared.success()
-                                dismiss()
-                            } label: {
-                                Text("Save")
-                                    .fontWeight(.semibold)
-                                    .padding(.horizontal, 22).padding(.vertical, 12)
-                                    .background(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .clipShape(Capsule())
-                                    .foregroundStyle(.white)
-                            }
-                            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && noteBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .opacity((title.isEmpty && noteBody.isEmpty) ? 0.4 : 1)
-                        }
-                    }
-                    .padding(20)
-                }
-            }
-            .navigationBarHidden(true)
-        }
-    }
-}
 
 // MARK: - Quick Task Capture Sheet
 struct QuickTaskCaptureView: View {
