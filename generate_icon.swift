@@ -205,13 +205,17 @@ if let cgImage = baseImage {
     let explicitList: [Int] = [20,29,40,58,60,76,80,87,120,152,167,180,1024]
     func resized(_ image: CGImage, to pixel: Int) -> CGImage? {
         if image.width == pixel { return image }
-        guard let ctx = CGContext(data: nil,
-                                  width: pixel,
-                                  height: pixel,
-                                  bitsPerComponent: 8,
-                                  bytesPerRow: 0,
-                                  space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+    // Use noneSkipLast to ensure final image is opaque (alpha removed)
+    guard let ctx = CGContext(data: nil,
+                  width: pixel,
+                  height: pixel,
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+    // Fill background with solid black (can change if needed) to eliminate any transparency
+    ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: pixel, height: pixel))
         ctx.interpolationQuality = .high
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: pixel, height: pixel))
         return ctx.makeImage()
