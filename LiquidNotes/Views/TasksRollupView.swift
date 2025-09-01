@@ -59,9 +59,11 @@ struct TasksRollupView: View {
         } else {
             priorityFiltered = searchFiltered
         }
-        // Sort by priority (custom order), then progress ascending, then modifiedDate desc
+        // Sort with Quick Tasks (system notes) always first, then by priority (custom order), then progress ascending, then modifiedDate desc
         let priorityOrder: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
         return priorityFiltered.sorted { lhs, rhs in
+            // Quick Tasks (system) first
+            if lhs.isSystem != rhs.isSystem { return lhs.isSystem && !rhs.isSystem }
             let lp = priorityOrder[lhs.priority, default: 4]
             let rp = priorityOrder[rhs.priority, default: 4]
             if lp != rp { return lp < rp }
