@@ -45,36 +45,46 @@ struct TaskListView: View {
             .padding(.top, 12)
             
             if isAddingTask {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     TextField("New task...", text: $newTaskText)
                         .textFieldStyle(.plain)
                         .font(.callout)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
                         .background(.clear)
                         .modernGlassCard()
-                        .onSubmit {
-                            addNewTask()
-                        }
-                    Menu {
-                        DatePicker(
-                            "Due Date",
-                            selection: Binding(
-                                get: { newTaskDueDate ?? Date() },
-                                set: { newVal in newTaskDueDate = newVal }
-                            ),
-                            displayedComponents: .date
-                        )
-                        if newTaskDueDate != nil {
-                            Button(role: .destructive) { newTaskDueDate = nil } label: { Label("Clear Date", systemImage: "xmark.circle") }
-                        }
-                    } label: {
-                        Image(systemName: newTaskDueDate == nil ? "calendar.badge.plus" : "calendar")
+                        .onSubmit { addNewTask() }
+
+                    // Calendar button opens sheet picker immediately (pre-add)
+                    Button(action: { showingCalendar = true }) {
+                        Image(systemName: newTaskDueDate == nil ? "calendar.badge.plus" : "calendar.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(newTaskDueDate == nil ? Color.primary : Color.orange)
                             .padding(8)
                             .background(.ultraThinMaterial, in: Circle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(newTaskDueDate == nil ? "Add due date" : "Edit due date"))
+
+                    if let due = newTaskDueDate {
+                        HStack(spacing: 4) {
+                            Text(due.ln_dayDistanceString())
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.orange.opacity(0.15)))
+                                .foregroundStyle(.orange)
+                            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { newTaskDueDate = nil } }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+
                     Button(action: addNewTask) {
                         Text("Add")
                             .font(.callout)
@@ -132,6 +142,14 @@ struct TaskListView: View {
         }
         .background(.clear)
         .ambientGlassEffect()
+        // Sheet for picking due date before adding the task
+        .sheet(isPresented: $showingCalendar) {
+            DueDateCalendarPicker(initialDate: newTaskDueDate) { selected in
+                newTaskDueDate = selected
+                showingCalendar = false
+            }
+            .presentationDetents([.medium])
+        }
     }
     
     private func calculateProgress() -> Double {

@@ -29,9 +29,12 @@ struct DueDateCalendarPicker: View {
             .background(LiquidNotesBackground().ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Set") { onSelect(tempDate); dismiss() }.disabled(!isChanged) }
-                ToolbarItem(placement: .destructiveAction) {
-                    if initialDate != nil { Button("Clear", role: .destructive) { onSelect(nil); dismiss() } }
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    if initialDate != nil {
+                        Button("Clear", role: .destructive) { onSelect(nil); dismiss() }
+                    }
+                    Button("Set") { onSelect(tempDate); dismiss() }
+                        .disabled(!isChanged)
                 }
             }
             .navigationTitle("Choose Date")

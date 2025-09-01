@@ -447,7 +447,6 @@ private extension GridNoteCard {
 
 
     @ViewBuilder var noteHeader: some View {
-        let hasBadges = note.isFavorited || ((note.tasks?.isEmpty) == false)
     HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
                 .font(.system(size: isLongTitle ? 15 : 16, weight: .semibold))
