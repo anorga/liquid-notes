@@ -23,6 +23,9 @@ struct SpatialTabView: View {
     @AppStorage("foldersCollapsed") private var foldersCollapsed: Bool = false
     @State private var batchActionAnimating: Bool = false
     @State private var dropHoverFolderID: UUID? = nil
+    @State private var showingDailyReview = false
+    @State private var showingCreationPopover = false
+    @State private var showingQuickTaskCapture = false
     // Archived inline option removed; filters always visible
     
     var body: some View {
@@ -74,6 +77,7 @@ struct SpatialTabView: View {
                 }
                 .overlay(alignment: .bottom) { if selectionMode { batchActionBar.transition(.move(edge: .bottom).combined(with: .opacity)) } }
             }
+            .overlay(alignment: .topTrailing) { floatingCreationButton }
             .navigationBarHidden(true)
             .onAppear {
                 setupViewModels()
@@ -109,6 +113,19 @@ struct SpatialTabView: View {
                     )
             }
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
+            .sheet(isPresented: $showingDailyReview) {
+                DailyReviewView()
+            }
+            .sheet(isPresented: $showingQuickTaskCapture) {
+                QuickTaskCaptureView { taskText, due in
+                    guard let vm = notesViewModel else { return }
+                    let target = fetchOrCreateQuickTasksNote(using: vm)
+                    target.addTask(taskText, dueDate: due)
+                    try? modelContext.save()
+                    HapticManager.shared.success()
+                }
+                .presentationDetents([.fraction(0.3)])
+            }
         }
     }
 
@@ -361,8 +378,22 @@ struct SpatialTabView: View {
     }
     private func deleteFolder(_ folder: Folder) {
         guard let viewModel = notesViewModel else { return }
+        // Disallow deleting the final remaining folder to avoid churn / auto recreation.
+        if folders.count <= 1 { 
+            HapticManager.shared.buttonTapped() // subtle feedback for ignored action
+            return 
+        }
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.3)) { viewModel.deleteFolder(folder) }
+            // If deletion removed the last folder, ensure a default is present and adopt it.
+            if folders.isEmpty {
+                if let newDefault = viewModel.ensureDefaultFolderAndReassignOrphans() {
+                    selectedFolder = newDefault
+                }
+            } else {
+                // If current selection was this folder, clear so ensureFolderSelection() will pick another
+                if selectedFolder?.id == folder.id { selectedFolder = nil; ensureFolderSelection() }
+            }
         }
     }
     private func toggleFolderFavorite(_ folder: Folder) {
@@ -477,6 +508,101 @@ struct SpatialTabView: View {
             .navigationTitle(movingSingleNote == nil ? "Move Notes" : "Move Note")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingMoveSheet = false; movingSingleNote = nil } } }
         }
+    }
+    
+    private var floatingCreationButton: some View {
+        Button { 
+            showingCreationPopover = true
+            HapticManager.shared.buttonTapped()
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundStyle(.blue)
+                .frame(width: 56, height: 56)
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showingCreationPopover, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                Button { createNewNote(); showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "note.text.badge.plus")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("New Note")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
+                Button { showingQuickTaskCapture = true; showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("Quick Task")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
+                Button { createNewFolder(); showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "folder.badge.plus")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("New Folder")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                
+                Button { showingDailyReview = true; showingCreationPopover = false } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "calendar.day.timeline.leading")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("Daily Review")
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(minWidth: 160)
+            .presentationCompactAdaptation(.popover)
+        }
+        .padding(.trailing, 20)
+        .padding(.top, 20)
+    }
+    
+    private func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
+        let title = "Quick Tasks"
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
+        if let found = try? modelContext.fetch(descriptor).first {
+            return found
+        }
+        
+        let new = vm.createNote(in: selectedFolder, title: title, content: "")
+        new.isFavorited = false
+        new.isSystem = true
+        try? modelContext.save()
+        return new
     }
 
 }
