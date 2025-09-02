@@ -50,12 +50,12 @@ enum AttachmentFileStore {
         return base.appendingPathComponent(noteID.uuidString, isDirectory: true)
     }
     
-    static func saveAttachment(note: Note, data: Data, type: String, preferredExt: String) -> (fileName: String, thumbName: String?)? {
+    static func saveAttachment(note: Note, data: Data, type: String, preferredExt: String) -> (id: String, fileName: String, thumbName: String?)? {
         ensureDirs()
         guard let dir = noteDir(noteID: note.id) else { return nil }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let id = UUID().uuidString
-        let fileName = id + "." + preferredExt
+    let fileName = id + "." + preferredExt
         let fileURL = dir.appendingPathComponent(fileName)
         do { try data.write(to: fileURL, options: .atomic) } catch { return nil }
         // Thumbnail (only for images)
@@ -73,7 +73,7 @@ enum AttachmentFileStore {
                 do { try tData.write(to: dir.appendingPathComponent(tn), options: .atomic); thumbName = tn } catch {}
             }
         }
-        note.addFileAttachment(id: id, type: type, fileName: fileName, thumbName: thumbName)
-        return (fileName, thumbName)
+    note.addFileAttachment(id: id, type: type, fileName: fileName, thumbName: thumbName)
+    return (id, fileName, thumbName)
     }
 }
