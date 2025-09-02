@@ -131,6 +131,9 @@ class NotesViewModel {
         }
         modelContext.delete(folder)
         saveContext()
+    // After deletion, if there are now zero folders, immediately create a default one
+    // and reassign any orphan notes so they remain organized.
+    ensureDefaultFolderAndReassignOrphans()
     }
     
     func toggleFolderFavorite(_ folder: Folder) {
@@ -261,4 +264,27 @@ class NotesViewModel {
     }
 
     // Linking reindex removed for simplification.
+
+    // MARK: - Integrity Helpers
+    /// Ensures at least one folder exists; if none, creates a default "Folder" and returns it.
+    /// Also reassigns any orphan notes (folder == nil) to this default for consistency.
+    @discardableResult
+    func ensureDefaultFolderAndReassignOrphans() -> Folder? {
+        let folderDescriptor = FetchDescriptor<Folder>()
+        let existingFolders = (try? modelContext.fetch(folderDescriptor)) ?? []
+        var targetFolder: Folder? = existingFolders.first
+        if targetFolder == nil {
+            let created = Folder(name: "Folder")
+            modelContext.insert(created)
+            targetFolder = created
+        }
+        if let target = targetFolder {
+            let noteDescriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.folder == nil })
+            if let orphans = try? modelContext.fetch(noteDescriptor) {
+                for orphan in orphans { orphan.folder = target }
+            }
+        }
+        saveContext()
+        return targetFolder
+    }
 }
