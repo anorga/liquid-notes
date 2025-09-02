@@ -271,9 +271,16 @@ struct NativeNoteEditor: View {
         note.title = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         note.content = lines.dropFirst().joined(separator: "\n")
         note.previewExcerpt = String(note.content.prefix(240))
-        // Archive rich text
-    note.richTextData = RichTextArchiver.archive(attributed)
-    (tv as? NativeTextView)?.reconcileFileAttachments()
+        // Tokenize & archive lightweight representation (no embedded binaries)
+        let tokenized = RichTextArchiver.tokenizedAttributedString(from: attributed)
+        if let data = RichTextArchiver.archiveTokenized(tokenized) {
+            let hash = RichTextArchiver.computeHash(data: data)
+            if hash != note.richTextHash {
+                note.richTextData = data
+                note.richTextHash = hash
+            }
+        }
+        (tv as? NativeTextView)?.reconcileFileAttachments()
         note.updateModifiedDate()
     NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
         
@@ -424,11 +431,11 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Load archived rich text if present; fallback to plain text
         if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
-            let mutable = NSMutableAttributedString(attributedString: archived)
-            // Standardize attributes & upgrade attachments
+            let containsTokens = archived.string.contains(RichTextArchiver.attachmentTokenPrefix)
+            let rebuilt = containsTokens ? RichTextArchiver.rebuildFromTokens(note: note, tokenized: archived) : archived
+            let mutable = NSMutableAttributedString(attributedString: rebuilt)
             upgradeAndNormalizeLoadedAttachments(in: mutable, for: note)
             textView.attributedText = mutable
-            // Start GIF animations after setting text
             textView.startGIFAnimations()
         } else {
             let fullText = note.title.isEmpty ? note.content : "\(note.title)\n\(note.content)"
@@ -591,7 +598,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
     var note: Note?
     var hasChangesBinding: Binding<Bool>?
     var modelContext: ModelContext?
-    private var debounceInterval: TimeInterval { 0.6 }
+    private var debounceInterval: TimeInterval {
+        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { return 1.2 }
+        return 0.6
+    }
+    private var recentMediaInsertionDate: Date = .distantPast
     private var lastScheduledItemKey = "LNTextSaveWorkItem"
     private static var workItems: [String: DispatchWorkItem] = [:]
     
@@ -669,14 +680,33 @@ class NativeTextView: UITextView, UITextViewDelegate {
         if let existing = NativeTextView.workItems[key] { existing.cancel() }
         let item = DispatchWorkItem { [weak self] in
             guard let self, let ctx = self.modelContext else { return }
-            // Perform lightweight incremental save (archive + preview + thumbs if new attachments)
             let attributed = self.attributedText ?? NSAttributedString(string: self.text ?? "")
-            note.richTextData = RichTextArchiver.archive(attributed)
-            // Update preview excerpt quickly
-            note.previewExcerpt = String((note.content).prefix(240))
+            // Extract plain text quickly (skip attachments replaced by newline)
+            var plainBuilder = ""
+            attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, _ in
+                if attrs[.attachment] == nil {
+                    plainBuilder.append((attributed.string as NSString).substring(with: range))
+                } else {
+                    plainBuilder.append("\n")
+                }
+            }
+            let lines = plainBuilder.components(separatedBy: "\n")
+            note.title = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            note.content = lines.dropFirst().joined(separator: "\n")
+            note.previewExcerpt = String(note.content.prefix(240))
             self.reconcileFileAttachments()
-            try? ctx.save()
-            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+            note.updateModifiedDate()
+            let tokenized = RichTextArchiver.tokenizedAttributedString(from: attributed)
+            DispatchQueue.global(qos: .utility).async {
+                if let data = RichTextArchiver.archiveTokenized(tokenized) {
+                    let hash = RichTextArchiver.computeHash(data: data)
+                    DispatchQueue.main.async {
+                        if hash != note.richTextHash { note.richTextData = data; note.richTextHash = hash }
+                        try? ctx.save()
+                        NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                    }
+                }
+            }
         }
         NativeTextView.workItems[key] = item
         DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: item)
@@ -943,14 +973,13 @@ class NativeTextView: UITextView, UITextViewDelegate {
     let imageType = isGIF ? "image/gif" : "image/jpeg"
         hasChangesBinding?.wrappedValue = true
         if let modelNote = attachment.note ?? self.note {
-            // Store file-based (preferred) & keep legacy arrays for now (migration step later)
-            if let saved = AttachmentFileStore.saveAttachment(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") {
-                attachment.attachmentID = saved.id
+            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") { id, _, _ in
+                if let id { attachment.attachmentID = id }
                 NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
             }
         }
-    // Configure GIF animation (after saving so we know ID)
     if isGIF { attachment.configureGIFAnimation(with: data, in: self) }
+    recentMediaInsertionDate = Date()
     }
     
     func insertInlineFile(_ url: URL) {
@@ -1332,9 +1361,20 @@ class InteractiveTextAttachment: NSTextAttachment {
             gifCurrentIndex = (gifCurrentIndex + 1) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
             // Trigger redraw for attachment range
-            if let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager? {
-                // Invalidate display for entire text to keep simple
-                lm.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: tv.attributedText.length))
+            if let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager?, let full = tv.attributedText {
+                let searchRange = NSRange(location: 0, length: full.length)
+                var targetRange: NSRange?
+                full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
+                    if let att = value as? InteractiveTextAttachment, att === self {
+                        targetRange = range
+                        stop.pointee = true
+                    }
+                }
+                if let r = targetRange {
+                    lm.invalidateDisplay(forCharacterRange: r)
+                } else {
+                    lm.invalidateDisplay(forCharacterRange: searchRange)
+                }
             }
         }
     }
