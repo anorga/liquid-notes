@@ -7,7 +7,7 @@ struct NoteEditorView: View {
     let note: Note
     
     var body: some View {
-        WorkingNoteEditor(note: note)
+        NativeNoteEditor(note: note)
     }
 }
 
