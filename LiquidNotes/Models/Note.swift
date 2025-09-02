@@ -41,6 +41,8 @@ final class Note {
     var fileAttachmentTypes: [String] = []        // MIME types
     var fileAttachmentNames: [String] = []        // stored file names (with extension)
     var fileAttachmentThumbNames: [String] = []   // thumbnail file names (optional)
+    // One-time flag to prevent repeated legacy attachment migration
+    var legacyMigrationDone: Bool = false
     // Parsed [[link]] titles referenced in content (resolved lazily by title match)
     var linkedNoteTitles: [String] = []
     // Historical titles for stable link resolution if a note is renamed
@@ -90,6 +92,7 @@ final class Note {
     self.linkUsageCount = 0
     self.lastLinkedDate = nil
     self.previewExcerpt = ""
+    self.legacyMigrationDone = false
     }
     
     var priority: NotePriority {

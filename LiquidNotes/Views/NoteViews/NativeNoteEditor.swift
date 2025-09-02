@@ -5,6 +5,7 @@ import UIKit
 import UniformTypeIdentifiers
 import Photos
 import ObjectiveC
+import ImageIO
 
 struct NativeNoteEditor: View {
     @Environment(\.dismiss) private var dismiss
@@ -22,6 +23,8 @@ struct NativeNoteEditor: View {
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingGifPicker = false
+    @State private var pendingSaveWorkItem: DispatchWorkItem?
+    private let saveDebounceInterval: TimeInterval = 0.6
     
     var body: some View {
         NavigationStack {
@@ -166,11 +169,13 @@ struct NativeNoteEditor: View {
                     .foregroundStyle(.primary)
             }
             
-            Button(action: { 
-                showingGifPicker = true
-            }) {
-                Image(systemName: "photo.stack")
-                    .font(.title2)
+            Button(action: { showingGifPicker = true }) {
+                Text("GIF")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
                     .foregroundStyle(.primary)
             }
             
@@ -248,7 +253,10 @@ struct NativeNoteEditor: View {
                     // Only store if not already present
                     if att.attachmentID == nil { att.attachmentID = UUID().uuidString }
                     if !noteRef.fileAttachmentIDs.contains(att.attachmentID!) {
-                        _ = AttachmentFileStore.saveAttachment(note: noteRef, data: data, type: mime, preferredExt: ext)
+                        if let saved = AttachmentFileStore.saveAttachment(note: noteRef, data: data, type: mime, preferredExt: ext) {
+                            // Link attachmentID to archived interactive attachment
+                            att.attachmentID = saved.id
+                        }
                     }
                     if let id = att.attachmentID { usedFileIDs.insert(id) }
                 }
@@ -279,9 +287,7 @@ struct NativeNoteEditor: View {
     }
     
     private func saveIfNeeded() {
-        if hasChanges {
-            saveNote()
-        }
+    if hasChanges { saveNote() }
     }
     
     private func cancelEdit() {
@@ -375,6 +381,24 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.note = note
         textView.hasChangesBinding = $hasChanges
         textView.modelContext = modelContext
+
+        // One-time migration of legacy inline attachments Data -> file-based
+        if !note.legacyMigrationDone && !note.attachments.isEmpty {
+            for (idx, data) in note.attachments.enumerated() {
+                guard idx < note.attachmentTypes.count else { continue }
+                let type = note.attachmentTypes[idx]
+                let ext: String
+                if type.contains("gif") { ext = "gif" }
+                else if type.contains("png") { ext = "png" }
+                else { ext = "jpg" }
+                _ = AttachmentFileStore.saveAttachment(note: note, data: data, type: type, preferredExt: ext)
+            }
+            note.attachments.removeAll()
+            note.attachmentTypes.removeAll()
+            note.attachmentIDs.removeAll()
+            note.legacyMigrationDone = true
+            try? modelContext.save()
+        }
         
         // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
@@ -398,28 +422,44 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.spellCheckingType = .yes
         textView.autocorrectionType = .yes
         
-    // Load archived rich text if present; fallback to plain text
-    if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
-        let normalized = NSMutableAttributedString(attributedString: archived)
-        normalized.enumerateAttributes(in: NSRange(location: 0, length: normalized.length)) { attrs, range, _ in
-            var newAttrs = attrs
-            if newAttrs[.font] == nil { newAttrs[.font] = UIFont.systemFont(ofSize: 20, weight: .regular) }
-            if newAttrs[.foregroundColor] == nil { newAttrs[.foregroundColor] = UIColor.label }
-            normalized.setAttributes(newAttrs, range: range)
+        // Load archived rich text if present; fallback to plain text
+        if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
+            let mutable = NSMutableAttributedString(attributedString: archived)
+            // Standardize attributes & upgrade attachments
+            upgradeAndNormalizeLoadedAttachments(in: mutable, for: note)
+            textView.attributedText = mutable
+            // Start GIF animations after setting text
+            textView.startGIFAnimations()
+        } else {
+            let fullText = note.title.isEmpty ? note.content : "\(note.title)\n\(note.content)"
+            let mutable = NSMutableAttributedString(string: fullText, attributes: [
+                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                .foregroundColor: UIColor.label
+            ])
+            // Legacy inline attachment arrays support (temporary) - will be removed post migration
+            textView.loadSavedAttachments(from: note, into: mutable)
+            textView.attributedText = mutable
+            textView.startGIFAnimations()
         }
-        textView.attributedText = normalized
-    } else {
-        let fullText = note.title.isEmpty ? note.content : "\(note.title)\n\(note.content)"
-        let mutable = NSMutableAttributedString(string: fullText, attributes: [
-            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-            .foregroundColor: UIColor.label
-        ])
-        // Legacy inline attachment arrays support (temporary)
-        textView.loadSavedAttachments(from: note, into: mutable)
-        textView.attributedText = mutable
-    }
         
         return textView
+    }
+
+    /// Normalize already archived inline image attachments (from loaded attributed text) to current device sizing rules.
+    private func normalizeInlineAttachmentSizes(in textView: UITextView) {
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        let maxWidth: CGFloat = isPad ? 420 : 300
+        let maxHeight: CGFloat = isPad ? 360 : 260
+        textView.attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: textView.attributedText.length)) { value, range, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            var bounds = attachment.bounds
+            if bounds.width == 0 || bounds.height == 0 { return }
+            let scale = min(1, min(maxWidth / bounds.width, maxHeight / bounds.height))
+            if scale < 0.999 { // shrink only
+                bounds.size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+                attachment.bounds = bounds
+            }
+        }
     }
     
     func updateUIView(_ uiView: NativeTextView, context: Context) {
@@ -471,7 +511,78 @@ struct NativeTextCanvas: UIViewRepresentable {
                 nativeTextView.hasChangesBinding?.wrappedValue = true
                 // Just format links, no title formatting
                 nativeTextView.formatLinks()
+                nativeTextView.scheduleDebouncedSave()
+                nativeTextView.broadcastLivePreviewUpdate()
             }
+        }
+    }
+
+    /// Rehydrate, scale, animate, and ID-bind loaded NSTextAttachments after unarchiving rich text.
+    private func upgradeAndNormalizeLoadedAttachments(in mutable: NSMutableAttributedString, for note: Note) {
+        let fullRange = NSRange(location: 0, length: mutable.length)
+        // First normalize base attributes
+        mutable.enumerateAttributes(in: fullRange) { attrs, range, _ in
+            var newAttrs = attrs
+            if newAttrs[.font] == nil { newAttrs[.font] = UIFont.systemFont(ofSize: 20, weight: .regular) }
+            if newAttrs[.foregroundColor] == nil { newAttrs[.foregroundColor] = UIColor.label }
+            mutable.setAttributes(newAttrs, range: range)
+        }
+        // Collect attachment ranges
+        var attachmentRanges: [NSRange] = []
+        mutable.enumerateAttribute(.attachment, in: fullRange) { value, range, _ in
+            if value is NSTextAttachment { attachmentRanges.append(range) }
+        }
+        guard !attachmentRanges.isEmpty else { return }
+        let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        let maxWidth: CGFloat = isPad ? 520 : 320
+        let minWidth: CGFloat = isPad ? 180 : 120
+        let maxHeight: CGFloat = isPad ? 320 : 220
+        // Map existing file attachment metadata in order
+        let count = min(attachmentRanges.count, note.fileAttachmentIDs.count)
+        for i in 0..<count {
+            let range = attachmentRanges[i]
+            guard let old = mutable.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment else { continue }
+            // Load corresponding file data
+            let id = note.fileAttachmentIDs[i]
+            let type = i < note.fileAttachmentTypes.count ? note.fileAttachmentTypes[i] : "image/jpeg"
+            let fileName = i < note.fileAttachmentNames.count ? note.fileAttachmentNames[i] : ""
+            var data: Data? = nil
+            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty {
+                let url = dir.appendingPathComponent(fileName)
+                data = try? Data(contentsOf: url)
+            }
+            // Build interactive attachment
+            let newAttachment = InteractiveTextAttachment()
+            newAttachment.note = note
+            newAttachment.attachmentID = id
+            if type.hasPrefix("image"), let d = data {
+                // GIF support
+                if type == "image/gif", let animated = animatedImage(fromGIFData: d) {
+                    newAttachment.image = animated
+                } else if let img = UIImage(data: d) {
+                    newAttachment.image = img
+                } else if let img = old.image { // fallback
+                    newAttachment.image = img
+                }
+                newAttachment.imageData = d
+            } else if let img = old.image {
+                newAttachment.image = img
+            }
+            // Determine intrinsic size
+            var size = newAttachment.image?.size ?? old.image?.size ?? CGSize(width: 200, height: 200)
+            // Scale
+            if size.width > maxWidth || size.height > maxHeight {
+                let scale = min(maxWidth / max(size.width, 1), maxHeight / max(size.height, 1))
+                size = CGSize(width: size.width * scale, height: size.height * scale)
+            }
+            if size.width < minWidth { // upscale very small icons
+                let scale = minWidth / max(size.width, 1)
+                size = CGSize(width: size.width * scale, height: size.height * scale)
+            }
+            newAttachment.bounds = CGRect(x: 0, y: -5, width: size.width, height: size.height)
+            // Replace in attributed string
+            let replacement = NSAttributedString(attachment: newAttachment)
+            mutable.replaceCharacters(in: range, with: replacement)
         }
     }
 }
@@ -480,6 +591,9 @@ class NativeTextView: UITextView, UITextViewDelegate {
     var note: Note?
     var hasChangesBinding: Binding<Bool>?
     var modelContext: ModelContext?
+    private var debounceInterval: TimeInterval { 0.6 }
+    private var lastScheduledItemKey = "LNTextSaveWorkItem"
+    private static var workItems: [String: DispatchWorkItem] = [:]
     
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -546,6 +660,31 @@ class NativeTextView: UITextView, UITextViewDelegate {
         for id in existing where !presentIDs.contains(id) {
             note.removeFileAttachment(id: id)
         }
+    }
+
+    func scheduleDebouncedSave() {
+        guard let binding = hasChangesBinding, binding.wrappedValue, let note else { return }
+        let key = note.id.uuidString
+        // Cancel previous
+        if let existing = NativeTextView.workItems[key] { existing.cancel() }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, let ctx = self.modelContext else { return }
+            // Perform lightweight incremental save (archive + preview + thumbs if new attachments)
+            let attributed = self.attributedText ?? NSAttributedString(string: self.text ?? "")
+            note.richTextData = RichTextArchiver.archive(attributed)
+            // Update preview excerpt quickly
+            note.previewExcerpt = String((note.content).prefix(240))
+            self.reconcileFileAttachments()
+            try? ctx.save()
+            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+        }
+        NativeTextView.workItems[key] = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: item)
+    }
+
+    func broadcastLivePreviewUpdate() {
+        guard let note else { return }
+        NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
     }
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
@@ -799,14 +938,19 @@ class NativeTextView: UITextView, UITextViewDelegate {
         attributedText = mutableText
         selectedRange = NSRange(location: range.location + fullString.length, length: 0)
         
-        // Persist into note model - determine type based on data
-        let imageType = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38]) ? "image/gif" : "image/jpeg"
+    // Persist into note model - determine type based on data
+    let isGIF = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38])
+    let imageType = isGIF ? "image/gif" : "image/jpeg"
         hasChangesBinding?.wrappedValue = true
         if let modelNote = attachment.note ?? self.note {
             // Store file-based (preferred) & keep legacy arrays for now (migration step later)
-            _ = AttachmentFileStore.saveAttachment(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg")
-            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
+            if let saved = AttachmentFileStore.saveAttachment(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") {
+                attachment.attachmentID = saved.id
+                NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
+            }
         }
+    // Configure GIF animation (after saving so we know ID)
+    if isGIF { attachment.configureGIFAnimation(with: data, in: self) }
     }
     
     func insertInlineFile(_ url: URL) {
@@ -1051,6 +1195,14 @@ class InteractiveTextAttachment: NSTextAttachment {
     var fileName: String?
     var fileExtension: String?
     var attachmentID: String?
+    // GIF animation support
+    fileprivate var gifFrames: [UIImage] = []
+    fileprivate var gifDurations: [Double] = []
+    fileprivate var gifTotalDuration: Double = 0
+    fileprivate var gifDisplayLink: CADisplayLink?
+    fileprivate var gifCurrentIndex: Int = 0
+    fileprivate weak var hostingTextView: UITextView?
+    fileprivate var gifAccumulated: Double = 0
     
     override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
         return bounds
@@ -1138,6 +1290,96 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.hasChangesBinding?.wrappedValue = true
+        }
+    }
+
+    fileprivate func configureGIFAnimation(with data: Data, in textView: UITextView) {
+        hostingTextView = textView
+        extractGIFFrames(data: data)
+        startGIFIfNeeded()
+    }
+    
+    private func extractGIFFrames(data: Data) {
+        gifFrames.removeAll(); gifDurations.removeAll(); gifTotalDuration = 0; gifCurrentIndex = 0; gifAccumulated = 0
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
+        let count = CGImageSourceGetCount(source)
+        guard count > 0 else { return }
+        var total: Double = 0
+        for i in 0..<count {
+            guard let cg = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
+            let duration = gifFrameDuration(source: source, index: i)
+            gifFrames.append(UIImage(cgImage: cg))
+            gifDurations.append(duration)
+            total += duration
+        }
+        gifTotalDuration = total
+        if let first = gifFrames.first { self.image = first }
+    }
+    
+    private func startGIFIfNeeded() {
+        guard gifFrames.count > 1, gifDisplayLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
+        gifDisplayLink = link
+        link.add(to: .main, forMode: .common)
+    }
+    
+    @objc private func stepGIF(_ link: CADisplayLink) {
+        guard gifFrames.count > 1 else { return }
+        gifAccumulated += link.duration
+        // Advance frames while accumulated > current frame duration (handle slow frames)
+        while gifAccumulated > gifDurations[gifCurrentIndex] {
+            gifAccumulated -= gifDurations[gifCurrentIndex]
+            gifCurrentIndex = (gifCurrentIndex + 1) % gifFrames.count
+            self.image = gifFrames[gifCurrentIndex]
+            // Trigger redraw for attachment range
+            if let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager? {
+                // Invalidate display for entire text to keep simple
+                lm.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: tv.attributedText.length))
+            }
+        }
+    }
+    
+    deinit {
+        gifDisplayLink?.invalidate()
+    }
+}
+
+// MARK: - GIF Utilities
+private func animatedImage(fromGIFData data: Data) -> UIImage? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    let frameCount = CGImageSourceGetCount(source)
+    guard frameCount > 1 else { return UIImage(data: data) }
+    var images: [UIImage] = []
+    var duration: Double = 0
+    for i in 0..<frameCount {
+        guard let cg = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
+        let frameDuration = gifFrameDuration(source: source, index: i)
+        duration += frameDuration
+        images.append(UIImage(cgImage: cg))
+    }
+    if duration <= 0 { duration = Double(frameCount) * 0.08 }
+    return UIImage.animatedImage(with: images, duration: duration)
+}
+
+private func gifFrameDuration(source: CGImageSource, index: Int) -> Double {
+    guard let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+          let gifDict = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else { return 0.1 }
+    let unclamped = gifDict[kCGImagePropertyGIFUnclampedDelayTime] as? Double
+    let clamped = gifDict[kCGImagePropertyGIFDelayTime] as? Double
+    let val = unclamped ?? clamped ?? 0.1
+    return val < 0.02 ? 0.02 : val
+}
+
+extension NativeTextView {
+    // Enumerate attachments and start GIF animations post-load
+    func startGIFAnimations() {
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment, let data = att.imageData, att.gifFrames.isEmpty {
+                // Determine if data is GIF
+                if data.count > 4 && data.subdata(in: 0..<4) == Data([0x47,0x49,0x46,0x38]) {
+                    att.configureGIFAnimation(with: data, in: self)
+                }
+            }
         }
     }
 }
