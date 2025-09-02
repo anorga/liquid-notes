@@ -129,6 +129,7 @@ struct MainTabView: View {
 // MARK: - Notification Handling
 extension Notification.Name { static let lnOpenNoteRequested = Notification.Name("lnOpenNoteRequested") }
 extension Notification.Name { static let lnCreateAndLinkNoteRequested = Notification.Name("lnCreateAndLinkNoteRequested") }
+extension Notification.Name { static let lnNoteAttachmentsChanged = Notification.Name("lnNoteAttachmentsChanged") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {

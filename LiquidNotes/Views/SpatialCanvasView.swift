@@ -325,7 +325,10 @@ private struct GridNoteCard: View {
     // Dynamic adjustments: shrink attachment & content lines if title is long to prevent visual overflow
     private var isLongTitle: Bool { note.title.count > 24 } // tighter threshold for layout adjustments
     private var dynamicAttachmentHeight: CGFloat {
-        guard showAttachmentPreview, note.attachments.first != nil else { return 0 }
+    // Use file-based attachments if present; fallback to legacy
+    let hasFile = !note.fileAttachmentIDs.isEmpty
+    let hasLegacy = note.attachments.first != nil
+    guard showAttachmentPreview, (hasFile || hasLegacy) else { return 0 }
         // Smaller baseline to maintain consistent padding around all elements
         if isLongTitle && !note.content.isEmpty { return 55 }
         return 78
@@ -476,11 +479,10 @@ private extension GridNoteCard {
     }
 
     @ViewBuilder var attachmentPreviewView: some View {
-        if showAttachmentPreview, let firstImageData = note.attachments.first, let firstType = note.attachmentTypes.first {
+    if showAttachmentPreview, let previewImage = spatialPreviewImage(for: note) {
             ZStack(alignment: .bottom) {
                 Group {
-                    if firstType.contains("gif") { AnimatedGIFView(data: firstImageData) }
-                    else if let uiImage = UIImage(data: firstImageData) { Image(uiImage: uiImage).resizable() }
+                    Image(uiImage: previewImage).resizable()
                 }
                 .aspectRatio(contentMode: .fill)
                 .frame(height: dynamicAttachmentHeight)
@@ -493,6 +495,18 @@ private extension GridNoteCard {
                 }
             }
         }
+    }
+
+    private func spatialPreviewImage(for note: Note) -> UIImage? {
+        // Prefer file-based thumbnail if available
+        if let firstThumb = note.fileAttachmentThumbNames.first, !firstThumb.isEmpty,
+           let dir = AttachmentFileStore.noteDir(noteID: note.id) {
+            let url = dir.appendingPathComponent(firstThumb)
+            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) { return img }
+        }
+        // Fallback: first legacy inline attachment data
+        if let data = note.attachments.last, let img = UIImage(data: data) { return img }
+        return nil
     }
 
     @ViewBuilder var contentView: some View {
