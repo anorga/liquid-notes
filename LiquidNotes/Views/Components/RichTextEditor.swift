@@ -187,7 +187,7 @@ struct RichTextEditor: UIViewRepresentable {
                     }
                 } else if item.itemProvider.hasItemConformingToTypeIdentifier(UTType.gif.identifier) {
                     item.itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.gif.identifier) { data, error in
-                        if let data = data, let image = UIImage.animatedImageWithData(data) {
+                        if let data = data, let image = UIImage(data: data) {
                             DispatchQueue.main.async {
                                 self.insertImage(image, into: interaction.view as! UITextView)
                             }
