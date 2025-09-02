@@ -9,6 +9,7 @@ import ObjectiveC
 struct NativeNoteEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     
     let note: Note
     
@@ -17,33 +18,176 @@ struct NativeNoteEditor: View {
     @State private var isNewNote = false
     @State private var showingShareSheet = false
     @State private var shareItem: String = ""
+    @State private var selectedTextStyle: TextStyle = .body
+    @State private var showingPhotoPicker = false
+    @State private var showingDocumentPicker = false
+    @State private var showingGifPicker = false
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Pure liquid glass background - no borders
-                Color.clear
-                    .background(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    // Minimal top navigation - native style
-                    nativeTopBar
+        NavigationStack {
+            GeometryReader { geometry in
+                ZStack {
+                    // Pure liquid glass background - no borders
+                    Color.clear
+                        .background(.ultraThinMaterial)
+                        .ignoresSafeArea()
                     
-                    // Native text editor canvas
-                    NativeTextCanvas(
-                        note: note,
-                        textView: $textView,
-                        hasChanges: $hasChanges
-                    )
+                    VStack(spacing: 0) {
+                        // Minimal top navigation - native style
+                        nativeTopBar
+                        
+                        // Native text editor canvas
+                        NativeTextCanvas(
+                            note: note,
+                            textView: $textView,
+                            hasChanges: $hasChanges,
+                            selectedTextStyle: $selectedTextStyle
+                        )
+                        
+                        // Bottom formatting toolbar
+                        formattingToolbar
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                            .background(.ultraThinMaterial)
+                    }
+                }
+            }
+            .navigationBarHidden(true)
+            .onAppear { setupEditor() }
+            .onDisappear { saveIfNeeded() }
+            .sheet(isPresented: $showingShareSheet) {
+                ShareSheet(activityItems: [shareItem])
+            }
+            .sheet(isPresented: $showingPhotoPicker) {
+                PhotoPickerView { results in
+                    handlePhotoPickerResults(results)
+                }
+            }
+            .sheet(isPresented: $showingDocumentPicker) {
+                DocumentPickerView { urls in
+                    handleDocumentPickerResults(urls)
+                }
+            }
+            .sheet(isPresented: $showingGifPicker) {
+                GifPickerView { results in
+                    handlePhotoPickerResults(results) // GIFs handled same as photos
                 }
             }
         }
-        .navigationBarHidden(true)
-        .onAppear { setupEditor() }
-        .onDisappear { saveIfNeeded() }
-        .sheet(isPresented: $showingShareSheet) {
-            ShareSheet(activityItems: [shareItem])
+    }
+    
+    private var formattingToolbar: some View {
+        HStack(spacing: 16) {
+            // Text styles group
+            Menu {
+                Button(action: { applyTextStyle(.title) }) {
+                    Label("Title", systemImage: "textformat.size.larger")
+                }
+                Button(action: { applyTextStyle(.heading) }) {
+                    Label("Heading", systemImage: "textformat")
+                }
+                Button(action: { applyTextStyle(.subheading) }) {
+                    Label("Subheading", systemImage: "textformat.subscript")
+                }
+                Button(action: { applyTextStyle(.body) }) {
+                    Label("Body", systemImage: "textformat.abc")
+                }
+            } label: {
+                Image(systemName: "textformat.size")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Divider()
+                .frame(height: 20)
+            
+            // Format group
+            Menu {
+                Button(action: { (textView as? NativeTextView)?.formatBold() }) {
+                    Label("Bold", systemImage: "bold")
+                }
+                Button(action: { (textView as? NativeTextView)?.formatItalic() }) {
+                    Label("Italic", systemImage: "italic")
+                }
+                Button(action: { (textView as? NativeTextView)?.formatUnderline() }) {
+                    Label("Underline", systemImage: "underline")
+                }
+                Button(action: { (textView as? NativeTextView)?.formatStrikethrough() }) {
+                    Label("Strikethrough", systemImage: "strikethrough")
+                }
+                Button(action: { (textView as? NativeTextView)?.formatMonospace() }) {
+                    Label("Monospace", systemImage: "textformat.abc.dottedunderline")
+                }
+                Button(action: { (textView as? NativeTextView)?.formatHighlight() }) {
+                    Label("Highlight", systemImage: "highlighter")
+                }
+            } label: {
+                Image(systemName: "bold.italic.underline")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Divider()
+                .frame(height: 20)
+            
+            // Lists group
+            Menu {
+                Button(action: { (textView as? NativeTextView)?.insertBulletList() }) {
+                    Label("Bullet List", systemImage: "list.bullet")
+                }
+                Button(action: { (textView as? NativeTextView)?.insertNumberedList() }) {
+                    Label("Numbered List", systemImage: "list.number")
+                }
+                Button(action: { (textView as? NativeTextView)?.insertTaskList() }) {
+                    Label("Task List", systemImage: "checklist")
+                }
+                Button(action: { (textView as? NativeTextView)?.insertDashedList() }) {
+                    Label("Dashed List", systemImage: "list.dash")
+                }
+                Button(action: { (textView as? NativeTextView)?.insertBlockQuote() }) {
+                    Label("Block Quote", systemImage: "quote.bubble")
+                }
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Divider()
+                .frame(height: 20)
+            
+            // Media group
+            Button(action: { 
+                showingPhotoPicker = true
+            }) {
+                Image(systemName: "photo")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Button(action: { 
+                showingGifPicker = true
+            }) {
+                Image(systemName: "photo.stack")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Button(action: { 
+                showingDocumentPicker = true
+            }) {
+                Image(systemName: "doc")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Button(action: { (textView as? NativeTextView)?.insertLink() }) {
+                Image(systemName: "link")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Spacer()
         }
     }
     
@@ -120,12 +264,75 @@ struct NativeNoteEditor: View {
         }
         dismiss()
     }
+    
+    private func applyTextStyle(_ style: TextStyle) {
+        if let nativeTextView = textView as? NativeTextView {
+            nativeTextView.applyTextStyle(style)
+        }
+        selectedTextStyle = style
+    }
+    
+    private func handlePhotoPickerResults(_ results: [PHPickerResult]) {
+        guard let result = results.first,
+              let nativeTextView = textView as? NativeTextView else { return }
+        
+        // Check if it's a GIF
+        if result.itemProvider.hasItemConformingToTypeIdentifier("com.compuserve.gif") {
+            result.itemProvider.loadDataRepresentation(forTypeIdentifier: "com.compuserve.gif") { data, error in
+                if let data = data {
+                    DispatchQueue.main.async {
+                        if let image = UIImage(data: data) {
+                            nativeTextView.insertInlineImage(image, data: data)
+                        }
+                    }
+                }
+            }
+        } else {
+            // Handle regular images
+            result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+                if let image = object as? UIImage {
+                    result.itemProvider.loadDataRepresentation(forTypeIdentifier: "public.image") { data, error in
+                        DispatchQueue.main.async {
+                            if let data = data {
+                                nativeTextView.insertInlineImage(image, data: data)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func handleDocumentPickerResults(_ urls: [URL]) {
+        guard let url = urls.first,
+              let nativeTextView = textView as? NativeTextView else { return }
+        
+        // Ensure we have access to the file
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
+        nativeTextView.insertInlineFile(url)
+    }
+}
+
+enum TextStyle {
+    case title, heading, subheading, body
+    
+    var font: UIFont {
+        switch self {
+        case .title: return .systemFont(ofSize: 32, weight: .bold)
+        case .heading: return .systemFont(ofSize: 26, weight: .semibold)
+        case .subheading: return .systemFont(ofSize: 22, weight: .medium)
+        case .body: return .systemFont(ofSize: 20, weight: .regular)
+        }
+    }
 }
 
 struct NativeTextCanvas: UIViewRepresentable {
     let note: Note
     @Binding var textView: UITextView?
     @Binding var hasChanges: Bool
+    @Binding var selectedTextStyle: TextStyle
     
     func makeUIView(context: Context) -> NativeTextView {
         let textView = NativeTextView()
@@ -133,14 +340,20 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.note = note
         textView.hasChangesBinding = $hasChanges
         
-        // Native iOS text view setup - no borders
+        // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: 17) // Native iOS font size
-        textView.textColor = .label
+        textView.font = .systemFont(ofSize: 20, weight: .regular) // Increased from 17
+        textView.textColor = .label // Dynamic color for light/dark mode
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
         textView.isScrollEnabled = true
         textView.keyboardDismissMode = .interactive
         textView.allowsEditingTextAttributes = true
+        
+        // Set typing attributes for new text
+        textView.typingAttributes = [
+            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+            .foregroundColor: UIColor.label
+        ]
         
         // Enable native features
         textView.smartInsertDeleteType = .yes
@@ -179,13 +392,33 @@ struct NativeTextCanvas: UIViewRepresentable {
             if let firstLine = lines.first, !firstLine.isEmpty {
                 let titleRange = NSRange(location: 0, length: firstLine.count)
                 attributedText.addAttributes([
-                    .font: UIFont.systemFont(ofSize: 28, weight: .bold),
+                    .font: UIFont.systemFont(ofSize: 32, weight: .bold),
                     .foregroundColor: UIColor.label
                 ], range: titleRange)
+                
+                // Apply body formatting to rest of content
+                if fullText.count > firstLine.count + 1 {
+                    let bodyRange = NSRange(location: firstLine.count + 1, length: fullText.count - firstLine.count - 1)
+                    attributedText.addAttributes([
+                        .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                        .foregroundColor: UIColor.label
+                    ], range: bodyRange)
+                }
             }
+        } else {
+            // If empty, set default attributes
+            attributedText.addAttributes([
+                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                .foregroundColor: UIColor.label
+            ], range: NSRange(location: 0, length: fullText.count))
         }
         
         textView.attributedText = attributedText
+        
+        // Also format any existing links
+        if let nativeTextView = textView as? NativeTextView {
+            nativeTextView.formatLinks()
+        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -244,6 +477,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
                     return // Tap was handled by attachment
                 }
             }
+            
+            // Check if tap is on a link
+            if let link = attributedText.attribute(.link, at: characterIndex, effectiveRange: nil) as? String {
+                showLinkPreview(for: link, at: NSRange(location: characterIndex, length: 1))
+            }
         }
     }
     
@@ -259,123 +497,14 @@ class NativeTextView: UITextView, UITextViewDelegate {
                action == #selector(insertNumberedList) ||
                action == #selector(insertTaskList) ||
                action == #selector(insertBlockQuote) ||
-               action == #selector(insertDivider) ||
-               action == #selector(insertPhoto) ||
-               action == #selector(insertFile)
-    }
-    
-    override func buildMenu(with builder: UIMenuBuilder) {
-        super.buildMenu(with: builder)
-        
-        // Add custom formatting menu
-        let formatMenu = UIMenu(
-            title: "Format",
-            image: UIImage(systemName: "textformat"),
-            children: [
-                UIAction(title: "Bold", image: UIImage(systemName: "bold")) { _ in
-                    self.formatBold()
-                },
-                UIAction(title: "Italic", image: UIImage(systemName: "italic")) { _ in
-                    self.formatItalic()
-                },
-                UIAction(title: "Underline", image: UIImage(systemName: "underline")) { _ in
-                    self.formatUnderline()
-                },
-                UIAction(title: "Strikethrough", image: UIImage(systemName: "strikethrough")) { _ in
-                    self.formatStrikethrough()
-                },
-                UIAction(title: "Monospace", image: UIImage(systemName: "textformat.abc.dottedunderline")) { _ in
-                    self.formatMonospace()
-                },
-                UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { _ in
-                    self.formatHighlight()
-                }
-            ]
-        )
-        
-        // Add text styles menu
-        let stylesMenu = UIMenu(
-            title: "Text Style",
-            image: UIImage(systemName: "textformat.size"),
-            children: [
-                UIAction(title: "Title", image: UIImage(systemName: "textformat.size.larger")) { _ in
-                    self.applyTextStyle(.title)
-                },
-                UIAction(title: "Heading", image: UIImage(systemName: "textformat")) { _ in
-                    self.applyTextStyle(.heading)
-                },
-                UIAction(title: "Subheading", image: UIImage(systemName: "textformat.subscript")) { _ in
-                    self.applyTextStyle(.subheading)
-                },
-                UIAction(title: "Body", image: UIImage(systemName: "textformat.abc")) { _ in
-                    self.applyTextStyle(.body)
-                }
-            ]
-        )
-        
-        // Add lists menu
-        let listsMenu = UIMenu(
-            title: "Lists",
-            image: UIImage(systemName: "list.bullet"),
-            children: [
-                UIAction(title: "Bullet List", image: UIImage(systemName: "list.bullet")) { _ in
-                    self.insertBulletList()
-                },
-                UIAction(title: "Numbered List", image: UIImage(systemName: "list.number")) { _ in
-                    self.insertNumberedList()
-                },
-                UIAction(title: "Task List", image: UIImage(systemName: "checklist")) { _ in
-                    self.insertTaskList()
-                },
-                UIAction(title: "Dashed List", image: UIImage(systemName: "list.dash")) { _ in
-                    self.insertDashedList()
-                }
-            ]
-        )
-        
-        // Add structure menu
-        let structureMenu = UIMenu(
-            title: "Structure",
-            image: UIImage(systemName: "quote.bubble"),
-            children: [
-                UIAction(title: "Block Quote", image: UIImage(systemName: "quote.bubble")) { _ in
-                    self.insertBlockQuote()
-                },
-                UIAction(title: "Divider", image: UIImage(systemName: "minus.forwardslash.plus")) { _ in
-                    self.insertDivider()
-                }
-            ]
-        )
-        
-        // Add media menu
-        let mediaMenu = UIMenu(
-            title: "Insert",
-            image: UIImage(systemName: "plus"),
-            children: [
-                UIAction(title: "Photo", image: UIImage(systemName: "photo")) { _ in
-                    self.insertPhoto()
-                },
-                UIAction(title: "File", image: UIImage(systemName: "doc")) { _ in
-                    self.insertFile()
-                },
-                UIAction(title: "Link", image: UIImage(systemName: "link")) { _ in
-                    self.insertLink()
-                }
-            ]
-        )
-        
-        builder.insertChild(formatMenu, atStartOfMenu: .standardEdit)
-        builder.insertChild(stylesMenu, atStartOfMenu: .standardEdit)
-        builder.insertChild(listsMenu, atStartOfMenu: .standardEdit)
-        builder.insertChild(structureMenu, atStartOfMenu: .standardEdit)
-        builder.insertChild(mediaMenu, atStartOfMenu: .standardEdit)
+               action == #selector(insertDivider)
     }
     
     // MARK: - Formatting Actions
     
     @objc func formatBold() {
         toggleAttribute(.font, transform: { font in
-            guard let font = font as? UIFont else { return UIFont.systemFont(ofSize: 17, weight: .bold) }
+            guard let font = font as? UIFont else { return UIFont.systemFont(ofSize: 20, weight: .bold) }
             return font.fontDescriptor.symbolicTraits.contains(.traitBold) ? 
                 font.withoutTrait(.traitBold) : font.withTrait(.traitBold)
         })
@@ -383,7 +512,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     @objc func formatItalic() {
         toggleAttribute(.font, transform: { font in
-            guard let font = font as? UIFont else { return UIFont.italicSystemFont(ofSize: 17) }
+            guard let font = font as? UIFont else { return UIFont.italicSystemFont(ofSize: 20) }
             return font.fontDescriptor.symbolicTraits.contains(.traitItalic) ? 
                 font.withoutTrait(.traitItalic) : font.withTrait(.traitItalic)
         })
@@ -402,30 +531,17 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
     
     @objc func formatMonospace() {
-        applyAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 17, weight: .regular))
+        applyAttribute(.font, value: UIFont.monospacedSystemFont(ofSize: 20, weight: .regular))
     }
     
     @objc func formatHighlight() {
         // Show color picker for highlighting
         showColorPicker { color in
-            self.applyAttribute(.backgroundColor, value: color)
+            self.applyAttribute(.backgroundColor, value: color.withAlphaComponent(0.3))
         }
     }
     
     // MARK: - Text Styles
-    
-    enum TextStyle {
-        case title, heading, subheading, body
-        
-        var font: UIFont {
-            switch self {
-            case .title: return .systemFont(ofSize: 28, weight: .bold)
-            case .heading: return .systemFont(ofSize: 22, weight: .semibold)
-            case .subheading: return .systemFont(ofSize: 20, weight: .medium)
-            case .body: return .systemFont(ofSize: 17, weight: .regular)
-            }
-        }
-    }
     
     func applyTextStyle(_ style: TextStyle) {
         applyAttribute(.font, value: style.font)
@@ -442,7 +558,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
     
     @objc func insertTaskList() {
-        insertListItem("\u{2610} ")
+        insertListItem("☐ ")
     }
     
     @objc func insertDashedList() {
@@ -459,24 +575,49 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     // MARK: - Media
     
-    @objc func insertPhoto() {
-        presentPhotoPicker()
-    }
-    
-    @objc func insertFile() {
-        presentDocumentPicker()
-    }
+    // Media insertion handled by SwiftUI toolbar, not context menu
     
     @objc func insertLink() {
-        insertText("[[]]")
-        // Move cursor back 2 positions
-        let newRange = NSRange(location: selectedRange.location - 2, length: 0)
-        selectedRange = newRange
-        
-        // Enable link detection and formatting
-        DispatchQueue.main.async {
-            self.formatLinks()
+        // Get selected text or prompt for link text
+        let selectedText = getSelectedText()
+        if !selectedText.isEmpty {
+            // Wrap selected text in link format
+            wrapSelectedTextAsLink(selectedText)
+        } else {
+            // Insert link template
+            insertText("[[Link Text]]")
+            // Move cursor inside brackets
+            let newRange = NSRange(location: selectedRange.location - 2, length: 0)
+            selectedRange = newRange
         }
+    }
+    
+    private func getSelectedText() -> String {
+        guard selectedRange.length > 0 else { return "" }
+        let text = self.text ?? ""
+        guard let range = Range(selectedRange, in: text) else { return "" }
+        return String(text[range])
+    }
+    
+    private func wrapSelectedTextAsLink(_ text: String) {
+        guard selectedRange.length > 0 else { return }
+        
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        // Create link with proper formatting
+        let linkText = NSAttributedString(string: text, attributes: [
+            .font: UIFont.systemFont(ofSize: 20),
+            .foregroundColor: UIColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .link: text
+        ])
+        
+        mutableText.replaceCharacters(in: selectedRange, with: linkText)
+        
+        let currentRange = NSRange(location: selectedRange.location + text.count, length: 0)
+        attributedText = mutableText
+        selectedRange = currentRange
+        hasChangesBinding?.wrappedValue = true
     }
     
     // MARK: - Link Handling
@@ -487,16 +628,24 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         
-        regex.enumerateMatches(in: mutableText.string, range: NSRange(location: 0, length: mutableText.length)) { match, _, _ in
-            guard let range = match?.range,
-                  let linkRange = match?.range(at: 1) else { return }
+        let matches = regex.matches(in: mutableText.string, range: NSRange(location: 0, length: mutableText.length))
+        
+        // Process matches in reverse to maintain indices
+        for match in matches.reversed() {
+            let linkRange = match.range(at: 1)
+            guard linkRange.location != NSNotFound else { continue }
             
-            // Style the link
-            mutableText.addAttributes([
+            let linkText = mutableText.string.substring(with: linkRange) ?? ""
+            
+            // Replace [[text]] with just the text, but styled as a link
+            let styledLink = NSAttributedString(string: linkText, attributes: [
+                .font: UIFont.systemFont(ofSize: 20),
                 .foregroundColor: UIColor.systemBlue,
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .link: mutableText.string.substring(with: linkRange) ?? ""
-            ], range: range)
+                .link: linkText
+            ])
+            
+            mutableText.replaceCharacters(in: match.range, with: styledLink)
         }
         
         let currentRange = selectedRange
@@ -516,31 +665,22 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let cleanedTitle = linkText.replacingOccurrences(of: "[[", with: "").replacingOccurrences(of: "]]", with: "")
         
         // This would integrate with the existing note linking system
-        // For now, we'll show a basic preview
         let alertController = UIAlertController(
-            title: "Link: \(cleanedTitle)",
-            message: "This would show a preview of the linked note content.",
+            title: cleanedTitle,
+            message: "Navigate to this note?",
             preferredStyle: .actionSheet
         )
         
         alertController.addAction(UIAlertAction(title: "Open Note", style: .default) { _ in
             // Implement note navigation
-            NotificationCenter.default.post(name: .lnOpenNoteRequested, object: linkText)
+            NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
         })
         
         alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
-        if let viewController = findViewController() {
-            // Position popover for iPad
-            if let popover = alertController.popoverPresentationController {
-                let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-                let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-                popover.sourceView = self
-                popover.sourceRect = rect
-            }
-            
-            viewController.present(alertController, animated: true)
-        }
+        // For now, just post the notification without showing preview
+        // Link navigation will be handled by the app's existing system
+        NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
     }
     
     // MARK: - Attachment Handling
@@ -625,6 +765,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         case "zip", "rar": iconName = "archivebox"
         case "mp4", "mov": iconName = "video"
         case "mp3", "wav": iconName = "music.note"
+        case "gif": iconName = "photo.stack"
         default: iconName = "doc"
         }
         
@@ -643,13 +784,35 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let titleRange = NSRange(location: 0, length: firstLine.count)
         
         mutableText.addAttributes([
-            .font: UIFont.systemFont(ofSize: 28, weight: .bold),
+            .font: UIFont.systemFont(ofSize: 32, weight: .bold),
             .foregroundColor: UIColor.label
         ], range: titleRange)
+        
+        // Apply body font to rest of text
+        if text.count > firstLine.count + 1 {
+            let bodyRange = NSRange(location: firstLine.count + 1, length: text.count - firstLine.count - 1)
+            mutableText.addAttributes([
+                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                .foregroundColor: UIColor.label
+            ], range: bodyRange)
+        }
         
         let currentRange = selectedRange
         attributedText = mutableText
         selectedRange = currentRange
+        
+        // Update typing attributes based on cursor position
+        if selectedRange.location == 0 || (selectedRange.location <= firstLine.count) {
+            typingAttributes = [
+                .font: UIFont.systemFont(ofSize: 32, weight: .bold),
+                .foregroundColor: UIColor.label
+            ]
+        } else {
+            typingAttributes = [
+                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                .foregroundColor: UIColor.label
+            ]
+        }
         
         // Also format any links
         formatLinks()
@@ -690,7 +853,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
         let insertion = NSAttributedString(string: insertText, attributes: [
-            .font: UIFont.systemFont(ofSize: 17),
+            .font: UIFont.systemFont(ofSize: 20),
             .foregroundColor: UIColor.label
         ])
         
@@ -703,8 +866,17 @@ class NativeTextView: UITextView, UITextViewDelegate {
     override func insertText(_ text: String) {
         let range = selectedRange
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        // Maintain current font size or use default body size
+        var currentFont = UIFont.systemFont(ofSize: 20, weight: .regular)
+        if range.location > 0 && range.location <= mutableText.length {
+            if let existingFont = mutableText.attribute(.font, at: max(0, range.location - 1), effectiveRange: nil) as? UIFont {
+                currentFont = existingFont
+            }
+        }
+        
         let insertion = NSAttributedString(string: text, attributes: [
-            .font: UIFont.systemFont(ofSize: 17),
+            .font: currentFont,
             .foregroundColor: UIColor.label
         ])
         
@@ -727,79 +899,14 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
     
     private func showColorPicker(completion: @escaping (UIColor) -> Void) {
-        // Present native color picker
-        if let viewController = self.findViewController() {
-            let colorPicker = UIColorPickerViewController()
-            let delegate = ColorPickerDelegate(completion: completion)
-            colorPicker.delegate = delegate
-            
-            // Store delegate to prevent deallocation
-            objc_setAssociatedObject(colorPicker, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            
-            viewController.present(colorPicker, animated: true)
-        }
+        // Use a simple color selection without UIKit presentation
+        // For now, apply a default highlight color
+        completion(UIColor.systemYellow.withAlphaComponent(0.3))
     }
     
-    private func presentPhotoPicker() {
-        guard let viewController = findViewController() else { return }
-        
-        var config = PHPickerConfiguration()
-        config.selectionLimit = 1
-        config.filter = .any(of: [.images, .videos])
-        
-        let picker = PHPickerViewController(configuration: config)
-        let delegate = PhotoPickerDelegate { [weak self] results in
-            self?.handlePhotoPickerResults(results)
-        }
-        picker.delegate = delegate
-        
-        // Store delegate to prevent deallocation
-        objc_setAssociatedObject(picker, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        
-        viewController.present(picker, animated: true)
-    }
     
-    private func presentDocumentPicker() {
-        guard let viewController = findViewController() else { return }
-        
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
-        let delegate = DocumentPickerDelegate { [weak self] urls in
-            self?.handleDocumentPickerResults(urls)
-        }
-        picker.delegate = delegate
-        
-        // Store delegate to prevent deallocation
-        objc_setAssociatedObject(picker, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        
-        viewController.present(picker, animated: true)
-    }
     
-    private func handlePhotoPickerResults(_ results: [PHPickerResult]) {
-        guard let result = results.first else { return }
-        
-        result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] object, error in
-            if let image = object as? UIImage {
-                // Also get the data
-                result.itemProvider.loadDataRepresentation(forTypeIdentifier: "public.image") { data, error in
-                    DispatchQueue.main.async {
-                        if let data = data {
-                            self?.insertInlineImage(image, data: data)
-                        }
-                    }
-                }
-            }
-        }
-    }
     
-    private func handleDocumentPickerResults(_ urls: [URL]) {
-        guard let url = urls.first else { return }
-        
-        // Ensure we have access to the file
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-        
-        insertInlineFile(url)
-    }
 }
 
 // MARK: - Extensions
@@ -823,17 +930,7 @@ extension UIFont {
     }
 }
 
-extension UIView {
-    func findViewController() -> UIViewController? {
-        if let nextResponder = self.next as? UIViewController {
-            return nextResponder
-        } else if let nextResponder = self.next as? UIView {
-            return nextResponder.findViewController()
-        } else {
-            return nil
-        }
-    }
-}
+// UIView extensions removed - using SwiftUI presentation
 
 extension String {
     func substring(with nsRange: NSRange) -> String? {
@@ -955,35 +1052,6 @@ class InteractiveTextAttachment: NSTextAttachment {
 
 // MARK: - Delegates
 
-class PhotoPickerDelegate: NSObject, PHPickerViewControllerDelegate {
-    let completion: ([PHPickerResult]) -> Void
-    
-    init(completion: @escaping ([PHPickerResult]) -> Void) {
-        self.completion = completion
-    }
-    
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-        completion(results)
-    }
-}
-
-class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
-    let completion: ([URL]) -> Void
-    
-    init(completion: @escaping ([URL]) -> Void) {
-        self.completion = completion
-    }
-    
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        completion(urls)
-    }
-    
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        completion([])
-    }
-}
-
 struct ShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
     
@@ -992,6 +1060,105 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiView: UIActivityViewController, context: Context) {}
+}
+
+struct PhotoPickerView: UIViewControllerRepresentable {
+    let completion: ([PHPickerResult]) -> Void
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 1
+        config.filter = .any(of: [.images, .videos])
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiView: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(completion: completion)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let completion: ([PHPickerResult]) -> Void
+        
+        init(completion: @escaping ([PHPickerResult]) -> Void) {
+            self.completion = completion
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            completion(results)
+        }
+    }
+}
+
+struct DocumentPickerView: UIViewControllerRepresentable {
+    let completion: ([URL]) -> Void
+    
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiView: UIDocumentPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(completion: completion)
+    }
+    
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let completion: ([URL]) -> Void
+        
+        init(completion: @escaping ([URL]) -> Void) {
+            self.completion = completion
+        }
+        
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            completion(urls)
+        }
+        
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            completion([])
+        }
+    }
+}
+
+struct GifPickerView: UIViewControllerRepresentable {
+    let completion: ([PHPickerResult]) -> Void
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 1
+        config.filter = .images // This includes GIFs
+        config.preferredAssetRepresentationMode = .current // Preserves GIF animation
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiView: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(completion: completion)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let completion: ([PHPickerResult]) -> Void
+        
+        init(completion: @escaping ([PHPickerResult]) -> Void) {
+            self.completion = completion
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            completion(results)
+        }
+    }
 }
 
 #Preview {
