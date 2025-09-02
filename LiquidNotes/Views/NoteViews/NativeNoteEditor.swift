@@ -41,7 +41,8 @@ struct NativeNoteEditor: View {
                             note: note,
                             textView: $textView,
                             hasChanges: $hasChanges,
-                            selectedTextStyle: $selectedTextStyle
+                            selectedTextStyle: $selectedTextStyle,
+                            modelContext: modelContext
                         )
                         
                         // Bottom formatting toolbar
@@ -69,8 +70,8 @@ struct NativeNoteEditor: View {
                 }
             }
             .sheet(isPresented: $showingGifPicker) {
-                GifPickerView { results in
-                    handlePhotoPickerResults(results) // GIFs handled same as photos
+                GiphyPicker(isPresented: $showingGifPicker) { gifData in
+                    handleGiphySelection(gifData)
                 }
             }
         }
@@ -232,15 +233,41 @@ struct NativeNoteEditor: View {
     
     private func saveNote() {
         guard let tv = textView else { return }
-        
-        let text = tv.text ?? ""
-        let lines = text.components(separatedBy: "\n")
-        let title = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let content = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        note.title = title
-        note.content = content
+        // Extract attributed string
+        let attributed = tv.attributedText ?? NSAttributedString(string: tv.text ?? "")
+        // Derive plain text (strip attachments) while collecting images to migrate
+        var plainBuilder = ""
+        var usedFileIDs = Set<String>()
+        attributed.enumerateAttributes(in: NSRange(location: 0, length: attributed.length)) { attrs, range, _ in
+            if let att = attrs[.attachment] as? InteractiveTextAttachment {
+                // Convert attachment to file-based storage if not already
+                if let data = att.imageData ?? att.fileData, let noteRef = att.note {
+                    let mime: String
+                    if let d = att.imageData, d.count > 4 && d.prefix(4) == Data([0x47,0x49,0x46,0x38]) { mime = "image/gif" } else if att.imageData != nil { mime = "image/jpeg" } else { mime = "application/octet-stream" }
+                    let ext = mime.contains("gif") ? "gif" : (mime.contains("jpeg") ? "jpg" : "bin")
+                    // Only store if not already present
+                    if att.attachmentID == nil { att.attachmentID = UUID().uuidString }
+                    if !noteRef.fileAttachmentIDs.contains(att.attachmentID!) {
+                        _ = AttachmentFileStore.saveAttachment(note: noteRef, data: data, type: mime, preferredExt: ext)
+                    }
+                    if let id = att.attachmentID { usedFileIDs.insert(id) }
+                }
+                // Represent in plain text as placeholder token (not user-visible directly)
+                plainBuilder.append("\n")
+            } else {
+                let substring = (attributed.string as NSString).substring(with: range)
+                plainBuilder.append(substring)
+            }
+        }
+        let lines = plainBuilder.components(separatedBy: "\n")
+        note.title = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        note.content = lines.dropFirst().joined(separator: "\n")
+        note.previewExcerpt = String(note.content.prefix(240))
+        // Archive rich text
+    note.richTextData = RichTextArchiver.archive(attributed)
+    (tv as? NativeTextView)?.reconcileFileAttachments()
         note.updateModifiedDate()
+    NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
         
         do {
             try modelContext.save()
@@ -313,6 +340,13 @@ struct NativeNoteEditor: View {
         
         nativeTextView.insertInlineFile(url)
     }
+    
+    private func handleGiphySelection(_ gifData: Data) {
+        guard let nativeTextView = textView as? NativeTextView,
+              let image = UIImage(data: gifData) else { return }
+        
+        nativeTextView.insertInlineImage(image, data: gifData)
+    }
 }
 
 enum TextStyle {
@@ -320,9 +354,9 @@ enum TextStyle {
     
     var font: UIFont {
         switch self {
-        case .title: return .systemFont(ofSize: 32, weight: .bold)
-        case .heading: return .systemFont(ofSize: 26, weight: .semibold)
-        case .subheading: return .systemFont(ofSize: 22, weight: .medium)
+        case .title: return .systemFont(ofSize: 24, weight: .bold)
+        case .heading: return .systemFont(ofSize: 22, weight: .semibold)
+        case .subheading: return .systemFont(ofSize: 21, weight: .medium)
         case .body: return .systemFont(ofSize: 20, weight: .regular)
         }
     }
@@ -333,12 +367,14 @@ struct NativeTextCanvas: UIViewRepresentable {
     @Binding var textView: UITextView?
     @Binding var hasChanges: Bool
     @Binding var selectedTextStyle: TextStyle
+    let modelContext: ModelContext
     
     func makeUIView(context: Context) -> NativeTextView {
         let textView = NativeTextView()
         textView.delegate = context.coordinator
         textView.note = note
         textView.hasChangesBinding = $hasChanges
+        textView.modelContext = modelContext
         
         // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
@@ -349,7 +385,7 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.keyboardDismissMode = .interactive
         textView.allowsEditingTextAttributes = true
         
-        // Set typing attributes for new text
+        // Set consistent typing attributes for all text
         textView.typingAttributes = [
             .font: UIFont.systemFont(ofSize: 20, weight: .regular),
             .foregroundColor: UIColor.label
@@ -362,8 +398,26 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.spellCheckingType = .yes
         textView.autocorrectionType = .yes
         
-        // Load content
-        loadNoteContent(into: textView)
+    // Load archived rich text if present; fallback to plain text
+    if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
+        let normalized = NSMutableAttributedString(attributedString: archived)
+        normalized.enumerateAttributes(in: NSRange(location: 0, length: normalized.length)) { attrs, range, _ in
+            var newAttrs = attrs
+            if newAttrs[.font] == nil { newAttrs[.font] = UIFont.systemFont(ofSize: 20, weight: .regular) }
+            if newAttrs[.foregroundColor] == nil { newAttrs[.foregroundColor] = UIColor.label }
+            normalized.setAttributes(newAttrs, range: range)
+        }
+        textView.attributedText = normalized
+    } else {
+        let fullText = note.title.isEmpty ? note.content : "\(note.title)\n\(note.content)"
+        let mutable = NSMutableAttributedString(string: fullText, attributes: [
+            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+            .foregroundColor: UIColor.label
+        ])
+        // Legacy inline attachment arrays support (temporary)
+        textView.loadSavedAttachments(from: note, into: mutable)
+        textView.attributedText = mutable
+    }
         
         return textView
     }
@@ -386,36 +440,22 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         let attributedText = NSMutableAttributedString(string: fullText)
         
-        // Apply title formatting to first line
+        // Apply consistent body formatting to all text
         if !fullText.isEmpty {
-            let lines = fullText.components(separatedBy: "\n")
-            if let firstLine = lines.first, !firstLine.isEmpty {
-                let titleRange = NSRange(location: 0, length: firstLine.count)
-                attributedText.addAttributes([
-                    .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-                    .foregroundColor: UIColor.label
-                ], range: titleRange)
-                
-                // Apply body formatting to rest of content
-                if fullText.count > firstLine.count + 1 {
-                    let bodyRange = NSRange(location: firstLine.count + 1, length: fullText.count - firstLine.count - 1)
-                    attributedText.addAttributes([
-                        .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-                        .foregroundColor: UIColor.label
-                    ], range: bodyRange)
-                }
-            }
-        } else {
-            // If empty, set default attributes
             attributedText.addAttributes([
                 .font: UIFont.systemFont(ofSize: 20, weight: .regular),
                 .foregroundColor: UIColor.label
             ], range: NSRange(location: 0, length: fullText.count))
         }
         
+        // Load saved attachments back into the text
+        if let nativeTextView = textView as? NativeTextView {
+            nativeTextView.loadSavedAttachments(from: note, into: attributedText)
+        }
+        
         textView.attributedText = attributedText
         
-        // Also format any existing links
+        // Format links only
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.formatLinks()
         }
@@ -429,7 +469,8 @@ struct NativeTextCanvas: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             if let nativeTextView = textView as? NativeTextView {
                 nativeTextView.hasChangesBinding?.wrappedValue = true
-                nativeTextView.formatFirstLineAsTitle()
+                // Just format links, no title formatting
+                nativeTextView.formatLinks()
             }
         }
     }
@@ -438,6 +479,7 @@ struct NativeTextCanvas: UIViewRepresentable {
 class NativeTextView: UITextView, UITextViewDelegate {
     var note: Note?
     var hasChangesBinding: Binding<Bool>?
+    var modelContext: ModelContext?
     
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -473,15 +515,36 @@ class NativeTextView: UITextView, UITextViewDelegate {
                 let attachmentRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
                 let attachmentLocation = CGPoint(x: location.x - attachmentRect.minX, y: location.y - attachmentRect.minY)
                 
+                // Only handle delete button taps, not general attachment taps
                 if attachment.handleTap(at: attachmentLocation, in: self) {
-                    return // Tap was handled by attachment
+                    return // Tap was handled by delete button
                 }
+                // Don't return here - let normal text editing continue
             }
             
             // Check if tap is on a link
             if let link = attributedText.attribute(.link, at: characterIndex, effectiveRange: nil) as? String {
                 showLinkPreview(for: link, at: NSRange(location: characterIndex, length: 1))
+                return
             }
+        }
+        
+        // Allow normal UITextView tap handling for cursor positioning
+        // Don't interfere with normal text editing
+    }
+
+    // Prune file-based attachments that were removed from the text (image runs deleted)
+    func reconcileFileAttachments() {
+        guard let note else { return }
+        // Collect IDs present in current attributed text
+        var presentIDs: Set<String> = []
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment, let id = att.attachmentID { presentIDs.insert(id) }
+        }
+        // Remove any fileAttachmentIDs not present
+        let existing = note.fileAttachmentIDs
+        for id in existing where !presentIDs.contains(id) {
+            note.removeFileAttachment(id: id)
         }
     }
     
@@ -690,15 +753,36 @@ class NativeTextView: UITextView, UITextViewDelegate {
         attachment.image = image
         attachment.note = self.note
         attachment.imageData = data
+    let newID = UUID().uuidString
+    attachment.attachmentID = newID
         
-        // Scale to fit within text
-        let maxWidth: CGFloat = min(frame.width - 40, 320)
-        let scale = min(maxWidth / image.size.width, 240 / image.size.height)
-        let scaledSize = CGSize(
-            width: image.size.width * scale,
-            height: image.size.height * scale
-        )
-        attachment.bounds = CGRect(origin: .zero, size: scaledSize)
+    // Responsive scaling: wider on iPad, slightly narrower on iPhone
+    let idiom = UIDevice.current.userInterfaceIdiom
+    let imageSize = image.size
+    let maxWidth: CGFloat = (idiom == .pad ? 520 : 320)
+    let minWidth: CGFloat = (idiom == .pad ? 180 : 120)
+    let maxHeight: CGFloat = (idiom == .pad ? 320 : 220)
+        
+        var newWidth = imageSize.width
+        var newHeight = imageSize.height
+        
+        // Scale down if too large
+        if newWidth > maxWidth || newHeight > maxHeight {
+            let widthScale = maxWidth / newWidth
+            let heightScale = maxHeight / newHeight
+            let scale = min(widthScale, heightScale)
+            newWidth *= scale
+            newHeight *= scale
+        }
+        
+        // Scale up if too small
+        if newWidth < minWidth {
+            let scale = minWidth / newWidth
+            newWidth *= scale
+            newHeight *= scale
+        }
+        
+    attachment.bounds = CGRect(x: 0, y: -5, width: newWidth, height: newHeight)
         
         let attachmentString = NSAttributedString(attachment: attachment)
         let range = selectedRange
@@ -715,9 +799,14 @@ class NativeTextView: UITextView, UITextViewDelegate {
         attributedText = mutableText
         selectedRange = NSRange(location: range.location + fullString.length, length: 0)
         
-        // Sync with note model
-        note?.addAttachment(data: data, type: "image/jpeg")
+        // Persist into note model - determine type based on data
+        let imageType = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38]) ? "image/gif" : "image/jpeg"
         hasChangesBinding?.wrappedValue = true
+        if let modelNote = attachment.note ?? self.note {
+            // Store file-based (preferred) & keep legacy arrays for now (migration step later)
+            _ = AttachmentFileStore.saveAttachment(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg")
+            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
+        }
     }
     
     func insertInlineFile(_ url: URL) {
@@ -749,7 +838,6 @@ class NativeTextView: UITextView, UITextViewDelegate {
         selectedRange = NSRange(location: range.location + fullString.length, length: 0)
         
         // Sync with note model
-        note?.addAttachment(data: fileData, type: "application/octet-stream")
         hasChangesBinding?.wrappedValue = true
     }
     
@@ -772,51 +860,61 @@ class NativeTextView: UITextView, UITextViewDelegate {
         return UIImage(systemName: iconName, withConfiguration: config) ?? UIImage()
     }
     
+    func loadSavedAttachments(from note: Note, into attributedText: NSMutableAttributedString) {
+        // Restore saved images/GIFs to the editor
+        for (index, attachmentData) in note.attachments.enumerated() {
+            guard index < note.attachmentTypes.count else { continue }
+            
+            let attachmentType = note.attachmentTypes[index]
+            
+            if attachmentType.hasPrefix("image/") {
+                if let image = UIImage(data: attachmentData) {
+                    let attachment = InteractiveTextAttachment()
+                    attachment.image = image
+                    attachment.note = note
+                    attachment.imageData = attachmentData
+                    
+                    // Use consistent sizing logic
+                    let imageSize = image.size
+                    let maxWidth: CGFloat = 300 // Fixed max width
+                    let minWidth: CGFloat = 120
+                    let maxHeight: CGFloat = 200
+                    
+                    var newWidth = imageSize.width
+                    var newHeight = imageSize.height
+                    
+                    if newWidth > maxWidth || newHeight > maxHeight {
+                        let widthScale = maxWidth / newWidth
+                        let heightScale = maxHeight / newHeight
+                        let scale = min(widthScale, heightScale)
+                        newWidth *= scale
+                        newHeight *= scale
+                    }
+                    
+                    if newWidth < minWidth {
+                        let scale = minWidth / newWidth
+                        newWidth *= scale
+                        newHeight *= scale
+                    }
+                    
+                    attachment.bounds = CGRect(x: 0, y: -5, width: newWidth, height: newHeight)
+                    
+                    let attachmentString = NSAttributedString(attachment: attachment)
+                    
+                    // Add to end of text with proper spacing
+                    if attributedText.length > 0 {
+                        attributedText.append(NSAttributedString(string: "\n"))
+                    }
+                    attributedText.append(attachmentString)
+                    attributedText.append(NSAttributedString(string: "\n"))
+                }
+            }
+        }
+    }
+    
     // MARK: - Helper Methods
     
-    func formatFirstLineAsTitle() {
-        guard let text = text, !text.isEmpty else { return }
-        
-        let lines = text.components(separatedBy: "\n")
-        guard let firstLine = lines.first, !firstLine.isEmpty else { return }
-        
-        let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        let titleRange = NSRange(location: 0, length: firstLine.count)
-        
-        mutableText.addAttributes([
-            .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-            .foregroundColor: UIColor.label
-        ], range: titleRange)
-        
-        // Apply body font to rest of text
-        if text.count > firstLine.count + 1 {
-            let bodyRange = NSRange(location: firstLine.count + 1, length: text.count - firstLine.count - 1)
-            mutableText.addAttributes([
-                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-                .foregroundColor: UIColor.label
-            ], range: bodyRange)
-        }
-        
-        let currentRange = selectedRange
-        attributedText = mutableText
-        selectedRange = currentRange
-        
-        // Update typing attributes based on cursor position
-        if selectedRange.location == 0 || (selectedRange.location <= firstLine.count) {
-            typingAttributes = [
-                .font: UIFont.systemFont(ofSize: 32, weight: .bold),
-                .foregroundColor: UIColor.label
-            ]
-        } else {
-            typingAttributes = [
-                .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-                .foregroundColor: UIColor.label
-            ]
-        }
-        
-        // Also format any links
-        formatLinks()
-    }
+    // Removed complex title formatting - spatial view handles title display
     
     private func toggleAttribute(_ key: NSAttributedString.Key, transform: (Any?) -> Any) {
         guard selectedRange.length > 0 else { return }
@@ -853,7 +951,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
         let insertion = NSAttributedString(string: insertText, attributes: [
-            .font: UIFont.systemFont(ofSize: 20),
+            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
             .foregroundColor: UIColor.label
         ])
         
@@ -867,16 +965,9 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let range = selectedRange
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
         
-        // Maintain current font size or use default body size
-        var currentFont = UIFont.systemFont(ofSize: 20, weight: .regular)
-        if range.location > 0 && range.location <= mutableText.length {
-            if let existingFont = mutableText.attribute(.font, at: max(0, range.location - 1), effectiveRange: nil) as? UIFont {
-                currentFont = existingFont
-            }
-        }
-        
+        // Always use consistent body font
         let insertion = NSAttributedString(string: text, attributes: [
-            .font: currentFont,
+            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
             .foregroundColor: UIColor.label
         ])
         
@@ -959,6 +1050,7 @@ class InteractiveTextAttachment: NSTextAttachment {
     var fileData: Data?
     var fileName: String?
     var fileExtension: String?
+    var attachmentID: String?
     
     override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
         return bounds
@@ -1005,7 +1097,7 @@ class InteractiveTextAttachment: NSTextAttachment {
     
     // Handle tap on attachment
     func handleTap(at point: CGPoint, in textView: UITextView) -> Bool {
-        // Check if tap is on delete button
+        // Check if tap is on delete button (only in top-right corner)
         let deleteButtonFrame = CGRect(
             x: bounds.width - 32,
             y: 8,
@@ -1013,37 +1105,37 @@ class InteractiveTextAttachment: NSTextAttachment {
             height: 24
         )
         
+        // Only handle delete button taps, ignore other taps on image
         if deleteButtonFrame.contains(point) {
             deleteAttachment(from: textView)
-            return true
+            return true // Tap was handled
         }
         
+        // Return false for all other taps to allow normal text editing
         return false
     }
     
     private func deleteAttachment(from textView: UITextView) {
         let mutableText = NSMutableAttributedString(attributedString: textView.attributedText)
         
-        // Find this attachment in the attributed string
+        // Find and remove this attachment from text
         mutableText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: mutableText.length)) { value, range, stop in
             if let attachment = value as? InteractiveTextAttachment, attachment === self {
-                // Remove from text
                 mutableText.deleteCharacters(in: range)
-                
-                // Remove from note model
-                if let note = self.note, let imageData = self.imageData {
-                    if let index = note.attachments.firstIndex(of: imageData) {
-                        note.removeAttachment(at: index)
-                    }
-                }
-                
                 stop.pointee = true
             }
         }
         
         textView.attributedText = mutableText
         
-        // Update changes
+        // Update UI
+        if let note = self.note {
+            // Remove matching data (if any) from note model so it doesn't persist/preview
+            if let data = self.imageData, let idx = note.attachments.firstIndex(of: data) {
+                note.removeAttachment(at: idx)
+            }
+            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+        }
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.hasChangesBinding?.wrappedValue = true
         }
@@ -1127,39 +1219,7 @@ struct DocumentPickerView: UIViewControllerRepresentable {
     }
 }
 
-struct GifPickerView: UIViewControllerRepresentable {
-    let completion: ([PHPickerResult]) -> Void
-    
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration()
-        config.selectionLimit = 1
-        config.filter = .images // This includes GIFs
-        config.preferredAssetRepresentationMode = .current // Preserves GIF animation
-        
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiView: PHPickerViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(completion: completion)
-    }
-    
-    class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let completion: ([PHPickerResult]) -> Void
-        
-        init(completion: @escaping ([PHPickerResult]) -> Void) {
-            self.completion = completion
-        }
-        
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-            completion(results)
-        }
-    }
-}
+// GIF picker now uses GiphyPicker from Components
 
 #Preview {
     let note = Note(title: "Sample", content: "Content")

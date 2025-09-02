@@ -30,6 +30,17 @@ final class Note {
     var tags: [String] = [] // Restored tags support
     var attachments: [Data] = []
     var attachmentTypes: [String] = []
+    // Stable IDs aligned with attachments array for token serialization [[ATTACH:<id>]] in content
+    var attachmentIDs: [String] = []
+    // Full archived rich text (NSAttributedString) representation (preferred new storage)
+    var richTextData: Data? = nil
+    // Lightweight plain excerpt for fast previews / search (body only, no title)
+    var previewExcerpt: String = ""
+    // File-based attachment metadata (future: migrate away from in-DB Data arrays)
+    var fileAttachmentIDs: [String] = []          // stable IDs
+    var fileAttachmentTypes: [String] = []        // MIME types
+    var fileAttachmentNames: [String] = []        // stored file names (with extension)
+    var fileAttachmentThumbNames: [String] = []   // thumbnail file names (optional)
     // Parsed [[link]] titles referenced in content (resolved lazily by title match)
     var linkedNoteTitles: [String] = []
     // Historical titles for stable link resolution if a note is renamed
@@ -78,6 +89,7 @@ final class Note {
     self.hasCustomGraphPosition = false
     self.linkUsageCount = 0
     self.lastLinkedDate = nil
+    self.previewExcerpt = ""
     }
     
     var priority: NotePriority {
@@ -89,17 +101,71 @@ final class Note {
         modifiedDate = Date()
     }
     
-    func addAttachment(data: Data, type: String) {
+    func addAttachment(data: Data, type: String, id: String = UUID().uuidString) {
     attachments.append(data)
     attachmentTypes.append(type)
+    attachmentIDs.append(id)
         updateModifiedDate()
     }
     
     func removeAttachment(at index: Int) {
-    guard index < attachments.count && index < attachmentTypes.count else { return }
+    guard index < attachments.count && index < attachmentTypes.count && index < attachmentIDs.count else { return }
     attachments.remove(at: index)
     attachmentTypes.remove(at: index)
+    attachmentIDs.remove(at: index)
         updateModifiedDate()
+    }
+    
+    func ensureAttachmentIDIntegrity() {
+        if attachmentIDs.count != attachments.count {
+            // Regenerate IDs for any missing
+            if attachmentIDs.count < attachments.count {
+                let deficit = attachments.count - attachmentIDs.count
+                for _ in 0..<deficit { attachmentIDs.append(UUID().uuidString) }
+            } else {
+                // Truncate extras (shouldn't happen normally)
+                attachmentIDs = Array(attachmentIDs.prefix(attachments.count))
+            }
+        }
+        if attachmentTypes.count != attachments.count {
+            // Pad types with generic image type if mismatch
+            if attachmentTypes.count < attachments.count {
+                let deficit = attachments.count - attachmentTypes.count
+                for _ in 0..<deficit { attachmentTypes.append("image/jpeg") }
+            } else {
+                attachmentTypes = Array(attachmentTypes.prefix(attachments.count))
+            }
+        }
+    }
+
+    // MARK: - File Attachment Helpers (new storage path)
+    func addFileAttachment(id: String, type: String, fileName: String, thumbName: String?) {
+        fileAttachmentIDs.append(id)
+        fileAttachmentTypes.append(type)
+        fileAttachmentNames.append(fileName)
+        fileAttachmentThumbNames.append(thumbName ?? "")
+        updateModifiedDate()
+    }
+
+    func removeFileAttachment(id: String) {
+        if let idx = fileAttachmentIDs.firstIndex(of: id) {
+            // Attempt file deletion
+            if let dir = AttachmentFileStore.noteDir(noteID: self.id) {
+                if idx < fileAttachmentNames.count {
+                    let url = dir.appendingPathComponent(fileAttachmentNames[idx])
+                    try? FileManager.default.removeItem(at: url)
+                }
+                if idx < fileAttachmentThumbNames.count && !fileAttachmentThumbNames[idx].isEmpty {
+                    let turl = dir.appendingPathComponent(fileAttachmentThumbNames[idx])
+                    try? FileManager.default.removeItem(at: turl)
+                }
+            }
+            fileAttachmentIDs.remove(at: idx)
+            if idx < fileAttachmentTypes.count { fileAttachmentTypes.remove(at: idx) }
+            if idx < fileAttachmentNames.count { fileAttachmentNames.remove(at: idx) }
+            if idx < fileAttachmentThumbNames.count { fileAttachmentThumbNames.remove(at: idx) }
+            updateModifiedDate()
+        }
     }
     
     func addTask(_ text: String, dueDate: Date? = nil) {
