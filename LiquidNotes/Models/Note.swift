@@ -34,6 +34,8 @@ final class Note {
     var attachmentIDs: [String] = []
     // Full archived rich text (NSAttributedString) representation (preferred new storage)
     var richTextData: Data? = nil
+    // SHA256 (hex) of the tokenized archived rich text to skip redundant saves
+    var richTextHash: String = ""
     // Lightweight plain excerpt for fast previews / search (body only, no title)
     var previewExcerpt: String = ""
     // File-based attachment metadata (future: migrate away from in-DB Data arrays)
