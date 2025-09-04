@@ -106,8 +106,18 @@ struct NativeNoteEditor: View {
                 }
             }
             .navigationBarHidden(true)
-            .onAppear { setupEditor() }
-            .onDisappear { saveIfNeeded() }
+            .onAppear { 
+                setupEditor()
+                if let nativeTextView = textView as? NativeTextView {
+                    nativeTextView.resumeGIFAnimations()
+                }
+            }
+            .onDisappear { 
+                saveIfNeeded()
+                if let nativeTextView = textView as? NativeTextView {
+                    nativeTextView.pauseGIFAnimations()
+                }
+            }
             .sheet(isPresented: $showingShareSheet) {
                 ShareSheet(activityItems: [shareItem])
             }
@@ -1627,20 +1637,42 @@ class InteractiveTextAttachment: NSTextAttachment {
     private func startGIFIfNeeded() {
         guard gifFrames.count > 1, gifDisplayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
+        
+        let optimizer = PerformanceOptimizer.shared
+        link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
+        
+        if optimizer.thermalState == .serious || optimizer.thermalState == .critical {
+            return
+        }
+        
         gifDisplayLink = link
         link.add(to: .main, forMode: .common)
     }
     
     @objc private func stepGIF(_ link: CADisplayLink) {
         guard gifFrames.count > 1 else { return }
+        
+        let optimizer = PerformanceOptimizer.shared
+        if optimizer.thermalState == .serious || optimizer.thermalState == .critical {
+            gifDisplayLink?.invalidate()
+            gifDisplayLink = nil
+            return
+        }
+        
         gifAccumulated += link.duration
-        // Advance frames while accumulated > current frame duration (handle slow frames)
-        while gifAccumulated > gifDurations[gifCurrentIndex] {
-            gifAccumulated -= gifDurations[gifCurrentIndex]
-            gifCurrentIndex = (gifCurrentIndex + 1) % gifFrames.count
+        let frameSkip = optimizer.shouldReduceGIFFrameRate ? 1 : 1
+        
+        while gifAccumulated > gifDurations[gifCurrentIndex] * Double(frameSkip) {
+            gifAccumulated -= gifDurations[gifCurrentIndex] * Double(frameSkip)
+            gifCurrentIndex = (gifCurrentIndex + frameSkip) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
-            // Trigger redraw for attachment range
-            if let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager?, let full = tv.attributedText {
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self,
+                      let tv = self.hostingTextView,
+                      let lm = tv.layoutManager as NSLayoutManager?,
+                      let full = tv.attributedText else { return }
+                
                 let searchRange = NSRange(location: 0, length: full.length)
                 var targetRange: NSRange?
                 full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
@@ -1651,11 +1683,18 @@ class InteractiveTextAttachment: NSTextAttachment {
                 }
                 if let r = targetRange {
                     lm.invalidateDisplay(forCharacterRange: r)
-                } else {
-                    lm.invalidateDisplay(forCharacterRange: searchRange)
                 }
             }
+            break
         }
+    }
+    
+    func pauseGIF() {
+        gifDisplayLink?.isPaused = true
+    }
+    
+    func resumeGIF() {
+        gifDisplayLink?.isPaused = false
     }
     
     deinit {
@@ -1690,14 +1729,28 @@ private func gifFrameDuration(source: CGImageSource, index: Int) -> Double {
 }
 
 extension NativeTextView {
-    // Enumerate attachments and start GIF animations post-load
     func startGIFAnimations() {
         attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
             if let att = value as? InteractiveTextAttachment, let data = att.imageData, att.gifFrames.isEmpty {
-                // Determine if data is GIF
                 if data.count > 4 && data.subdata(in: 0..<4) == Data([0x47,0x49,0x46,0x38]) {
                     att.configureGIFAnimation(with: data, in: self)
                 }
+            }
+        }
+    }
+    
+    func pauseGIFAnimations() {
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment {
+                att.pauseGIF()
+            }
+        }
+    }
+    
+    func resumeGIFAnimations() {
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment {
+                att.resumeGIF()
             }
         }
     }
