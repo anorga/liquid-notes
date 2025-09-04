@@ -236,11 +236,6 @@ struct NativeNoteEditor: View {
                     .foregroundStyle(.primary)
             }
             
-            Button(action: { (textView as? NativeTextView)?.insertLink() }) {
-                Image(systemName: "link")
-                    .font(.title2)
-                    .foregroundStyle(.primary)
-            }
             
             Spacer()
         }
@@ -557,10 +552,6 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         textView.attributedText = attributedText
         
-        // Format links only
-        if let nativeTextView = textView as? NativeTextView {
-            nativeTextView.formatLinks()
-        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -571,8 +562,6 @@ struct NativeTextCanvas: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             if let nativeTextView = textView as? NativeTextView {
                 nativeTextView.hasChangesBinding?.wrappedValue = true
-                // Just format links, no title formatting
-                nativeTextView.formatLinks()
                 nativeTextView.scheduleDebouncedSave()
                 nativeTextView.broadcastLivePreviewUpdate()
             }
@@ -734,11 +723,6 @@ class NativeTextView: UITextView, UITextViewDelegate {
                 // Don't return here - let normal text editing continue
             }
             
-            // Check if tap is on a link
-            if let link = attributedText.attribute(.link, at: characterIndex, effectiveRange: nil) as? String {
-                showLinkPreview(for: link, at: NSRange(location: characterIndex, length: 1))
-                return
-            }
         }
         
         // Allow normal UITextView tap handling for cursor positioning
@@ -1094,111 +1078,6 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     // Media insertion handled by SwiftUI toolbar, not context menu
     
-    @objc func insertLink() {
-        // Get selected text or prompt for link text
-        let selectedText = getSelectedText()
-        if !selectedText.isEmpty {
-            // Wrap selected text in link format
-            wrapSelectedTextAsLink(selectedText)
-        } else {
-            // Insert link template
-            insertText("[[Link Text]]")
-            // Move cursor inside brackets
-            let newRange = NSRange(location: selectedRange.location - 2, length: 0)
-            selectedRange = newRange
-        }
-    }
-    
-    private func getSelectedText() -> String {
-        guard selectedRange.length > 0 else { return "" }
-        let text = self.text ?? ""
-        guard let range = Range(selectedRange, in: text) else { return "" }
-        return String(text[range])
-    }
-    
-    private func wrapSelectedTextAsLink(_ text: String) {
-        guard selectedRange.length > 0 else { return }
-        
-        let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        
-        // Create link with proper formatting
-        let linkText = NSAttributedString(string: text, attributes: [
-            .font: UIFont.systemFont(ofSize: 20),
-            .foregroundColor: UIColor.systemBlue,
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-            .link: text
-        ])
-        
-        mutableText.replaceCharacters(in: selectedRange, with: linkText)
-        
-        let currentRange = NSRange(location: selectedRange.location + text.count, length: 0)
-        attributedText = mutableText
-        selectedRange = currentRange
-        hasChangesBinding?.wrappedValue = true
-    }
-    
-    // MARK: - Link Handling
-    
-    func formatLinks() {
-        let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        let pattern = "\\[\\[([^\\]]+)\\]\\]"
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-        
-        let matches = regex.matches(in: mutableText.string, range: NSRange(location: 0, length: mutableText.length))
-        
-        // Process matches in reverse to maintain indices
-        for match in matches.reversed() {
-            let linkRange = match.range(at: 1)
-            guard linkRange.location != NSNotFound else { continue }
-            
-            let linkText = mutableText.string.substring(with: linkRange) ?? ""
-            
-            // Replace [[text]] with just the text, but styled as a link
-            let styledLink = NSAttributedString(string: linkText, attributes: [
-                .font: UIFont.systemFont(ofSize: 20),
-                .foregroundColor: UIColor.systemBlue,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .link: linkText
-            ])
-            
-            mutableText.replaceCharacters(in: match.range, with: styledLink)
-        }
-        
-        let currentRange = selectedRange
-        attributedText = mutableText
-        selectedRange = currentRange
-    }
-    
-    // Handle link taps for previews
-    func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange) -> Bool {
-        // Show link preview
-        showLinkPreview(for: URL.absoluteString, at: characterRange)
-        return false
-    }
-    
-    private func showLinkPreview(for linkText: String, at range: NSRange) {
-        // Find the linked note
-        let cleanedTitle = linkText.replacingOccurrences(of: "[[", with: "").replacingOccurrences(of: "]]", with: "")
-        
-        // This would integrate with the existing note linking system
-        let alertController = UIAlertController(
-            title: cleanedTitle,
-            message: "Navigate to this note?",
-            preferredStyle: .actionSheet
-        )
-        
-        alertController.addAction(UIAlertAction(title: "Open Note", style: .default) { _ in
-            // Implement note navigation
-            NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
-        })
-        
-        alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        
-        // For now, just post the notification without showing preview
-        // Link navigation will be handled by the app's existing system
-        NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
-    }
     
     // MARK: - Attachment Handling
     
