@@ -431,10 +431,10 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Load archived rich text if present; fallback to plain text
         if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
-            let containsTokens = archived.string.contains(RichTextArchiver.attachmentTokenPrefix)
+            let containsTokens = archived.string.contains(RichTextArchiver.attachmentTokenPrefix) || archived.string.contains("[[CHECKBOX:")
             let rebuilt = containsTokens ? RichTextArchiver.rebuildFromTokens(note: note, tokenized: archived) : archived
             let mutable = NSMutableAttributedString(attributedString: rebuilt)
-            upgradeAndNormalizeLoadedAttachments(in: mutable, for: note)
+            upgradeAndNormalizeLoadedAttachments(in: mutable, for: note, textView: textView)
             textView.attributedText = mutable
             textView.startGIFAnimations()
         } else {
@@ -525,7 +525,7 @@ struct NativeTextCanvas: UIViewRepresentable {
     }
 
     /// Rehydrate, scale, animate, and ID-bind loaded NSTextAttachments after unarchiving rich text.
-    private func upgradeAndNormalizeLoadedAttachments(in mutable: NSMutableAttributedString, for note: Note) {
+    private func upgradeAndNormalizeLoadedAttachments(in mutable: NSMutableAttributedString, for note: Note, textView: UITextView) {
         let fullRange = NSRange(location: 0, length: mutable.length)
         // First normalize base attributes
         mutable.enumerateAttributes(in: fullRange) { attrs, range, _ in
@@ -533,6 +533,13 @@ struct NativeTextCanvas: UIViewRepresentable {
             if newAttrs[.font] == nil { newAttrs[.font] = UIFont.systemFont(ofSize: 20, weight: .regular) }
             if newAttrs[.foregroundColor] == nil { newAttrs[.foregroundColor] = UIColor.label }
             mutable.setAttributes(newAttrs, range: range)
+        }
+        
+        // Set textView reference for any checkboxes
+        mutable.enumerateAttribute(.attachment, in: fullRange) { value, range, _ in
+            if let checkbox = value as? CheckboxTextAttachment {
+                checkbox.textView = textView
+            }
         }
         // Collect attachment ranges
         var attachmentRanges: [NSRange] = []
@@ -634,6 +641,31 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let characterIndex = layoutManager.characterIndex(for: location, in: textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
         
         if characterIndex < attributedText.length {
+            // Check for checkbox first
+            if let checkbox = attributedText.attribute(.attachment, at: characterIndex, effectiveRange: nil) as? CheckboxTextAttachment {
+                checkbox.toggle()
+                
+                // Force refresh by rebuilding the attributed string to ensure visual update
+                let mutableText = NSMutableAttributedString(attributedString: attributedText)
+                
+                // Find the checkbox and replace it with updated version
+                mutableText.enumerateAttribute(.attachment, in: NSRange(location: characterIndex, length: 1), options: []) { value, range, stop in
+                    if let cb = value as? CheckboxTextAttachment, cb === checkbox {
+                        // Create new attachment string with updated checkbox
+                        let newCheckboxString = NSAttributedString(attachment: checkbox)
+                        mutableText.replaceCharacters(in: range, with: newCheckboxString)
+                        stop.pointee = true
+                    }
+                }
+                
+                // Apply the changes
+                let currentSelection = selectedRange
+                attributedText = mutableText
+                selectedRange = currentSelection
+                
+                return
+            }
+            
             if let attachment = attributedText.attribute(.attachment, at: characterIndex, effectiveRange: nil) as? InteractiveTextAttachment {
                 // Convert location to attachment-relative coordinates
                 let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: characterIndex, length: 1), actualCharacterRange: nil)
@@ -782,23 +814,221 @@ class NativeTextView: UITextView, UITextViewDelegate {
     // MARK: - Lists
     
     @objc func insertBulletList() {
-        insertListItem("• ")
+        toggleListItem("• ")
     }
     
     @objc func insertNumberedList() {
-        insertListItem("1. ")
+        let range = selectedRange
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        if range.length > 0 {
+            // Handle multi-line selection with proper numbering
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all lines already have numbered list format
+            let numberedPattern = "^\\d+\\. "
+            let regex = try? NSRegularExpression(pattern: numberedPattern)
+            var allNumbered = true
+            
+            for lineRange in lineRanges {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedLine.isEmpty {
+                    let matches = regex?.matches(in: lineText, range: NSRange(location: 0, length: lineText.count)) ?? []
+                    if matches.isEmpty {
+                        allNumbered = false
+                        break
+                    }
+                }
+            }
+            
+            // Process lines in reverse order
+            var totalLengthChange = 0
+            var lineNumber = lineRanges.count
+            
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !trimmedLine.isEmpty {
+                    if allNumbered {
+                        // Remove numbering
+                        if let regex = regex {
+                            let matches = regex.matches(in: lineText, range: NSRange(location: 0, length: lineText.count))
+                            if let match = matches.first {
+                                let deleteRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
+                                mutableText.deleteCharacters(in: deleteRange)
+                                totalLengthChange -= match.range.length
+                            }
+                        }
+                    } else {
+                        // Add numbering
+                        let prefix = "\(lineNumber). "
+                        let insertion = NSAttributedString(string: prefix, attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += prefix.count
+                        lineNumber -= 1
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+            hasChangesBinding?.wrappedValue = true
+        } else {
+            // Handle single line - check if it has numbering
+            let line = getCurrentLine()
+            let numberedPattern = "^\\d+\\. "
+            if let regex = try? NSRegularExpression(pattern: numberedPattern) {
+                let matches = regex.matches(in: line, range: NSRange(location: 0, length: line.count))
+                if !matches.isEmpty {
+                    // Remove numbering
+                    let lineStart = getCurrentLineRange().location
+                    let deleteRange = NSRange(location: lineStart, length: matches[0].range.length)
+                    mutableText.deleteCharacters(in: deleteRange)
+                    attributedText = mutableText
+                    selectedRange = NSRange(location: max(0, range.location - matches[0].range.length), length: 0)
+                    hasChangesBinding?.wrappedValue = true
+                    return
+                }
+            }
+            // Add numbering
+            toggleListItem("1. ")
+        }
     }
     
     @objc func insertTaskList() {
-        insertListItem("☐ ")
+        let range = selectedRange
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        if range.length > 0 {
+            // Handle multi-line selection
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all lines already have checkbox
+            var allHaveCheckbox = true
+            for lineRange in lineRanges {
+                var hasCheckbox = false
+                mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, _ in
+                    if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                        hasCheckbox = true
+                    }
+                }
+                let lineText = text.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !lineText.isEmpty && !hasCheckbox {
+                    allHaveCheckbox = false
+                    break
+                }
+            }
+            
+            // Process lines in reverse order
+            var totalLengthChange = 0
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !lineText.isEmpty {
+                    if allHaveCheckbox {
+                        // Remove checkbox
+                        mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, stop in
+                            if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                                // Remove checkbox and space after it
+                                let deleteLength = min(2, lineRange.length) // Checkbox + space
+                                mutableText.deleteCharacters(in: NSRange(location: lineRange.location, length: deleteLength))
+                                totalLengthChange -= deleteLength
+                                stop.pointee = true
+                            }
+                        }
+                    } else {
+                        // Add checkbox
+                        let checkbox = CheckboxTextAttachment()
+                        checkbox.textView = self
+                        let checkboxString = NSAttributedString(attachment: checkbox)
+                        let spaceString = NSAttributedString(string: " ", attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        let insertion = NSMutableAttributedString()
+                        insertion.append(checkboxString)
+                        insertion.append(spaceString)
+                        
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += insertion.length
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+        } else {
+            // Handle single line or cursor position
+            let lineRange = getCurrentLineRange()
+            var hasCheckbox = false
+            
+            // Check if line already has checkbox at start
+            if lineRange.length > 0 {
+                mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, stop in
+                    if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                        hasCheckbox = true
+                        stop.pointee = true
+                    }
+                }
+            }
+            
+            if hasCheckbox {
+                // Remove checkbox and space
+                let deleteLength = min(2, lineRange.length)
+                mutableText.deleteCharacters(in: NSRange(location: lineRange.location, length: deleteLength))
+                attributedText = mutableText
+                selectedRange = NSRange(location: max(0, range.location - deleteLength), length: 0)
+            } else {
+                // Add checkbox
+                let line = getCurrentLine()
+                let checkbox = CheckboxTextAttachment()
+                checkbox.textView = self
+                let checkboxString = NSAttributedString(attachment: checkbox)
+                let spaceString = NSAttributedString(string: " ", attributes: [
+                    .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                    .foregroundColor: UIColor.label
+                ])
+                
+                let insertion = NSMutableAttributedString()
+                if !line.isEmpty && range.location != lineRange.location {
+                    insertion.append(NSAttributedString(string: "\n"))
+                }
+                insertion.append(checkboxString)
+                insertion.append(spaceString)
+                
+                let insertLocation = line.isEmpty ? range.location : (range.location == lineRange.location ? lineRange.location : range.location)
+                mutableText.insert(insertion, at: insertLocation)
+                attributedText = mutableText
+                selectedRange = NSRange(location: insertLocation + insertion.length, length: 0)
+            }
+        }
+        
+        hasChangesBinding?.wrappedValue = true
     }
     
     @objc func insertDashedList() {
-        insertListItem("– ")
+        toggleListItem("– ")
     }
     
     @objc func insertBlockQuote() {
-        insertListItem("> ")
+        toggleListItem("> ")
     }
     
     @objc func insertDivider() {
@@ -1117,21 +1347,91 @@ class NativeTextView: UITextView, UITextViewDelegate {
         hasChangesBinding?.wrappedValue = true
     }
     
-    private func insertListItem(_ prefix: String) {
+    private func toggleListItem(_ prefix: String) {
         let range = selectedRange
-        let line = getCurrentLine()
-        let insertText = line.isEmpty ? prefix : "\n" + prefix
-        
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        let insertion = NSAttributedString(string: insertText, attributes: [
-            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-            .foregroundColor: UIColor.label
-        ])
         
-        mutableText.insert(insertion, at: range.location)
-        attributedText = mutableText
-        selectedRange = NSRange(location: range.location + insertText.count, length: 0)
+        if range.length > 0 {
+            // Handle multi-line selection
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            // Enumerate all line ranges that intersect with the selection
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all non-empty lines already have the prefix
+            var allHavePrefix = true
+            for lineRange in lineRanges {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedLine.isEmpty && !lineText.hasPrefix(prefix) {
+                    allHavePrefix = false
+                    break
+                }
+            }
+            
+            // Process lines in reverse order to maintain indices
+            var totalLengthChange = 0
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !trimmedLine.isEmpty {
+                    if allHavePrefix && lineText.hasPrefix(prefix) {
+                        // Remove prefix
+                        let newRange = NSRange(location: lineRange.location, length: prefix.count)
+                        mutableText.deleteCharacters(in: newRange)
+                        totalLengthChange -= prefix.count
+                    } else if !lineText.hasPrefix(prefix) {
+                        // Add prefix
+                        let insertion = NSAttributedString(string: prefix, attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += prefix.count
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            // Adjust selection to account for changed text
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+        } else {
+            // Handle single line or cursor position
+            let line = getCurrentLine()
+            if line.hasPrefix(prefix) {
+                // Remove the prefix from current line
+                let lineStart = getCurrentLineRange().location
+                let deleteRange = NSRange(location: lineStart, length: prefix.count)
+                mutableText.deleteCharacters(in: deleteRange)
+                attributedText = mutableText
+                selectedRange = NSRange(location: max(0, range.location - prefix.count), length: 0)
+            } else {
+                // Add prefix
+                let insertText = line.isEmpty ? prefix : "\n" + prefix
+                let insertion = NSAttributedString(string: insertText, attributes: [
+                    .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                    .foregroundColor: UIColor.label
+                ])
+                mutableText.insert(insertion, at: range.location)
+                attributedText = mutableText
+                selectedRange = NSRange(location: range.location + insertText.count, length: 0)
+            }
+        }
+        
         hasChangesBinding?.wrappedValue = true
+    }
+    
+    private func getCurrentLineRange() -> NSRange {
+        let text = self.text ?? ""
+        let location = selectedRange.location
+        guard location <= text.count else { return NSRange(location: 0, length: 0) }
+        let nsText = text as NSString
+        return nsText.lineRange(for: NSRange(location: location, length: 0))
     }
     
     override func insertText(_ text: String) {
@@ -1212,6 +1512,51 @@ class ColorPickerDelegate: NSObject, UIColorPickerViewControllerDelegate {
     
     func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
         completion(viewController.selectedColor)
+    }
+}
+
+// MARK: - Checkbox Text Attachment
+
+class CheckboxTextAttachment: NSTextAttachment {
+    var isChecked: Bool = false
+    weak var textView: UITextView?
+    
+    override init(data contentData: Data?, ofType uti: String?) {
+        super.init(data: contentData, ofType: uti)
+        updateImage()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        updateImage()
+    }
+    
+    func updateImage() {
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        let symbolName = isChecked ? "checkmark.circle.fill" : "circle"
+        let color = isChecked ? UIColor.systemBlue : UIColor.label
+        
+        if let symbolImage = UIImage(systemName: symbolName, withConfiguration: config)?.withTintColor(color, renderingMode: .alwaysOriginal) {
+            self.image = symbolImage
+            self.bounds = CGRect(x: 0, y: -4, width: 22, height: 22)
+        }
+    }
+    
+    func toggle() {
+        isChecked.toggle()
+        updateImage()
+        
+        // Trigger redraw and haptic feedback
+        if let tv = textView {
+            tv.setNeedsDisplay()
+            
+            // Mark as changed
+            if let nativeTextView = tv as? NativeTextView {
+                nativeTextView.hasChangesBinding?.wrappedValue = true
+                // Add haptic feedback for better user experience
+                HapticManager.impact(.light)
+            }
+        }
     }
 }
 
