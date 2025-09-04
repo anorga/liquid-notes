@@ -17,197 +17,68 @@ extension View {
     
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         let theme = ThemeManager.shared
-        // if #available(iOS 26.0, *) {
-            switch variant {
-            case .regular:
+        
+        switch variant {
+        case .regular:
+            if theme.reduceMotion || theme.minimalMode {
+                return AnyView(self.background(
+                    shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.8))
+                ))
+            } else {
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(Color.clear)
+                        shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.4))
                         
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.6)
-                        )
-                        if theme.highContrast {
-                            shape.stroke(Color.primary.opacity(0.6), lineWidth: 2)
-                        } else {
-                            shape.stroke(
-                                LinearGradient(
-                                    colors: [
-                                        .white.opacity(0.35),
-                                        .white.opacity(0.08),
-                                        .black.opacity(0.12)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 1
-                            )
+                        if !theme.highContrast {
+                            shape.stroke(.white.opacity(0.2), lineWidth: 0.5)
                         }
                     }
                 ))
-            case .thin:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(Color.clear)
-                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.5) : .primary.opacity(0.15), lineWidth: theme.highContrast ? 1 : 0.5)
-                    }
-                ))
-            case .thick:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.55)
-                        )
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.45),
-                                    .white.opacity(0.15),
-                                    .black.opacity(0.18)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1.2
-                        )
-                    }
-                ))
-            case .ultra:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.4)
-                        )
-                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.7) : .white.opacity(0.25), lineWidth: theme.highContrast ? 1.2 : 0.8)
-                    }
-                ))
-            case .floating:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.7)
-                        )
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.4),
-                                    .white.opacity(0.08)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.0
-                        )
-                    }
-                ))
-            case .elevated:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.75)
-                        )
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.55),
-                                    .white.opacity(0.25),
-                                    .black.opacity(0.12)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.5
-                        )
-                    }
-                ))
-            case .ambient:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.backgroundGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity * 0.5)
-                        )
-                        shape.stroke(theme.highContrast ? Color.primary.opacity(0.6) : .white.opacity(0.2), lineWidth: 0.8)
-                    }
-                ))
-            case .vibrant:
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(
-                            LinearGradient(
-                                colors: theme.currentTheme.primaryGradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ).opacity(theme.glassOpacity)
-                        )
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.45),
-                                    .blue.opacity(0.12),
-                                    .purple.opacity(0.12)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1.0
-                        )
-                    }
-                ))
             }
-        // } else {
-        //     // iOS 17+: Apple-style glass borders with system adaptation
-        //     return AnyView(self.background(
-        //         ZStack {
-        //             shape.fill(
-        //                 LinearGradient(
-        //                     colors: theme.currentTheme.primaryGradient,
-        //                     startPoint: .topLeading,
-        //                     endPoint: .bottomTrailing
-        //                 ).opacity(theme.glassOpacity * 0.65)
-        //             )
-        //             if theme.highContrast {
-        //                 shape.stroke(Color.primary.opacity(0.55), lineWidth: 1.2)
-        //             } else {
-        //                 shape.stroke(
-        //                     LinearGradient(
-        //                         colors: [
-        //                             .primary.opacity(0.18),
-        //                             .primary.opacity(0.05),
-        //                             .secondary.opacity(0.1)
-        //                         ],
-        //                         startPoint: .topLeading,
-        //                         endPoint: .bottomTrailing
-        //                     ),
-        //                     lineWidth: 0.8
-        //                 )
-        //             }
-        //         }
-        //     ))
-        // }
+        case .thin:
+            return AnyView(self.background(
+                shape.fill(.thinMaterial.opacity(theme.glassOpacity * 0.6))
+            ))
+        case .thick:
+            return AnyView(self.background(
+                ZStack {
+                    shape.fill(.regularMaterial.opacity(theme.glassOpacity * 0.7))
+                    if !theme.minimalMode {
+                        shape.stroke(.white.opacity(0.15), lineWidth: 0.8)
+                    }
+                }
+            ))
+        case .ultra:
+            return AnyView(self.background(
+                ZStack {
+                    shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.5))
+                    if !theme.minimalMode {
+                        shape.stroke(.white.opacity(0.25), lineWidth: 0.8)
+                    }
+                }
+            ))
+        case .floating:
+            return AnyView(self.background(
+                shape.fill(.thickMaterial.opacity(theme.glassOpacity * 0.8))
+            ))
+        case .elevated:
+            return AnyView(self.background(
+                shape.fill(.regularMaterial.opacity(theme.glassOpacity * 0.9))
+            ))
+        case .ambient:
+            return AnyView(self.background(
+                shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.4))
+            ))
+        case .vibrant:
+            return AnyView(self.background(
+                ZStack {
+                    shape.fill(.thickMaterial.opacity(theme.glassOpacity))
+                    if !theme.minimalMode {
+                        shape.stroke(.white.opacity(0.3), lineWidth: 0.5)
+                    }
+                }
+            ))
+        }
     }
     
     /// Convenience overload for common shapes  
@@ -334,71 +205,30 @@ extension View {
 extension View {
     func refinedClearGlass(cornerRadius: CGFloat = 22, intensity: Double = 1.0) -> some View {
         let theme = ThemeManager.shared
-    // Blend noteGlassDepth (passed as intensity) with global glassOpacity; adapt for minimalMode
-    let depth = intensity
-    let opacityFactor = theme.glassOpacity // 0.3 ... 0.95
-    let combined = depth * opacityFactor // master factor
-    // Base translucency target: lower values = more transparent
-    let materialOpacity = 0.25 + combined * 0.55 // 0.25 ... ~0.8
-    // Gradient strength (color wash)
-    let gradientAlpha = 0.08 + combined * 0.28 + (theme.highContrast ? 0.08 : 0)
-    let gradientColors = theme.currentTheme.primaryGradient.map { $0.opacity(gradientAlpha) }
-    // Stroke & glow scaling (re-tuned for subtle "liquid" border)
-    // We collapse dual-stroke system into a single adaptive hairline + faint inner highlight
-    let hairlineAlpha = (theme.highContrast ? 0.75 : 0.45) + combined * (theme.highContrast ? 0.15 : 0.10)
-    let innerHighlightAlpha = (theme.highContrast ? 0.35 : 0.20) + combined * 0.08
-    let outerShadowAlpha = 0.18 + combined * 0.18 + (theme.highContrast ? 0.06 : 0)
-    let haloAlpha = 0.05 + combined * 0.12 + (theme.highContrast ? 0.08 : 0)
-    let minimal = theme.minimalMode
-    let blurRadius = minimal ? 4 : (theme.reduceMotion ? 8 : 18 + combined * 14)
-    let gradientBlur = minimal ? 6 : (theme.reduceMotion ? 10 : 24 + combined * 10)
-        return self
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(.ultraThinMaterial.opacity(materialOpacity))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: gradientColors,
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        )
+        let materialOpacity = 0.4 + (intensity * theme.glassOpacity * 0.4)
+        
+        return Group {
+            if theme.minimalMode || theme.reduceMotion {
+                self
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(.ultraThinMaterial.opacity(materialOpacity))
                     )
-            .blur(radius: gradientBlur)
-            .opacity(0.85)
-            )
-            // Unified liquid border system: subtle hairline + inner luminous edge
-            .overlay(
-                ZStack {
-                    // Hairline (outer) – very subtle, adaptive
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(colors: [
-                                .white.opacity(hairlineAlpha),
-                                .white.opacity(0.02)
-                            ], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: theme.highContrast ? 1.1 : 0.7
-                        )
-                        .blendMode(.plusLighter)
-                        .opacity(minimal ? 0.55 : 0.85)
-                    // Inner highlight (simulated inner shadow inverse)
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(colors: [
-                                (theme.currentTheme.primaryGradient.first ?? .white).opacity(innerHighlightAlpha * 0.9),
-                                .clear
-                            ], startPoint: .bottomTrailing, endPoint: .topLeading),
-                            lineWidth: theme.highContrast ? 0.9 : 0.6
-                        )
-                        .blur(radius: 1.0)
-                        .opacity(minimal ? 0.35 : 0.55)
-                        .blendMode(.screen)
-                }
-            )
-            .shadow(color: .black.opacity(minimal ? outerShadowAlpha * 0.4 : outerShadowAlpha), radius: (minimal ? 8 : 16) + combined * (minimal ? 2 : 6), x: 0, y: minimal ? 6 : 10)
-            .shadow(color: (theme.currentTheme.primaryGradient.first ?? .white).opacity(minimal ? haloAlpha * 0.5 : haloAlpha), radius: (minimal ? 16 : 30) + combined * (minimal ? 8 : 18), x: 0, y: minimal ? 12 : 20)
-        .blur(radius: blurRadius * 0.0) // placeholder if future depth-of-field needed
+                    .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
+            } else {
+                self
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(.ultraThinMaterial.opacity(materialOpacity))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .stroke(.white.opacity(0.2), lineWidth: 0.5)
+                    )
+                    .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+                    .shadow(color: .white.opacity(0.1), radius: 20, x: 0, y: 10)
+            }
+        }
     }
     
     func subtleParallax(_ motion: MotionManager = .shared, maxOffset: CGFloat = 8) -> some View {

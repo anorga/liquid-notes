@@ -12,9 +12,12 @@ import SwiftData
 @MainActor
 class NotesViewModel {
     private var modelContext: ModelContext
+    private let backgroundQueue = DispatchQueue(label: "NotesViewModel.background", qos: .userInitiated)
+    private var queryCache: [String: [Note]] = [:]
+    private var lastQueryTime: TimeInterval = 0
+    private let queryThrottleInterval: TimeInterval = 0.5
     
     var searchText = ""
-    // Removed selectedThemeID - no longer using themes
     var isEditMode = false
     var syncStatus: SyncStatus = .idle
     
@@ -30,17 +33,18 @@ class NotesViewModel {
     // MARK: - Note Operations
     
     func createNote(title: String = "", content: String = "") -> Note {
+        clearQueryCache()
+        
         let note = Note(title: title, content: content)
         let descriptor = FetchDescriptor<Note>()
         let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
-        // Assign to default folder if one exists (or create it if none present)
+        
         let folderDescriptor = FetchDescriptor<Folder>()
         if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
             note.folder = first
         } else {
-            // Create a default folder named "Folder" and assign
             let defaultFolder = Folder(name: "Folder")
             modelContext.insert(defaultFolder)
             note.folder = defaultFolder
@@ -161,11 +165,31 @@ class NotesViewModel {
     // MARK: - Search and Filtering
     
     func filteredNotes(from notes: [Note]) -> [Note] {
-        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let currentTime = CACurrentMediaTime()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if query.isEmpty {
             return notes.filter { !$0.isArchived }
         }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Operators: #tag, is:fav, has:task, is:overdue, priority:<level>, due:yyyy-mm-dd, progress:>=NN, tag:any, tag:all
+        
+        if let cached = queryCache[query],
+           currentTime - lastQueryTime < queryThrottleInterval {
+            return cached
+        }
+        
+        let result = performFiltering(notes: notes, query: query)
+        
+        queryCache[query] = result
+        lastQueryTime = currentTime
+        
+        if queryCache.count > 50 {
+            queryCache.removeAll()
+        }
+        
+        return result
+    }
+    
+    private func performFiltering(notes: [Note], query: String) -> [Note] {
         var requiredTags: [String] = []
         var requireFavorite = false
         var requireHasTask = false
@@ -173,8 +197,9 @@ class NotesViewModel {
         var priorityFilter: NotePriority? = nil
         var minProgress: Double? = nil
         var dueBefore: Date? = nil
-        var tagModeAll = true // tag:any vs tag:all
+        var tagModeAll = true
         var textTerms: [String] = []
+        
         query.split(separator: " ").forEach { tokenSub in
             let token = String(tokenSub)
             if token.hasPrefix("#") {
@@ -197,6 +222,7 @@ class NotesViewModel {
             else if token.lowercased() == "tag:any" { tagModeAll = false }
             else { textTerms.append(token) }
         }
+        
         return notes.filter { note in
             if note.isArchived { return false }
             if requireFavorite && !note.isFavorited { return false }
@@ -205,7 +231,7 @@ class NotesViewModel {
             if let mp = minProgress, note.progress < mp { return false }
             if requireOverdue, let due = note.dueDate { if due > Date() { return false } } else if requireOverdue && note.dueDate == nil { return false }
             if let db = dueBefore, let due = note.dueDate { if due > db { return false } } else if dueBefore != nil && note.dueDate == nil { return false }
-            // Tags requirement: every required tag must exist (case-insensitive)
+            
             if !requiredTags.isEmpty {
                 let lowered = note.tags.map { $0.lowercased() }
                 if tagModeAll {
@@ -216,7 +242,7 @@ class NotesViewModel {
                     if !matchAny { return false }
                 }
             }
-            // Text terms must each appear in title/content/tags/tasks
+            
             if !textTerms.isEmpty {
                 let tagsJoined = note.tags.joined(separator: " ")
                 let tasksJoined = (note.tasks ?? []).map { $0.text }.joined(separator: " ")
@@ -286,5 +312,10 @@ class NotesViewModel {
         }
         saveContext()
         return targetFolder
+    }
+    
+    private func clearQueryCache() {
+        queryCache.removeAll()
+        lastQueryTime = 0
     }
 }

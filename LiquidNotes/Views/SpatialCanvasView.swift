@@ -649,10 +649,90 @@ private extension GridNoteCard {
     return PreviewHost()
 }
 
+class GIFAnimator: NSObject {
+    private var displayLink: CADisplayLink?
+    private var imageSource: CGImageSource?
+    private var frameIndex = 0
+    private var frameCount = 0
+    private var frameDurations: [TimeInterval] = []
+    private var lastFrameTime: TimeInterval = 0
+    private var currentFrameTime: TimeInterval = 0
+    private var onFrameUpdate: ((UIImage?) -> Void)?
+    
+    func startAnimation(with data: Data, onFrameUpdate: @escaping (UIImage?) -> Void) {
+        self.onFrameUpdate = onFrameUpdate
+        
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 1 else {
+            onFrameUpdate(UIImage(data: data))
+            return
+        }
+        
+        imageSource = source
+        frameCount = CGImageSourceGetCount(source)
+        frameDurations = (0..<frameCount).compactMap { index in
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any],
+                  let gifProperties = properties[kCGImagePropertyGIFDictionary as String] as? [String: Any] else {
+                return 0.1
+            }
+            
+            let duration = gifProperties[kCGImagePropertyGIFDelayTime as String] as? TimeInterval ?? 0.1
+            return max(duration, 0.05)
+        }
+        
+        if let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            onFrameUpdate(UIImage(cgImage: cgImage))
+        }
+        
+        let displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
+        let optimizer = PerformanceOptimizer.shared
+        displayLink.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 8 : 15
+        displayLink.add(to: .main, forMode: .common)
+        self.displayLink = displayLink
+    }
+    
+    @objc private func updateFrame() {
+        guard let imageSource = imageSource,
+              frameCount > 0,
+              frameDurations.count == frameCount else { return }
+        
+        let currentTime = CACurrentMediaTime()
+        if lastFrameTime == 0 {
+            lastFrameTime = currentTime
+        }
+        
+        currentFrameTime += (currentTime - lastFrameTime)
+        lastFrameTime = currentTime
+        
+        let frameDuration = frameDurations[frameIndex]
+        
+        if currentFrameTime >= frameDuration {
+            currentFrameTime = 0
+            frameIndex = (frameIndex + 1) % frameCount
+            
+            if let cgImage = CGImageSourceCreateImageAtIndex(imageSource, frameIndex, nil) {
+                onFrameUpdate?(UIImage(cgImage: cgImage))
+            }
+        }
+    }
+    
+    func stopAnimation() {
+        displayLink?.invalidate()
+        displayLink = nil
+        imageSource = nil
+        frameIndex = 0
+        frameCount = 0
+        frameDurations.removeAll()
+        lastFrameTime = 0
+        currentFrameTime = 0
+        onFrameUpdate = nil
+    }
+}
+
 struct AnimatedGIFView: View {
     let data: Data
     @State private var currentFrame: UIImage?
-    @State private var timer: Timer?
+    @State private var animator = GIFAnimator()
     
     var body: some View {
         Group {
@@ -666,35 +746,13 @@ struct AnimatedGIFView: View {
             }
         }
         .onAppear {
-            startAnimation()
+            animator.startAnimation(with: data) { frame in
+                currentFrame = frame
+            }
         }
         .onDisappear {
-            stopAnimation()
+            animator.stopAnimation()
         }
-    }
-    
-    private func startAnimation() {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetCount(source) > 1 else {
-            // Fallback to static image
-            currentFrame = UIImage(data: data)
-            return
-        }
-        
-        var frameIndex = 0
-        let frameCount = CGImageSourceGetCount(source)
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            if let cgImage = CGImageSourceCreateImageAtIndex(source, frameIndex, nil) {
-                currentFrame = UIImage(cgImage: cgImage)
-            }
-            frameIndex = (frameIndex + 1) % frameCount
-        }
-    }
-    
-    private func stopAnimation() {
-        timer?.invalidate()
-        timer = nil
     }
 }
 
