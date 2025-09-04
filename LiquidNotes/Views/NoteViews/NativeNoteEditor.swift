@@ -105,6 +105,8 @@ struct NativeNoteEditor: View {
                     }
                 }
             }
+            .toolbarBackground(.ultraThinMaterial, for: .bottomBar)
+            .toolbarBackgroundVisibility(.visible, for: .bottomBar)
             .navigationBarHidden(true)
             .onAppear { 
                 setupEditor()
@@ -277,6 +279,8 @@ struct NativeNoteEditor: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
     }
     
     private func setupEditor() {
