@@ -1641,7 +1641,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         let optimizer = PerformanceOptimizer.shared
         link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
         
-        if optimizer.thermalState == .serious || optimizer.thermalState == .critical {
+        if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             return
         }
         
@@ -1653,7 +1653,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         guard gifFrames.count > 1 else { return }
         
         let optimizer = PerformanceOptimizer.shared
-        if optimizer.thermalState == .serious || optimizer.thermalState == .critical {
+        if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             gifDisplayLink?.invalidate()
             gifDisplayLink = nil
             return
