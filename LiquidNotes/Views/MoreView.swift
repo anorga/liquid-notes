@@ -10,7 +10,6 @@ struct MoreView: View {
                     LNHeader(title: "More") { EmptyView() }
                     VStack(spacing: 14) {
                         MoreNavLink(icon: "gearshape.fill", color: .blue, title: "Settings") { SettingsView().navigationBarHidden(true) }
-                        MoreNavLink(icon: "circle.grid.3x3", color: .blue, title: "Graph") { GraphView().navigationBarHidden(true) }
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 12)
