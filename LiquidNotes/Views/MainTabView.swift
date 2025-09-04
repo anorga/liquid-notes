@@ -38,8 +38,15 @@ struct MainTabView: View {
     // Command system removed
     // Removed reindex trigger (simplification)
         .sheet(item: $selectedNote) { note in
-            NoteEditorView(note: note)
-                .presentationDetents([.medium, .large])
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                NoteEditorView(note: note)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            } else {
+                NoteEditorView(note: note)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .sheet(isPresented: $showingDailyReview) {
             DailyReviewView()

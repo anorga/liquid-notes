@@ -173,8 +173,15 @@ struct SearchView: View {
                 }
             }
             .sheet(item: $selectedNote) { note in
-                NoteEditorView(note: note)
-                    .presentationDetents([.medium, .large])
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    NoteEditorView(note: note)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.hidden)
+                } else {
+                    NoteEditorView(note: note)
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                }
             }
             .navigationBarHidden(true)
         }
