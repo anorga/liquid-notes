@@ -56,16 +56,17 @@ final class PerformanceOptimizer: ObservableObject {
         }
     }
     
-    var shouldReduceAnimations: Bool {
-        thermalState == .serious || thermalState == .critical
+    nonisolated var shouldReduceAnimations: Bool {
+        ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical
     }
     
-    var shouldUseSimplifiedGlass: Bool {
-        thermalState == .fair || thermalState == .serious || thermalState == .critical
+    nonisolated var shouldUseSimplifiedGlass: Bool {
+        let state = ProcessInfo.processInfo.thermalState
+        return state == .fair || state == .serious || state == .critical
     }
     
-    var shouldReduceGIFFrameRate: Bool {
-        thermalState != .nominal
+    nonisolated var shouldReduceGIFFrameRate: Bool {
+        ProcessInfo.processInfo.thermalState != .nominal
     }
     
     func performBackgroundTask<T>(_ task: @escaping () throws -> T, completion: @MainActor @escaping (Result<T, Error>) -> Void) {
