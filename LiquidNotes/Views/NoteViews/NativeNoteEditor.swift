@@ -11,6 +11,8 @@ struct NativeNoteEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     
     let note: Note
     
@@ -26,6 +28,33 @@ struct NativeNoteEditor: View {
     @State private var pendingSaveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: TimeInterval = 0.6
     
+    // Compute optimal content width based on device and size class
+    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? {
+        let screenWidth = geometry.size.width
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        
+        if isIPad {
+            // iPad: Progressive width constraints based on available space
+            
+            // Threshold for when to stop constraining width (near full screen)
+            let fullScreenThreshold: CGFloat = 1100
+            
+            if screenWidth < fullScreenThreshold {
+                // Below threshold: Use full width for better space utilization
+                return nil
+            } else {
+                // Above threshold: Apply reading width constraint
+                // This creates a smooth transition as window approaches full screen
+                let maxReadingWidth: CGFloat = 900
+                let padding: CGFloat = 100
+                return min(screenWidth - padding, maxReadingWidth)
+            }
+        } else {
+            // iPhone: Always use full width
+            return nil
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
@@ -39,14 +68,34 @@ struct NativeNoteEditor: View {
                         // Minimal top navigation - native style
                         nativeTopBar
                         
-                        // Native text editor canvas
-                        NativeTextCanvas(
-                            note: note,
-                            textView: $textView,
-                            hasChanges: $hasChanges,
-                            selectedTextStyle: $selectedTextStyle,
-                            modelContext: modelContext
-                        )
+                        // Centered content container with responsive width
+                        if let maxWidth = optimalWidth(for: geometry) {
+                            // iPad with optimal width - center the content
+                            HStack {
+                                Spacer()
+                                VStack(spacing: 0) {
+                                    // Native text editor canvas
+                                    NativeTextCanvas(
+                                        note: note,
+                                        textView: $textView,
+                                        hasChanges: $hasChanges,
+                                        selectedTextStyle: $selectedTextStyle,
+                                        modelContext: modelContext
+                                    )
+                                }
+                                .frame(maxWidth: maxWidth)
+                                Spacer()
+                            }
+                        } else {
+                            // iPhone or compact iPad - use full width
+                            NativeTextCanvas(
+                                note: note,
+                                textView: $textView,
+                                hasChanges: $hasChanges,
+                                selectedTextStyle: $selectedTextStyle,
+                                modelContext: modelContext
+                            )
+                        }
                         
                         // Bottom formatting toolbar
                         formattingToolbar
@@ -411,7 +460,13 @@ struct NativeTextCanvas: UIViewRepresentable {
         textView.backgroundColor = .clear
         textView.font = .systemFont(ofSize: 20, weight: .regular) // Increased from 17
         textView.textColor = .label // Dynamic color for light/dark mode
-        textView.textContainerInset = UIEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        
+        // Responsive insets based on device
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        let horizontalInset: CGFloat = isIPad ? 40 : 20
+        let verticalInset: CGFloat = isIPad ? 24 : 16
+        textView.textContainerInset = UIEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: horizontalInset)
+        
         textView.isScrollEnabled = true
         textView.keyboardDismissMode = .interactive
         textView.allowsEditingTextAttributes = true
