@@ -45,19 +45,6 @@ final class Note {
     var fileAttachmentThumbNames: [String] = []   // thumbnail file names (optional)
     // One-time flag to prevent repeated legacy attachment migration
     var legacyMigrationDone: Bool = false
-    // Parsed [[link]] titles referenced in content (resolved lazily by title match)
-    var linkedNoteTitles: [String] = []
-    // Historical titles for stable link resolution if a note is renamed
-    var aliasTitles: [String] = []
-    // Resolved linked note UUIDs (stable graph). Maintained by reindexer.
-    var linkedNoteIDs: [UUID] = []
-    // Graph layout (persisted user-adjusted positions)
-    var graphPosX: Double = 0
-    var graphPosY: Double = 0
-    var hasCustomGraphPosition: Bool = false
-    // Link usage metrics (for ranking suggestions)
-    var linkUsageCount: Int = 0
-    var lastLinkedDate: Date? = nil
     
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.note) var tasks: [TaskItem]? // CloudKit requires optional relationships
     var dueDate: Date?
@@ -85,14 +72,6 @@ final class Note {
     self.attachmentTypes = []  
     self.tasks = []
     self.dueDate = nil
-    self.linkedNoteTitles = []
-    self.aliasTitles = []
-    self.linkedNoteIDs = []
-    self.graphPosX = 0
-    self.graphPosY = 0
-    self.hasCustomGraphPosition = false
-    self.linkUsageCount = 0
-    self.lastLinkedDate = nil
     self.previewExcerpt = ""
     self.legacyMigrationDone = false
     }
@@ -214,33 +193,6 @@ final class Note {
     func removeTag(_ tag: String) {
         tags.removeAll { $0 == tag }
         updateModifiedDate()
-    }
-}
-
-// MARK: - Linking Helpers
-extension Note {
-    /// Extracts [[Linked Note]] style references from the note content and stores the raw titles.
-    /// Call this after mutating `content` (typically during save) before persisting context.
-    func updateLinkedNoteTitles() {
-        let pattern = #"\[\[([^\]]+)\]\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-        let range = NSRange(location: 0, length: (content as NSString).length)
-        let matches = regex.matches(in: content, range: range)
-        let titles = matches.compactMap { match -> String? in
-            guard match.numberOfRanges >= 2 else { return nil }
-            let sub = match.range(at: 1)
-            if let swiftRange = Range(sub, in: content) { return String(content[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines) }
-            return nil
-        }
-        linkedNoteTitles = Array(Set(titles)).sorted()
-    }
-
-    /// Records previous title as alias if changed and non-empty.
-    func recordTitleAlias(previousTitle: String, newTitle: String) {
-        let old = previousTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let new = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !old.isEmpty, !new.isEmpty, old != new else { return }
-        if !aliasTitles.contains(old) { aliasTitles.append(old) }
     }
 }
 

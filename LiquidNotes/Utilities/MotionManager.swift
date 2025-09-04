@@ -16,7 +16,12 @@ class MotionManager: ObservableObject {
     @Published var data = MotionData()
     @Published var isActive = false
     
-    // Convenience property for glass effects
+    private var motionUpdateTimer: Timer?
+    private var lastUpdateTime: TimeInterval = 0
+    private var motionThreshold: Double = 0.02
+    private var isDeviceStationary = true
+    private var stationaryStartTime: TimeInterval = 0
+    
     var motionData: MotionData {
         return data
     }
@@ -29,7 +34,11 @@ class MotionManager: ObservableObject {
         var gravity = CMAcceleration()
         
         var isSignificantMotion: Bool {
-            abs(pitch) > 0.1 || abs(roll) > 0.1 || abs(yaw) > 0.1
+            abs(pitch) > 0.02 || abs(roll) > 0.02 || abs(yaw) > 0.02
+        }
+        
+        var motionIntensity: Double {
+            sqrt(pitch * pitch + roll * roll + yaw * yaw)
         }
     }
     
@@ -48,15 +57,16 @@ class MotionManager: ObservableObject {
             return
         }
         
-        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0 // 60 FPS for smooth animations
+        motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
     }
     
     func startTracking() {
         guard !isActive && motionManager.isDeviceMotionAvailable else { return }
         
         isActive = true
+        lastUpdateTime = CACurrentMediaTime()
         
-        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+        motionManager.startDeviceMotionUpdates(to: OperationQueue()) { [weak self] motion, error in
             guard let self = self, let motion = motion else {
                 if let error = error {
                     print("Motion update error: \(error)")
@@ -64,7 +74,7 @@ class MotionManager: ObservableObject {
                 return
             }
             
-            self.updateMotionData(motion)
+            self.processMotionUpdate(motion)
         }
     }
     
@@ -73,17 +83,43 @@ class MotionManager: ObservableObject {
         
         isActive = false
         motionManager.stopDeviceMotionUpdates()
+        motionUpdateTimer?.invalidate()
+        motionUpdateTimer = nil
         
-        // Reset motion data
         data = MotionData()
     }
     
-    private func updateMotionData(_ motion: CMDeviceMotion) {
-        data.pitch = motion.attitude.pitch
-        data.roll = motion.attitude.roll
-        data.yaw = motion.attitude.yaw
-        data.rotationRate = motion.rotationRate
-        data.gravity = motion.gravity
+    private func processMotionUpdate(_ motion: CMDeviceMotion) {
+        let currentTime = CACurrentMediaTime()
+        
+        let newPitch = motion.attitude.pitch
+        let newRoll = motion.attitude.roll
+        let newYaw = motion.attitude.yaw
+        
+        let pitchDelta = abs(newPitch - data.pitch)
+        let rollDelta = abs(newRoll - data.roll)
+        let yawDelta = abs(newYaw - data.yaw)
+        let motionDelta = max(pitchDelta, rollDelta, yawDelta)
+        
+        if motionDelta > motionThreshold {
+            isDeviceStationary = false
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.data.pitch = newPitch
+                self.data.roll = newRoll
+                self.data.yaw = newYaw
+                self.data.rotationRate = motion.rotationRate
+                self.data.gravity = motion.gravity
+            }
+            lastUpdateTime = currentTime
+        } else if !isDeviceStationary {
+            if stationaryStartTime == 0 {
+                stationaryStartTime = currentTime
+            } else if currentTime - stationaryStartTime > 2.0 {
+                isDeviceStationary = true
+                stationaryStartTime = 0
+            }
+        }
     }
     
     // MARK: - Utility Methods

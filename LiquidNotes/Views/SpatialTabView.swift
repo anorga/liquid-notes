@@ -107,10 +107,15 @@ struct SpatialTabView: View {
             .onChange(of: folders) { ensureFolderSelection() }
             .onDisappear { clearSelection() }
             .sheet(item: $selectedNote) { note in
-                NoteEditorView(note: note)
-                    .presentationDetents(
-                        UIDevice.current.userInterfaceIdiom == .pad ? [.large] : [.medium, .large]
-                    )
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    NoteEditorView(note: note)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.hidden)
+                } else {
+                    NoteEditorView(note: note)
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                }
             }
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
             .sheet(isPresented: $showingDailyReview) {
