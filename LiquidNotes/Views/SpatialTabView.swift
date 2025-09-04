@@ -148,8 +148,8 @@ struct SpatialTabView: View {
                     // No folders yet (very first launch) – allow creating one
                     Button { createNewFolder() } label: {
                         Image(systemName: "plus")
-                            .font(.caption)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .font(.body)
+                            .padding(.horizontal, 16).padding(.vertical, 10)
                             .background(Capsule().fill(Color.secondary.opacity(0.15)))
                     }.buttonStyle(.plain)
                 } else {
@@ -158,14 +158,14 @@ struct SpatialTabView: View {
                     // Persistent + button
                     Button { createNewFolder() } label: {
                         Image(systemName: "plus")
-                            .font(.caption)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .font(.body)
+                            .padding(.horizontal, 16).padding(.vertical, 10)
                             .background(Capsule().fill(Color.secondary.opacity(0.15)))
                     }.buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 6)
+            .padding(.vertical, 10)
         }
     }
     // Selected folder now externally bindable so other creation entry points (FAB, Quick Capture, Commands) honor current folder
@@ -200,8 +200,8 @@ struct SpatialTabView: View {
             if !isRenaming { favoriteButton(folder) }
             if !isRenaming { folderMenu(folder) }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(Capsule().fill(baseFill))
         .overlay(Capsule().stroke(strokeColor, lineWidth: strokeWidth))
         .contentShape(Rectangle())
@@ -216,7 +216,7 @@ struct SpatialTabView: View {
     }
     private func folderLabel(folder: Folder, highlighted: Bool) -> some View {
         Text(folder.name)
-            .font(.caption2)
+            .font(.body)
             .fontWeight(highlighted ? .semibold : .regular)
             .lineLimit(1)
             .onTapGesture { withAnimation(.bouncy(duration:0.35)) { selectedFolder = highlighted ? nil : folder } }
@@ -224,14 +224,14 @@ struct SpatialTabView: View {
     private func renameEditor(for folder: Folder) -> some View {
         HStack(spacing: 4) {
             TextField("Name", text: Binding(get: { folder.name }, set: { folder.name = $0 }))
-                .font(.caption2)
+                .font(.body)
                 .textFieldStyle(.plain)
                 .frame(minWidth: 70)
                 .focused($folderNameFocused)
-            Button { commitRename(folder) } label: { Image(systemName: "checkmark").font(.caption2) }
+            Button { commitRename(folder) } label: { Image(systemName: "checkmark").font(.callout) }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Save folder name")
-            Button { cancelRename() } label: { Image(systemName: "xmark").font(.caption2) }
+            Button { cancelRename() } label: { Image(systemName: "xmark").font(.callout) }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cancel rename")
         }
@@ -253,7 +253,7 @@ struct SpatialTabView: View {
             Button(role: .destructive) { deleteFolder(folder) } label: { Label("Delete", systemImage: "trash") }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.caption2)
+                .font(.callout)
                 .padding(.horizontal, 2)
         }
         .menuIndicator(.hidden)
@@ -271,22 +271,22 @@ struct SpatialTabView: View {
     private var folderSection: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Label("Folders", systemImage: "folder").font(.caption).foregroundStyle(.secondary)
+                Label("Folders", systemImage: "folder").font(.callout).foregroundStyle(.secondary)
                 Button(action: { withAnimation(.spring(response:0.35,dampingFraction:0.85)) { foldersCollapsed.toggle() } }) {
                     Image(systemName: foldersCollapsed ? "chevron.down" : "chevron.up")
-                        .font(.caption2)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }.buttonStyle(.plain)
                 if selectionMode && !selectedNoteIDs.isEmpty {
                     Button("Move Selected") { showingMoveSheet = true }
-                        .font(.caption2)
+                        .font(.callout)
                         .buttonStyle(.plain)
                 }
                 Spacer()
             }
             .padding(.horizontal, 20)
-            .padding(.top, 2)
-            .padding(.bottom, foldersCollapsed ? 4 : 0)
+            .padding(.top, 6)
+            .padding(.bottom, foldersCollapsed ? 8 : 0)
             if !foldersCollapsed { folderBar.transition(.opacity.combined(with: .move(edge: .top))) }
         }
     }
