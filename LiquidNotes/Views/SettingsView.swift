@@ -77,31 +77,6 @@ struct SettingsView: View {
                 .foregroundStyle(.primary)
             
             VStack(alignment: .leading, spacing: 12) {
-                // Live preview card
-                Text("Preview")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                HStack(alignment: .center) {
-                    ZStack(alignment: .topLeading) {
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .fill(Color.clear)
-                            .refinedClearGlass(cornerRadius: 26, intensity: themeManager.noteGlassDepth)
-                            .frame(width: 160, height: 110)
-                            .overlay(alignment: .topLeading) {
-                                Text("Sample")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
-                                    .padding(8)
-                            }
-                            // Removed style embellishment icon (single unified style)
-                            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.05 : 0.18), radius: themeManager.minimalMode ? 4 : 12, x: 0, y: themeManager.minimalMode ? 2 : 6)
-                            // Overlay stroke removed; unified border handled by refinedClearGlass
-                    }
-                    Spacer()
-                }
-                .padding(.bottom, 4)
-
                 Text("Glass Theme")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
