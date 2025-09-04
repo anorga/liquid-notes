@@ -30,6 +30,8 @@ struct MainTabView: View {
             Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackgroundVisibility(.visible, for: .tabBar)
         .onAppear { setupViewModel() }
     .onAppear { registerOpenNoteObserver() }
     .onAppear { registerCreateAndLinkObserver() }
