@@ -69,7 +69,6 @@ struct SpatialCanvasView: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gapSpacing) {
                         ForEach(notes, id: \.id) { note in
-                            let _ = note.id // Force capture to avoid observation
                             GridNoteCard(
                                 note: note,
                                 selectionMode: selectionMode,
@@ -658,6 +657,7 @@ class GIFAnimator: NSObject {
     private var lastFrameTime: TimeInterval = 0
     private var currentFrameTime: TimeInterval = 0
     private var onFrameUpdate: ((UIImage?) -> Void)?
+    private var isPaused = false
     
     func startAnimation(with data: Data, onFrameUpdate: @escaping (UIImage?) -> Void) {
         self.onFrameUpdate = onFrameUpdate
@@ -686,13 +686,14 @@ class GIFAnimator: NSObject {
         
         let displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
         let optimizer = PerformanceOptimizer.shared
-        displayLink.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 8 : 15
+        displayLink.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 5 : 10
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
     }
     
     @objc private func updateFrame() {
-        guard let imageSource = imageSource,
+        guard !isPaused,
+              let imageSource = imageSource,
               frameCount > 0,
               frameDurations.count == frameCount else { return }
         
@@ -716,6 +717,16 @@ class GIFAnimator: NSObject {
         }
     }
     
+    func pauseAnimation() {
+        isPaused = true
+        displayLink?.isPaused = true
+    }
+    
+    func resumeAnimation() {
+        isPaused = false
+        displayLink?.isPaused = false
+    }
+    
     func stopAnimation() {
         displayLink?.invalidate()
         displayLink = nil
@@ -726,6 +737,7 @@ class GIFAnimator: NSObject {
         lastFrameTime = 0
         currentFrameTime = 0
         onFrameUpdate = nil
+        isPaused = false
     }
 }
 
