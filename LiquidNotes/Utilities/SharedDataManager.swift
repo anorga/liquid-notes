@@ -47,11 +47,19 @@ class SharedDataManager {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(widgetNotes)
-            try data.write(to: widgetDataURL)
-            
+            let newData = try encoder.encode(widgetNotes)
+            // If data hasn't changed, skip writing and reloading timelines
+            if let existingData = try? Data(contentsOf: widgetDataURL), existingData == newData {
+                #if DEBUG
+                print("🟡 SharedDataManager: Widget data unchanged; skipping write/reload")
+                #endif
+                return
+            }
+            try newData.write(to: widgetDataURL, options: .atomic)
             WidgetCenter.shared.reloadAllTimelines()
+            #if DEBUG
             print("🟢 SharedDataManager: Widget timeline reload requested at \(Date())")
+            #endif
         } catch {
             print("🔴 SharedDataManager: Failed to save widget data: \(error)")
         }
@@ -70,6 +78,31 @@ class SharedDataManager {
         } catch {
             print("Failed to load widget data: \(error)")
             return []
+        }
+    }
+
+    // Centralized helper to compute the widget dataset and persist it to the app group.
+    // Keep this logic identical to previous scattered implementations.
+    @MainActor
+    func refreshWidgetData(context: ModelContext) {
+        let descriptor = FetchDescriptor<Note>(
+            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
+        )
+        if let notes = try? context.fetch(descriptor) {
+            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
+            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
+            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
+            saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
+        }
+    }
+
+    // Convenience: build a temporary container and refresh without a provided context.
+    // Use sparingly; prefer the context-aware variant when available.
+    @MainActor
+    func refreshWidgetData() {
+        if let container = try? ModelContainer(for: Note.self, NoteCategory.self, Folder.self) {
+            let context = container.mainContext
+            refreshWidgetData(context: context)
         }
     }
     
