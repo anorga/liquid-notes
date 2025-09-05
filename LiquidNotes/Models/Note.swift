@@ -160,6 +160,11 @@ final class Note {
     tasks = copy
     updateProgress()
     updateModifiedDate()
+    
+    // Schedule notification if due date is set
+    if let dueDate = dueDate, dueDate > Date() {
+        SharedDataManager.shared.scheduleTaskNotification(for: task, in: self)
+    }
     }
 
     func toggleTask(at index: Int) {
@@ -171,6 +176,8 @@ final class Note {
 
     func removeTask(at index: Int) {
     guard var arr = tasks, index < arr.count else { return }
+    let task = arr[index]
+    SharedDataManager.shared.cancelTaskNotification(for: task.id)
     arr.remove(at: index)
     tasks = arr
     updateProgress()

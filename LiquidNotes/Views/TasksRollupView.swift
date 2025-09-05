@@ -54,7 +54,11 @@ struct TasksRollupView: View {
         }
         .sheet(isPresented: $showingDuePicker) {
             DueDateCalendarPicker(initialDate: duePickerTask?.dueDate) { selected in
-                if let task = duePickerTask { task.dueDate = selected; try? modelContext.save() }
+                if let task = duePickerTask { 
+                    task.dueDate = selected
+                    try? modelContext.save()
+                    updateWidgetData()
+                }
             }
             .presentationDetents([.medium])
         }
@@ -97,6 +101,7 @@ struct TasksRollupView: View {
                                     let quickTasksNote = fetchOrCreateQuickTasksNote()
                                     quickTasksNote.addTask(trimmed, dueDate: newTaskDueDate)
                                     try? modelContext.save()
+                                    updateWidgetData()
                                     HapticManager.shared.success()
                                     showingQuickTaskCapture = false
                                     newTaskText = ""
@@ -209,14 +214,14 @@ private extension TasksRollupView {
                     HStack(spacing: 10) {
                         if editingTaskID == task.id {
                             // Editing layout: completion toggle left, then editable text field
-                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save(); updateWidgetData() }) {
                                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
                             }
                             .buttonStyle(.plain)
                             TextField("Task", text: Binding(
                                 get: { task.text },
-                                set: { newVal in task.text = newVal; try? modelContext.save() }
+                                set: { newVal in task.text = newVal; try? modelContext.save(); updateWidgetData() }
                             ))
                             .textFieldStyle(.plain)
                             .disabled(task.isCompleted)
@@ -242,10 +247,10 @@ private extension TasksRollupView {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 if task.dueDate != nil {
-                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save(); updateWidgetData() } label: { Label("Clear Date", systemImage: "xmark.circle") }
                                 }
                             }
-                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             // Name edit confirm button (after delete)
                             Button(action: { editingTaskID = nil }) {
                                 Image(systemName: "checkmark.circle.fill")
@@ -255,7 +260,7 @@ private extension TasksRollupView {
                             .buttonStyle(.plain)
                         } else {
                             // Normal layout: completion toggle at start
-                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save() }) {
+                            Button(action: { task.isCompleted.toggle(); note.updateProgress(); try? modelContext.save(); updateWidgetData() }) {
                                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
                             }
@@ -290,10 +295,10 @@ private extension TasksRollupView {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 if task.dueDate != nil {
-                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save(); updateWidgetData() } label: { Label("Clear Date", systemImage: "xmark.circle") }
                                 }
                             }
-                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
+                            Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             if editingTaskID == task.id {
                                 // Name edit confirm button (placed after delete)
                                 Button(action: { editingTaskID = nil }) {
@@ -310,7 +315,7 @@ private extension TasksRollupView {
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
                 }
             }
-            Button(action: { note.addTask("New Task"); try? modelContext.save() }) {
+            Button(action: { note.addTask("New Task"); try? modelContext.save(); updateWidgetData() }) {
                 Label("Add Task", systemImage: "plus")
                     .font(.caption)
                     .padding(.horizontal, 10).padding(.vertical, 8)
@@ -382,7 +387,22 @@ private extension TasksRollupView {
         
         modelContext.insert(new)
         try? modelContext.save()
+        updateWidgetData()
         return new
+    }
+    
+    private func updateWidgetData() {
+        let descriptor = FetchDescriptor<Note>(
+            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
+        )
+        
+        if let notes = try? modelContext.fetch(descriptor) {
+            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
+            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
+            
+            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
+            SharedDataManager.shared.saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
+        }
     }
 }
 

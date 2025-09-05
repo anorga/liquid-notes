@@ -126,7 +126,7 @@ struct SpatialTabView: View {
                     guard let vm = notesViewModel else { return }
                     let target = fetchOrCreateQuickTasksNote(using: vm)
                     target.addTask(taskText, dueDate: due)
-                    try? modelContext.save()
+                    vm.persistChanges()
                     HapticManager.shared.success()
                 }
                 .presentationDetents([.fraction(0.3)])

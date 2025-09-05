@@ -51,7 +51,7 @@ class NotesViewModel {
         }
         modelContext.insert(note)
         
-        saveContext()
+        persistChanges()
         return note
     }
 
@@ -76,7 +76,7 @@ class NotesViewModel {
             }
         }
         modelContext.insert(note)
-        saveContext()
+        persistChanges()
         return note
     }
     
@@ -84,31 +84,31 @@ class NotesViewModel {
         note.title = title
         note.content = content
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func deleteNote(_ note: Note) {
         modelContext.delete(note)
-        saveContext()
+        persistChanges()
     }
     
     func toggleNoteFavorite(_ note: Note) {
         note.isFavorited.toggle()
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func archiveNote(_ note: Note) {
         note.isArchived = true
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func updateNotePosition(_ note: Note, x: Float, y: Float) {
         note.positionX = x
         note.positionY = y
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     // MARK: - Folder Operations
@@ -123,7 +123,7 @@ class NotesViewModel {
         folder.zIndex = maxZIndex + 1
         
         modelContext.insert(folder)
-    saveContext()
+        persistChanges()
         return folder
     }
     
@@ -134,16 +134,14 @@ class NotesViewModel {
             }
         }
         modelContext.delete(folder)
-        saveContext()
-    // After deletion, if there are now zero folders, immediately create a default one
-    // and reassign any orphan notes so they remain organized.
-    ensureDefaultFolderAndReassignOrphans()
+        persistChanges()
+        ensureDefaultFolderAndReassignOrphans()
     }
     
     func toggleFolderFavorite(_ folder: Folder) {
         folder.isFavorited.toggle()
         folder.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     // Removed updateNoteTheme - no longer using themes
@@ -153,13 +151,13 @@ class NotesViewModel {
     func createCategory(name: String, color: String = "blue") -> NoteCategory {
         let category = NoteCategory(name: name, color: color)
         modelContext.insert(category)
-        saveContext()
+        persistChanges()
         return category
     }
     
     func deleteCategory(_ category: NoteCategory) {
         modelContext.delete(category)
-        saveContext()
+        persistChanges()
     }
     
     // MARK: - Search and Filtering
@@ -287,6 +285,21 @@ class NotesViewModel {
     // Public wrapper to persist changes without exposing saveContext
     func persistChanges() {
         saveContext()
+        updateWidgetData()
+    }
+    
+    private func updateWidgetData() {
+        let descriptor = FetchDescriptor<Note>(
+            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
+        )
+        
+        if let notes = try? modelContext.fetch(descriptor) {
+            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
+            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
+            
+            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
+            SharedDataManager.shared.saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
+        }
     }
 
     // Linking reindex removed for simplification.
@@ -310,7 +323,7 @@ class NotesViewModel {
                 for orphan in orphans { orphan.folder = target }
             }
         }
-        saveContext()
+        persistChanges()
         return targetFolder
     }
     
