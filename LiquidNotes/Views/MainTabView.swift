@@ -17,6 +17,7 @@ struct MainTabView: View {
     @State private var showingDailyReview = false
     @State private var openNoteObserver: NSObjectProtocol?
     @State private var createAndLinkObserver: NSObjectProtocol?
+    @State private var quickTaskObserver: NSObjectProtocol?
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingSettings = false
@@ -30,11 +31,15 @@ struct MainTabView: View {
             Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackgroundVisibility(.visible, for: .tabBar)
         .onAppear { setupViewModel() }
     .onAppear { registerOpenNoteObserver() }
     .onAppear { registerCreateAndLinkObserver() }
+    .onAppear { registerQuickTaskObserver() }
     .onDisappear { if let obs = openNoteObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = createAndLinkObserver { NotificationCenter.default.removeObserver(obs) } }
+    .onDisappear { if let obs = quickTaskObserver { NotificationCenter.default.removeObserver(obs) } }
     // Command system removed
     // Removed reindex trigger (simplification)
         .sheet(item: $selectedNote) { note in
@@ -56,7 +61,7 @@ struct MainTabView: View {
                 guard let vm = notesViewModel else { return }
                 let target = fetchOrCreateQuickTasksNote(using: vm)
                 target.addTask(taskText, dueDate: due)
-                try? modelContext.save()
+                vm.persistChanges()
                 HapticManager.shared.success()
             }
             .presentationDetents([.fraction(0.3)])
@@ -137,6 +142,7 @@ struct MainTabView: View {
 extension Notification.Name { static let lnOpenNoteRequested = Notification.Name("lnOpenNoteRequested") }
 extension Notification.Name { static let lnCreateAndLinkNoteRequested = Notification.Name("lnCreateAndLinkNoteRequested") }
 extension Notification.Name { static let lnNoteAttachmentsChanged = Notification.Name("lnNoteAttachmentsChanged") }
+extension Notification.Name { static let showQuickTaskCapture = Notification.Name("showQuickTaskCapture") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {
@@ -158,6 +164,12 @@ private extension MainTabView {
                 let new = vm.createNote(in: selectedFolder, title: title, content: "")
                 selectedNote = new
             }
+        }
+    }
+    
+    func registerQuickTaskObserver() {
+        quickTaskObserver = NotificationCenter.default.addObserver(forName: .showQuickTaskCapture, object: nil, queue: .main) { _ in
+            showingQuickTaskCapture = true
         }
     }
 }
