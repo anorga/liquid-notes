@@ -36,6 +36,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		83031C6B2E6AC57F0011D4EF /* LiquidNotesWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LiquidNotesWidgetExtension.entitlements; sourceTree = "<group>"; };
 		83E626222E528792005994F9 /* LiquidNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LiquidNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LiquidNotesWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		83E6265C2E52FDAB005994F9 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -102,6 +103,7 @@
 		83E626192E528792005994F9 = {
 			isa = PBXGroup;
 			children = (
+				83031C6B2E6AC57F0011D4EF /* LiquidNotesWidgetExtension.entitlements */,
 				83E626242E528792005994F9 /* LiquidNotes */,
 				83E626602E52FDAB005994F9 /* LiquidNotesWidget */,
 				83E6265B2E52FDAB005994F9 /* Frameworks */,
@@ -465,6 +467,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = LiquidNotesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 3P6M963JAU;
@@ -495,6 +498,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = LiquidNotesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 3P6M963JAU;

@@ -10,11 +10,17 @@ import SwiftData
 
 @main
 struct LiquidNotesApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     var body: some Scene {
         WindowGroup {
             MainTabView()
                 .onAppear { NotificationScheduler.requestAuthIfNeeded() }
                 .onAppear { configureWindowSizeRestrictions() }
+                .onAppear { BadgeManager.shared.refreshBadgeCount() }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    BadgeManager.shared.refreshBadgeCount()
+                }
         }
         .modelContainer(for: [Note.self, NoteCategory.self, Folder.self, TaskItem.self])
     }

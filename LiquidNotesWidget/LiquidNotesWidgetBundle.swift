@@ -12,5 +12,7 @@ import SwiftUI
 struct LiquidNotesWidgetBundle: WidgetBundle {
     var body: some Widget {
         LiquidNotesWidget()
+        QuickNoteControl()
+        QuickTaskControl()
     }
 }
