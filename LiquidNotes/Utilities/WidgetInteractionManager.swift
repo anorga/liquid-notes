@@ -33,7 +33,7 @@ class WidgetInteractionManager: ObservableObject {
             try context.save()
             
             // Update widget data
-            updateWidgetData(context: context)
+            SharedDataManager.shared.refreshWidgetData(context: context)
             
             // Show feedback
             HapticManager.shared.buttonTapped()
@@ -66,7 +66,7 @@ class WidgetInteractionManager: ObservableObject {
             try context.save()
             
             // Update widget data
-            updateWidgetData(context: context)
+            SharedDataManager.shared.refreshWidgetData(context: context)
             
             // Live Activity functionality removed to prevent cross-target issues
             
@@ -105,7 +105,7 @@ class WidgetInteractionManager: ObservableObject {
             try context.save()
             
             // Update widget data
-            updateWidgetData(context: context)
+            SharedDataManager.shared.refreshWidgetData(context: context)
             
             // Live Activity updates removed to prevent cross-target issues
             
@@ -123,20 +123,5 @@ class WidgetInteractionManager: ObservableObject {
         }
     }
     
-    private func updateWidgetData(context: ModelContext) {
-        let descriptor = FetchDescriptor<Note>(
-            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
-        )
-        
-        if let notes = try? context.fetch(descriptor) {
-            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
-            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
-            
-            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
-            SharedDataManager.shared.saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
-        }
-        
-        // Refresh all widgets
-        WidgetCenter.shared.reloadAllTimelines()
-    }
+    // Centralized refresh logic now in SharedDataManager.refreshWidgetData(context:)
 }

@@ -392,17 +392,7 @@ private extension TasksRollupView {
     }
     
     private func updateWidgetData() {
-        let descriptor = FetchDescriptor<Note>(
-            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
-        )
-        
-        if let notes = try? modelContext.fetch(descriptor) {
-            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
-            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
-            
-            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
-            SharedDataManager.shared.saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
-        }
+        SharedDataManager.shared.refreshWidgetData(context: modelContext)
     }
 }
 

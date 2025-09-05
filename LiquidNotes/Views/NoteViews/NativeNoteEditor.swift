@@ -346,6 +346,8 @@ struct NativeNoteEditor: View {
             try modelContext.save()
             hasChanges = false
             HapticManager.shared.success()
+            // Refresh widget data after saving note content
+            SharedDataManager.shared.refreshWidgetData(context: modelContext)
         } catch {
             HapticManager.shared.error()
         }

@@ -11,66 +11,92 @@ import AppIntents
 
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
+        #if DEBUG
         print("🟡 Widget: placeholder() called")
+        #endif
         return SimpleEntry(date: Date(), notes: getSampleNotes())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> ()) {
+        #if DEBUG
         print("🟡 Widget: getSnapshot called, isPreview: \(context.isPreview)")
+        #endif
         let notes = loadNotes()
         let entry = SimpleEntry(date: Date(), notes: notes)
+        #if DEBUG
         print("🟡 Widget: getSnapshot completed with \(notes.count) notes")
+        #endif
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
+        #if DEBUG
         print("🟡 Widget: getTimeline called")
+        #endif
         let notes = loadNotes()
         let entry = SimpleEntry(date: Date(), notes: notes)
         
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+        #if DEBUG
         print("🟡 Widget: getTimeline completed with \(notes.count) notes, next update: \(nextUpdate)")
+        #endif
         completion(timeline)
     }
     
     private func loadNotes() -> [WidgetNote] {
+        #if DEBUG
         print("🟡 Widget: loadNotes() called at \(Date())")
+        #endif
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.com.liquidnotes.shared"
         ) else { 
+            #if DEBUG
             print("🔴 Widget: No shared container URL found")
+            #endif
             return []
         }
         
+        #if DEBUG
         print("🟡 Widget: Loading notes from shared container: \(containerURL)")
+        #endif
         let widgetDataURL = containerURL.appendingPathComponent("widget_notes.json")
+        #if DEBUG
         print("🟡 Widget: Checking file at: \(widgetDataURL)")
+        #endif
         
         // List all files in the container to debug
+        #if DEBUG
         do {
             let files = try FileManager.default.contentsOfDirectory(atPath: containerURL.path)
             print("🟡 Widget: Files in container: \(files)")
         } catch {
             print("🔴 Widget: Cannot list container contents: \(error)")
         }
+        #endif
         
         // Check if file exists
         if !FileManager.default.fileExists(atPath: widgetDataURL.path) {
+            #if DEBUG
             print("🔴 Widget: widget_notes.json file does NOT exist at \(widgetDataURL.path)")
+            #endif
             return []
         }
         
         do {
             let data = try Data(contentsOf: widgetDataURL)
+            #if DEBUG
             print("🟡 Widget: Read \(data.count) bytes from file")
+            #endif
             
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let widgetData = try decoder.decode([WidgetNoteData].self, from: data)
             
+            #if DEBUG
             print("🟢 Widget: Successfully loaded \(widgetData.count) notes")
             print("🟢 Widget: Note titles: \(widgetData.map { $0.title })")
+            #endif
             
             let widgetNotes = widgetData.map { data in
                 WidgetNote(
@@ -84,17 +110,23 @@ struct Provider: TimelineProvider {
                 )
             }
             
+            #if DEBUG
             print("🟢 Widget: Returning \(widgetNotes.count) widget notes")
+            #endif
             return widgetNotes
         } catch {
+            #if DEBUG
             print("🔴 Widget: Failed to load notes: \(error)")
             print("🔴 Widget: Error details: \(error.localizedDescription)")
+            #endif
             return []
         }
     }
     
     private func getSampleNotes() -> [WidgetNote] {
+        #if DEBUG
         print("🟡 Widget: getSampleNotes() called - returning sample data")
+        #endif
         return [
             WidgetNote(
                 id: UUID(),
@@ -175,10 +207,11 @@ struct SmallWidgetView: View {
                 Text("No Data")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
+                #if DEBUG
                 Text("Debug: \(notes.count) notes")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -203,10 +236,11 @@ struct MediumWidgetView: View {
                 Text("No Data (Medium)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
+                #if DEBUG
                 Text("Debug: \(notes.count) notes")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -242,10 +276,11 @@ struct LargeWidgetView: View {
                 Text("No Data (Large)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
+                #if DEBUG
                 Text("Debug: \(notes.count) notes")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
