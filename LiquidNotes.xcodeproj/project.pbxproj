@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
 		83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		83F000012E6B000000000001 /* icon_source.png in Resources */ = {isa = PBXBuildFile; fileRef = 83F000002E6B000000000001 /* icon_source.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +44,7 @@
 		83E6265E2E52FDAB005994F9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		83E626832E54094A005994F9 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		83E626882E540966005994F9 /* PushKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PushKit.framework; path = System/Library/Frameworks/PushKit.framework; sourceTree = SDKROOT; };
+		83F000002E6B000000000001 /* icon_source.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = icon_source.png; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -103,6 +105,7 @@
 		83E626192E528792005994F9 = {
 			isa = PBXGroup;
 			children = (
+				83F000002E6B000000000001 /* icon_source.png */,
 				83031C6B2E6AC57F0011D4EF /* LiquidNotesWidgetExtension.entitlements */,
 				83E626242E528792005994F9 /* LiquidNotes */,
 				83E626602E52FDAB005994F9 /* LiquidNotesWidget */,
@@ -223,6 +226,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				83F000012E6B000000000001 /* icon_source.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

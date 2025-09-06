@@ -11,7 +11,8 @@ import SwiftData
 @main
 struct LiquidNotesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @AppStorage("hasShownSplash") private var hasShownSplash = false
+    // Show splash once per cold start (process lifetime), not persisted
+    @State private var showSplash = true
     
     var body: some Scene {
         WindowGroup {
@@ -23,15 +24,13 @@ struct LiquidNotesApp: App {
                     BadgeManager.shared.refreshBadgeCount()
                 }
                 .overlay(alignment: .center) {
-                    if !hasShownSplash {
+                    if showSplash {
                         SplashView()
                             .transition(.opacity)
                             .onAppear {
                                 // Dismiss after a brief moment; do not block app startup
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
-                                    withAnimation(.easeInOut(duration: 0.35)) {
-                                        hasShownSplash = true
-                                    }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                                    withAnimation(.easeInOut(duration: 0.45)) { showSplash = false }
                                 }
                             }
                     }

@@ -15,18 +15,12 @@ class SharedDataManager {
     }
     
     func saveNotesForWidget(notes: [Note]) {
-        guard let containerURL = sharedContainerURL else { 
-            print("🔴 SharedDataManager: No shared container URL found")
-            return 
-        }
+        guard let containerURL = sharedContainerURL else { return }
         
         // Ensure the container directory exists
         do {
             try FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            print("🔴 SharedDataManager: Failed to create container directory: \(error)")
-            return
-        }
+        } catch { return }
         
         let widgetDataURL = containerURL.appendingPathComponent("widget_notes.json")
         
@@ -49,20 +43,10 @@ class SharedDataManager {
             encoder.dateEncodingStrategy = .iso8601
             let newData = try encoder.encode(widgetNotes)
             // If data hasn't changed, skip writing and reloading timelines
-            if let existingData = try? Data(contentsOf: widgetDataURL), existingData == newData {
-                #if DEBUG
-                print("🟡 SharedDataManager: Widget data unchanged; skipping write/reload")
-                #endif
-                return
-            }
+            if let existingData = try? Data(contentsOf: widgetDataURL), existingData == newData { return }
             try newData.write(to: widgetDataURL, options: .atomic)
             WidgetCenter.shared.reloadAllTimelines()
-            #if DEBUG
-            print("🟢 SharedDataManager: Widget timeline reload requested at \(Date())")
-            #endif
-        } catch {
-            print("🔴 SharedDataManager: Failed to save widget data: \(error)")
-        }
+        } catch { }
     }
     
     func loadNotesForWidget() -> [WidgetNoteData] {
@@ -75,10 +59,7 @@ class SharedDataManager {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode([WidgetNoteData].self, from: data)
-        } catch {
-            print("Failed to load widget data: \(error)")
-            return []
-        }
+        } catch { return [] }
     }
 
     // Centralized helper to compute the widget dataset and persist it to the app group.
