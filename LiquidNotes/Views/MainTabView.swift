@@ -24,15 +24,14 @@ struct MainTabView: View {
     // Removed quick theme overlay per simplification feedback
     
     var body: some View {
-        TabView(selection: $selectedTab) {
+        // Build the core TabView once, then apply iOS-specific bar styling below
+        let tabCore = TabView(selection: $selectedTab) {
             Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
             Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
             Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
             Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-        .toolbarBackgroundVisibility(.visible, for: .tabBar)
         .onAppear { setupViewModel() }
     .onAppear { registerOpenNoteObserver() }
     .onAppear { registerCreateAndLinkObserver() }
@@ -70,6 +69,18 @@ struct MainTabView: View {
                 SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
             }
             .presentationDetents([.fraction(0.3)])
+        }
+        // Apply bar appearance conditionally to match iOS 26+ "glass" behavior
+        Group {
+            if #available(iOS 26.0, *) {
+                tabCore
+                    .toolbarBackground(.automatic, for: .tabBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .tabBar)
+            } else {
+                tabCore
+                    .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+                    .toolbarBackgroundVisibility(.visible, for: .tabBar)
+            }
         }
     }
     
