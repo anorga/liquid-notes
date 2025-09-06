@@ -4,6 +4,7 @@ import SwiftData
 struct TasksRollupView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
+    @Query(filter: #Predicate<TaskItem> { $0.note == nil }) private var standaloneTasks: [TaskItem]
     @State private var search = ""
     @State private var showCompleted = true
     @State private var selectedPriority: NotePriority? = nil
@@ -15,12 +16,17 @@ struct TasksRollupView: View {
     @State private var newTaskText = ""
     @State private var newTaskDueDate: Date? = nil
     @State private var showingTaskDuePicker = false
+    @State private var toastMessage: String? = nil
+    @State private var focusedTaskID: UUID? = nil
+    @State private var focusObserver: NSObjectProtocol?
+    @State private var showingMoveTaskPicker = false
+    @State private var taskToMove: TaskItem? = nil
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                LNHeader(title: "Tasks", subtitle: "\(filteredNotes.count) notes") { EmptyView() }
+                LNHeader(title: "Tasks", subtitle: summarySubtitle) { EmptyView() }
                 
-                if filteredNotes.isEmpty {
+                if filteredNotes.isEmpty && standaloneFiltered.isEmpty {
                     VStack {
                         Spacer()
                         VStack(spacing: 8) {
@@ -39,6 +45,22 @@ struct TasksRollupView: View {
                     filters
                     ScrollView {
                         LazyVStack(spacing: 14) {
+                            if !standaloneFiltered.isEmpty {
+                                Section {
+                                    standaloneSection
+                                } header: {
+                                    HStack {
+                                        Text("Standalone Tasks")
+                                            .font(.headline)
+                                        Spacer()
+                                        Text("\(standaloneFiltered.count)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 8)
+                                }
+                            }
                             ForEach(filteredNotes, id: \.id) { note in
                                 Section {
                                     if isExpanded(note) { taskList(note) }
@@ -51,13 +73,40 @@ struct TasksRollupView: View {
             }
             .background(LiquidNotesBackground().ignoresSafeArea())
             .overlay(alignment: .topTrailing) { floatingCreationButton }
+            .overlay(alignment: .top) {
+                if let msg = toastMessage {
+                    Text(msg)
+                        .font(.caption)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 0.5))
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
         }
         .sheet(isPresented: $showingDuePicker) {
             DueDateCalendarPicker(initialDate: duePickerTask?.dueDate) { selected in
-                if let task = duePickerTask { 
+                if let task = duePickerTask {
                     task.dueDate = selected
                     try? modelContext.save()
-                    updateWidgetData()
+                    if let note = task.note {
+                        if task.dueDate != nil {
+                            SharedDataManager.shared.scheduleTaskNotification(for: task, in: note)
+                        } else {
+                            SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                        }
+                        updateWidgetData()
+                    } else {
+                        if task.dueDate != nil {
+                            SharedDataManager.shared.scheduleTaskNotification(for: task)
+                        } else {
+                            SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                        }
+                        // Widget shows notes; no need to update
+                    }
+                    BadgeManager.shared.updateBadgeCount()
+                    showToast(task.dueDate == nil ? "Due date cleared" : "Due date set")
                 }
             }
             .presentationDetents([.medium])
@@ -98,10 +147,14 @@ struct TasksRollupView: View {
                                 Button {
                                     let trimmed = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
                                     guard !trimmed.isEmpty else { return }
-                                    let quickTasksNote = fetchOrCreateQuickTasksNote()
-                                    quickTasksNote.addTask(trimmed, dueDate: newTaskDueDate)
+                                    // Create a standalone task (not attached to a note)
+                                    let task = TaskItem(text: trimmed, isCompleted: false, note: nil, dueDate: newTaskDueDate)
+                                    modelContext.insert(task)
                                     try? modelContext.save()
-                                    updateWidgetData()
+                                    if task.dueDate != nil {
+                                        SharedDataManager.shared.scheduleTaskNotification(for: task)
+                                    }
+                                    BadgeManager.shared.taskAdded()
                                     HapticManager.shared.success()
                                     showingQuickTaskCapture = false
                                     newTaskText = ""
@@ -129,6 +182,56 @@ struct TasksRollupView: View {
             DueDateCalendarPicker(initialDate: newTaskDueDate) { selected in newTaskDueDate = selected }
                 .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showingMoveTaskPicker) {
+            NavigationStack {
+                List {
+                    Section("Select a note") {
+                        ForEach(allNotes, id: \.id) { note in
+                            Button {
+                                if let t = taskToMove {
+                                    t.note = note
+                                    try? modelContext.save()
+                                    if t.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: t, in: note) }
+                                    BadgeManager.shared.updateBadgeCount()
+                                    updateWidgetData()
+                                }
+                                taskToMove = nil
+                                showingMoveTaskPicker = false
+                            } label: {
+                                HStack {
+                                    Text(note.title.isEmpty ? "Untitled" : note.title)
+                                    Spacer()
+                                    if note.isFavorited { Image(systemName: "star.fill").foregroundStyle(.yellow) }
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Move to Note")
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingMoveTaskPicker = false; taskToMove = nil } } }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .onAppear {
+            focusObserver = NotificationCenter.default.addObserver(forName: .focusTask, object: nil, queue: .main) { notif in
+                guard let id = notif.object as? UUID else { return }
+                focusedTaskID = id
+                if standaloneTasks.contains(where: { $0.id == id }) {
+                    // no expansion needed for standalone
+                } else {
+                    for note in allNotes {
+                        if let tasks = note.tasks, tasks.contains(where: { $0.id == id }) {
+                            expandedNotes.insert(note.id)
+                            break
+                        }
+                    }
+                }
+                showToast("Opened Tasks")
+            }
+        }
+        .onDisappear {
+            if let obs = focusObserver { NotificationCenter.default.removeObserver(obs) }
+        }
     }
     private var filteredNotes: [Note] {
         // Break chained operations into clear steps to aid compiler type-checking
@@ -153,10 +256,10 @@ struct TasksRollupView: View {
         } else {
             priorityFiltered = searchFiltered
         }
-        // Sort with Quick Tasks (system notes) always first, then by priority (custom order), then progress ascending, then modifiedDate desc
+        // Sort with system notes first (historical behavior), then by priority (custom order), then progress ascending, then modifiedDate desc
         let priorityOrder: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
         return priorityFiltered.sorted { lhs, rhs in
-            // Quick Tasks (system) first
+            // System notes first
             if lhs.isSystem != rhs.isSystem { return lhs.isSystem && !rhs.isSystem }
             let lp = priorityOrder[lhs.priority, default: 4]
             let rp = priorityOrder[rhs.priority, default: 4]
@@ -168,6 +271,171 @@ struct TasksRollupView: View {
 }
 
 private extension TasksRollupView {
+    @ViewBuilder
+    func taskPriorityDot(_ p: NotePriority) -> some View {
+        let color: Color = (p == .normal) ? Color.secondary.opacity(0.25) : p.color
+        Circle()
+            .fill(color)
+            .frame(width: 6, height: 6)
+    }
+
+    func taskPriorityIcon(_ p: NotePriority) -> some View {
+        Image(systemName: p.iconName)
+            .font(.caption2)
+            .foregroundStyle(p == .normal ? Color.secondary.opacity(0.6) : p.color)
+    }
+
+    func showToast(_ message: String) {
+        withAnimation(.easeInOut(duration: 0.2)) { toastMessage = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeInOut(duration: 0.3)) { toastMessage = nil }
+        }
+    }
+    var summarySubtitle: String {
+        let noteCount = filteredNotes.count
+        let standaloneCount = standaloneFiltered.count
+        return "\(noteCount) notes • \(standaloneCount) standalone"
+    }
+    
+    var standaloneFiltered: [TaskItem] {
+        let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = standaloneTasks.filter { showCompleted || !$0.isCompleted }
+        let searchFiltered: [TaskItem]
+        if trimmed.isEmpty {
+            searchFiltered = base
+        } else {
+            searchFiltered = base.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
+        }
+        let priorityFiltered: [TaskItem]
+        if let p = selectedPriority {
+            priorityFiltered = searchFiltered.filter { $0.priority == p }
+        } else {
+            priorityFiltered = searchFiltered
+        }
+        // Sort: overdue first, then nearest due, then has due before no due, then priority, then createdDate desc
+        let order: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
+        return priorityFiltered.sorted { lhs, rhs in
+            let lDue = lhs.dueDate
+            let rDue = rhs.dueDate
+            let now = Date()
+            let lOver = (lDue != nil) && (lDue! < now)
+            let rOver = (rDue != nil) && (rDue! < now)
+            if lOver != rOver { return lOver && !rOver }
+            switch (lDue, rDue) {
+            case let (l?, r?):
+                if l != r { return l < r }
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                break
+            }
+            let lp = order[lhs.priority, default: 4]
+            let rp = order[rhs.priority, default: 4]
+            if lp != rp { return lp < rp }
+            return lhs.createdDate > rhs.createdDate
+        }
+    }
+    
+    var standaloneSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(standaloneFiltered, id: \.id) { task in
+                HStack(spacing: 10) {
+                    Button(action: {
+                        task.isCompleted.toggle()
+                        try? modelContext.save()
+                        BadgeManager.shared.taskCompleted()
+                        SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
+                    }) {
+                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    // Inline priority indicator + icon
+                    taskPriorityDot(task.priority)
+                    taskPriorityIcon(task.priority)
+
+                    Text(task.text)
+                        .strikethrough(task.isCompleted, color: .primary.opacity(0.6))
+                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                        .lineLimit(3)
+                        
+                    if let due = task.dueDate {
+                        let isOverdue = !task.isCompleted && Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: Date())
+                        Text(due.ln_dayDistanceString())
+                            .font(.caption2)
+                            .padding(.horizontal, 6).padding(.vertical, 4)
+                            .background(Capsule().fill((isOverdue ? Color.red : Color.orange).opacity(0.18)))
+                            .foregroundStyle(isOverdue ? .red : .orange)
+                    }
+                    Spacer(minLength: 4)
+                    Button {
+                        duePickerTask = task
+                        showingDuePicker = true
+                    } label: {
+                        Image(systemName: task.dueDate == nil ? "calendar" : "calendar.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(task.dueDate == nil ? Color.secondary : Color.orange)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        if task.dueDate != nil {
+                            Button(role: .destructive) {
+                                task.dueDate = nil
+                                SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                                try? modelContext.save()
+                                SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
+                                showToast("Due date cleared")
+                            } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                        }
+                        Button {
+                            taskToMove = task
+                            showingMoveTaskPicker = true
+                        } label: { Label("Move to Note…", systemImage: "arrowshape.turn.up.right") }
+                        Divider()
+                        Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                        Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                        Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                        Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                    }
+                    Button(role: .destructive) {
+                        // Delete standalone task
+                        modelContext.delete(task)
+                        SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                        try? modelContext.save()
+                        BadgeManager.shared.updateBadgeCount()
+                        SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
+                    } label: {
+                        Image(systemName: "trash").font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .contentShape(Rectangle())
+                .contextMenu {
+                    if task.dueDate != nil {
+                        Button(role: .destructive) {
+                            task.dueDate = nil
+                            SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                            try? modelContext.save()
+                            showToast("Due date cleared")
+                        } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                    }
+                    Button {
+                        taskToMove = task
+                        showingMoveTaskPicker = true
+                    } label: { Label("Move to Note…", systemImage: "arrowshape.turn.up.right") }
+                    Divider()
+                    Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                    Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                    Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                    Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
+            }
+        }
+    }
     var filters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
@@ -219,6 +487,9 @@ private extension TasksRollupView {
                                     .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
                             }
                             .buttonStyle(.plain)
+                            // Inline priority indicator + icon
+                            taskPriorityDot(task.priority)
+                            taskPriorityIcon(task.priority)
                             TextField("Task", text: Binding(
                                 get: { task.text },
                                 set: { newVal in task.text = newVal; try? modelContext.save(); updateWidgetData() }
@@ -247,8 +518,31 @@ private extension TasksRollupView {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 if task.dueDate != nil {
-                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save(); updateWidgetData() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                    Button(role: .destructive) {
+                                        task.dueDate = nil
+                                        SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                                        try? modelContext.save()
+                                        updateWidgetData()
+                                        BadgeManager.shared.updateBadgeCount()
+                                        showToast("Due date cleared")
+                                    } label: { Label("Clear Date", systemImage: "xmark.circle") }
                                 }
+                                Button {
+                                    // Detach to standalone
+                                    task.note = nil
+                                    note.updateProgress()
+                                    try? modelContext.save()
+                                    if task.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: task) }
+                                    BadgeManager.shared.updateBadgeCount()
+                                    updateWidgetData()
+                                    SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
+                                    showToast("Detached to Standalone")
+                                } label: { Label("Detach to Standalone", systemImage: "arrowshape.turn.up.left") }
+                                Divider()
+                                Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                                Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                                Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                                Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                             }
                             Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             // Name edit confirm button (after delete)
@@ -265,6 +559,9 @@ private extension TasksRollupView {
                                     .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
                             }
                             .buttonStyle(.plain)
+                            // Inline priority indicator + icon
+                            taskPriorityDot(task.priority)
+                            taskPriorityIcon(task.priority)
                             if editingTaskID == task.id {
                                 EmptyView()
                             }
@@ -295,8 +592,31 @@ private extension TasksRollupView {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 if task.dueDate != nil {
-                                    Button(role: .destructive) { task.dueDate = nil; try? modelContext.save(); updateWidgetData() } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                                    Button(role: .destructive) {
+                                        task.dueDate = nil
+                                        SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                                        try? modelContext.save()
+                                        updateWidgetData()
+                                        BadgeManager.shared.updateBadgeCount()
+                                        showToast("Due date cleared")
+                                    } label: { Label("Clear Date", systemImage: "xmark.circle") }
                                 }
+                                Button {
+                                    // Detach to standalone
+                                    task.note = nil
+                                    note.updateProgress()
+                                    try? modelContext.save()
+                                    if task.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: task) }
+                                    BadgeManager.shared.updateBadgeCount()
+                                    updateWidgetData()
+                                    SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
+                                    showToast("Detached to Standalone")
+                                } label: { Label("Detach to Standalone", systemImage: "arrowshape.turn.up.left") }
+                                Divider()
+                                Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                                Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                                Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                                Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                             }
                             Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             if editingTaskID == task.id {
@@ -310,6 +630,32 @@ private extension TasksRollupView {
                                 .transition(.opacity.combined(with: .scale))
                             }
                         }
+                    }
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        if task.dueDate != nil {
+                            Button(role: .destructive) {
+                                task.dueDate = nil
+                                SharedDataManager.shared.cancelTaskNotification(for: task.id)
+                                try? modelContext.save()
+                                updateWidgetData()
+                                BadgeManager.shared.updateBadgeCount()
+                            } label: { Label("Clear Date", systemImage: "xmark.circle") }
+                        }
+                        Button {
+                            // Detach to standalone
+                            task.note = nil
+                            note.updateProgress()
+                            try? modelContext.save()
+                            if task.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: task) }
+                            BadgeManager.shared.updateBadgeCount()
+                            updateWidgetData()
+                        } label: { Label("Detach to Standalone", systemImage: "arrowshape.turn.up.left") }
+                        Divider()
+                        Button { task.priority = .low; try? modelContext.save() } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                        Button { task.priority = .normal; try? modelContext.save() } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                        Button { task.priority = .high; try? modelContext.save() } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                        Button { task.priority = .urgent; try? modelContext.save() } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
@@ -365,31 +711,7 @@ private extension TasksRollupView {
         .padding(.top, 20)
     }
     
-    private func fetchOrCreateQuickTasksNote() -> Note {
-        let title = "Quick Tasks"
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
-        if let found = try? modelContext.fetch(descriptor).first {
-            return found
-        }
-        
-        let new = Note(title: title, content: "")
-        new.isFavorited = false
-        new.isSystem = true
-        
-        let folderDescriptor = FetchDescriptor<Folder>()
-        if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
-            new.folder = first
-        } else {
-            let defaultFolder = Folder(name: "Folder")
-            modelContext.insert(defaultFolder)
-            new.folder = defaultFolder
-        }
-        
-        modelContext.insert(new)
-        try? modelContext.save()
-        updateWidgetData()
-        return new
-    }
+    // (Legacy Quick Tasks note helper removed; standalone tasks are used instead.)
     
     private func updateWidgetData() {
         SharedDataManager.shared.refreshWidgetData(context: modelContext)

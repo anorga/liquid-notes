@@ -43,7 +43,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             }
             return true
         }
-        
+
+        if url.host == "tasks" {
+            // Open Tasks tab; optional last path component can be a taskID for future selection
+            let taskIDString = url.pathComponents.dropFirst().first // /<taskID>
+            NotificationCenter.default.post(name: .openTasksTab, object: taskIDString)
+            return true
+        }
+
         if url.host == "action" {
             let pathComponents = url.pathComponents
             guard pathComponents.count >= 3 else { return false }
