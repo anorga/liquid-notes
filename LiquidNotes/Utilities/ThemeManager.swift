@@ -5,9 +5,9 @@ enum GlassTheme: String, CaseIterable {
     case clear = "Clear"
     case warm = "Warm"
     case cool = "Cool"
-    case vibrant = "Vibrant"
+    case neon = "Neon"
     case midnight = "Midnight"
-    case sunset = "Sunset"
+    case aurora = "Aurora"
     
     var primaryGradient: [Color] {
         switch self {
@@ -17,12 +17,14 @@ enum GlassTheme: String, CaseIterable {
             return [.orange.opacity(0.35), .pink.opacity(0.25)]
         case .cool:
             return [.blue.opacity(0.32), .cyan.opacity(0.22)]
-        case .vibrant:
-            return [.purple.opacity(0.38), .pink.opacity(0.28)]
+        case .neon:
+            // Bright, energetic green → cyan
+            return [.green.opacity(0.40), .cyan.opacity(0.30)]
         case .midnight:
             return [.indigo.opacity(0.45), .black.opacity(0.25)]
-        case .sunset:
-            return [.orange.opacity(0.42), .red.opacity(0.28)]
+        case .aurora:
+            // Calm, premium mint → teal
+            return [.mint.opacity(0.34), .teal.opacity(0.28)]
         }
     }
     
@@ -34,12 +36,12 @@ enum GlassTheme: String, CaseIterable {
             return [.orange.opacity(0.12), .yellow.opacity(0.08)]
         case .cool:
             return [.blue.opacity(0.1), .mint.opacity(0.06)]
-        case .vibrant:
-            return [.purple.opacity(0.14), .pink.opacity(0.1)]
+        case .neon:
+            return [.green.opacity(0.16), .cyan.opacity(0.12)]
         case .midnight:
             return [.indigo.opacity(0.18), .purple.opacity(0.12)]
-        case .sunset:
-            return [.orange.opacity(0.16), .red.opacity(0.1)]
+        case .aurora:
+            return [.mint.opacity(0.14), .teal.opacity(0.10)]
         }
     }
     
@@ -48,9 +50,9 @@ enum GlassTheme: String, CaseIterable {
         case .clear: return 0.6
         case .warm: return 0.7
         case .cool: return 0.65
-        case .vibrant: return 0.75
+        case .neon: return 0.76
         case .midnight: return 0.8
-        case .sunset: return 0.72
+        case .aurora: return 0.70
         }
     }
     
@@ -59,9 +61,9 @@ enum GlassTheme: String, CaseIterable {
         case .clear: return 0.08
         case .warm: return 0.1
         case .cool: return 0.09
-        case .vibrant: return 0.12
+        case .neon: return 0.12
         case .midnight: return 0.15
-        case .sunset: return 0.11
+        case .aurora: return 0.10
         }
     }
 }
@@ -132,7 +134,10 @@ class ThemeManager: ObservableObject {
     }
     
     private init() {
-        let savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
+        var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
+        // Migrate legacy names to new ones
+        if savedTheme == "Vibrant" { savedTheme = GlassTheme.neon.rawValue }
+        if savedTheme == "Sunset" { savedTheme = GlassTheme.aurora.rawValue }
         self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .clear
         
         let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")

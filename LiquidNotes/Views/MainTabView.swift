@@ -13,33 +13,34 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var selectedFolder: Folder? = nil // shared across entry points
     @State private var showingQuickTaskCapture = false // single task capture
-    @State private var quickTasksNoteID: UUID? = nil // cached reference
     @State private var showingDailyReview = false
     @State private var openNoteObserver: NSObjectProtocol?
     @State private var createAndLinkObserver: NSObjectProtocol?
     @State private var quickTaskObserver: NSObjectProtocol?
+    @State private var openTasksObserver: NSObjectProtocol?
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingSettings = false
     // Removed quick theme overlay per simplification feedback
     
     var body: some View {
-        TabView(selection: $selectedTab) {
+        // Build the core TabView once, then apply iOS-specific bar styling below
+        let tabCore = TabView(selection: $selectedTab) {
             Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
             Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
             Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
             Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-        .toolbarBackgroundVisibility(.visible, for: .tabBar)
         .onAppear { setupViewModel() }
     .onAppear { registerOpenNoteObserver() }
     .onAppear { registerCreateAndLinkObserver() }
     .onAppear { registerQuickTaskObserver() }
+    .onAppear { registerOpenTasksObserver() }
     .onDisappear { if let obs = openNoteObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = createAndLinkObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = quickTaskObserver { NotificationCenter.default.removeObserver(obs) } }
+    .onDisappear { if let obs = openTasksObserver { NotificationCenter.default.removeObserver(obs) } }
     // Command system removed
     // Removed reindex trigger (simplification)
         .sheet(item: $selectedNote) { note in
@@ -58,13 +59,28 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showingQuickTaskCapture) {
             QuickTaskCaptureView { taskText, due in
-                guard let vm = notesViewModel else { return }
-                let target = fetchOrCreateQuickTasksNote(using: vm)
-                target.addTask(taskText, dueDate: due)
-                vm.persistChanges()
+                // Create standalone task (not attached to a note)
+                let task = TaskItem(text: taskText, isCompleted: false, note: nil, dueDate: due)
+                modelContext.insert(task)
+                try? modelContext.save()
+                if task.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: task) }
+                BadgeManager.shared.taskAdded()
                 HapticManager.shared.success()
+                SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
             }
             .presentationDetents([.fraction(0.3)])
+        }
+        // Apply bar appearance conditionally to match iOS 26+ "glass" behavior
+        Group {
+            if #available(iOS 26.0, *) {
+                tabCore
+                    .toolbarBackground(.automatic, for: .tabBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .tabBar)
+            } else {
+                tabCore
+                    .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+                    .toolbarBackgroundVisibility(.visible, for: .tabBar)
+            }
         }
     }
     
@@ -143,6 +159,8 @@ extension Notification.Name { static let lnOpenNoteRequested = Notification.Name
 extension Notification.Name { static let lnCreateAndLinkNoteRequested = Notification.Name("lnCreateAndLinkNoteRequested") }
 extension Notification.Name { static let lnNoteAttachmentsChanged = Notification.Name("lnNoteAttachmentsChanged") }
 extension Notification.Name { static let showQuickTaskCapture = Notification.Name("showQuickTaskCapture") }
+extension Notification.Name { static let openTasksTab = Notification.Name("openTasksTab") }
+extension Notification.Name { static let focusTask = Notification.Name("focusTask") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {
@@ -170,6 +188,15 @@ private extension MainTabView {
     func registerQuickTaskObserver() {
         quickTaskObserver = NotificationCenter.default.addObserver(forName: .showQuickTaskCapture, object: nil, queue: .main) { _ in
             showingQuickTaskCapture = true
+        }
+    }
+    
+    func registerOpenTasksObserver() {
+        openTasksObserver = NotificationCenter.default.addObserver(forName: .openTasksTab, object: nil, queue: .main) { notif in
+            selectedTab = 4 // Tasks tab index
+            if let idStr = notif.object as? String, let uuid = UUID(uuidString: idStr) {
+                NotificationCenter.default.post(name: .focusTask, object: uuid)
+            }
         }
     }
 }
@@ -244,32 +271,9 @@ struct QuickTaskCaptureView: View {
     }
 }
 
-// MARK: - Quick Tasks Helper
-private extension MainTabView {
-    func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
-        if let existingID = quickTasksNoteID {
-            let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == existingID })
-            if let found = try? modelContext.fetch(descriptor).first { return found }
-        }
-        // Search by reserved title
-        let title = "Quick Tasks"
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
-        if let found = try? modelContext.fetch(descriptor).first {
-            quickTasksNoteID = found.id
-            return found
-        }
-        // Create hidden aggregation note
-    let new = vm.createNote(in: selectedFolder, title: title, content: "")
-    new.isFavorited = false
-    new.isSystem = true
-        quickTasksNoteID = new.id
-        try? modelContext.save()
-        return new
-    }
-}
+// (Quick Tasks helper removed — standalone tasks are now used.)
 
 #Preview {
     MainTabView()
         .modelContainer(for: [Note.self, NoteCategory.self, Folder.self], inMemory: true)
 }
-

@@ -105,8 +105,8 @@ struct NativeNoteEditor: View {
                     }
                 }
             }
-            .toolbarBackground(.ultraThinMaterial, for: .bottomBar)
-            .toolbarBackgroundVisibility(.visible, for: .bottomBar)
+            // Use system-provided glass on iOS 26+, fallback to material on older iOS
+            .modifier(BottomBarCompatStyle())
             .navigationBarHidden(true)
             .onAppear { 
                 setupEditor()
@@ -279,8 +279,7 @@ struct NativeNoteEditor: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.ultraThinMaterial)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        .modifier(NavBarCompatStyle())
     }
     
     private func setupEditor() {
@@ -346,6 +345,8 @@ struct NativeNoteEditor: View {
             try modelContext.save()
             hasChanges = false
             HapticManager.shared.success()
+            // Refresh widget data after saving note content
+            SharedDataManager.shared.refreshWidgetData(context: modelContext)
         } catch {
             HapticManager.shared.error()
         }
@@ -417,6 +418,39 @@ struct NativeNoteEditor: View {
               let image = UIImage(data: gifData) else { return }
         
         nativeTextView.insertInlineImage(image, data: gifData)
+    }
+}
+
+// MARK: - Bar Styling (iOS compatibility)
+private struct BottomBarCompatStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                content
+                    .toolbarBackground(.automatic, for: .bottomBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .bottomBar)
+            } else {
+                content
+                    .toolbarBackground(.ultraThinMaterial, for: .bottomBar)
+                    .toolbarBackgroundVisibility(.visible, for: .bottomBar)
+            }
+        }
+    }
+}
+
+private struct NavBarCompatStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                content
+                    .toolbarBackground(.automatic, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .navigationBar)
+            } else {
+                content
+                    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            }
+        }
     }
 }
 

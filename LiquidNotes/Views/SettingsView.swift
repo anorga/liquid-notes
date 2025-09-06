@@ -287,6 +287,8 @@ struct SettingsView: View {
         .background(.clear)
         .premiumGlassCard()
     }
+
+    
 }
 
 private func analyticsRow(_ title: String, _ val: Int) -> some View {

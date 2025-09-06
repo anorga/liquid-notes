@@ -9,6 +9,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         SharedDataManager.shared.setupNotificationCategories()
         SharedDataManager.shared.requestNotificationPermissions()
+        // Ensure the widget has initial data on first launch / cold start
+        Task { @MainActor in
+            SharedDataManager.shared.refreshWidgetData()
+        }
         return true
     }
     
@@ -39,7 +43,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             }
             return true
         }
-        
+
+        if url.host == "tasks" {
+            // Open Tasks tab; optional last path component can be a taskID for future selection
+            let taskIDString = url.pathComponents.dropFirst().first // /<taskID>
+            NotificationCenter.default.post(name: .openTasksTab, object: taskIDString)
+            return true
+        }
+
         if url.host == "action" {
             let pathComponents = url.pathComponents
             guard pathComponents.count >= 3 else { return false }
@@ -127,7 +138,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                     try? context.save()
                     
                     SharedDataManager.shared.cancelTaskNotification(for: taskID)
-                    updateWidgetData(context: context)
+                    SharedDataManager.shared.refreshWidgetData(context: context)
                     break
                 }
             }
@@ -151,24 +162,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                     try? context.save()
                     
                     SharedDataManager.shared.scheduleTaskNotification(for: task, in: note)
-                    updateWidgetData(context: context)
+                    SharedDataManager.shared.refreshWidgetData(context: context)
                     break
                 }
             }
-        }
-    }
-    
-    private func updateWidgetData(context: ModelContext) {
-        let descriptor = FetchDescriptor<Note>(
-            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
-        )
-        
-        if let notes = try? context.fetch(descriptor) {
-            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
-            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
-            
-            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
-            SharedDataManager.shared.saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
         }
     }
 }

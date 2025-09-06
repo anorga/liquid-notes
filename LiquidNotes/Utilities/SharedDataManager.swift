@@ -15,18 +15,12 @@ class SharedDataManager {
     }
     
     func saveNotesForWidget(notes: [Note]) {
-        guard let containerURL = sharedContainerURL else { 
-            print("🔴 SharedDataManager: No shared container URL found")
-            return 
-        }
+        guard let containerURL = sharedContainerURL else { return }
         
         // Ensure the container directory exists
         do {
             try FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            print("🔴 SharedDataManager: Failed to create container directory: \(error)")
-            return
-        }
+        } catch { return }
         
         let widgetDataURL = containerURL.appendingPathComponent("widget_notes.json")
         
@@ -47,14 +41,12 @@ class SharedDataManager {
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(widgetNotes)
-            try data.write(to: widgetDataURL)
-            
+            let newData = try encoder.encode(widgetNotes)
+            // If data hasn't changed, skip writing and reloading timelines
+            if let existingData = try? Data(contentsOf: widgetDataURL), existingData == newData { return }
+            try newData.write(to: widgetDataURL, options: .atomic)
             WidgetCenter.shared.reloadAllTimelines()
-            print("🟢 SharedDataManager: Widget timeline reload requested at \(Date())")
-        } catch {
-            print("🔴 SharedDataManager: Failed to save widget data: \(error)")
-        }
+        } catch { }
     }
     
     func loadNotesForWidget() -> [WidgetNoteData] {
@@ -67,9 +59,31 @@ class SharedDataManager {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode([WidgetNoteData].self, from: data)
-        } catch {
-            print("Failed to load widget data: \(error)")
-            return []
+        } catch { return [] }
+    }
+
+    // Centralized helper to compute the widget dataset and persist it to the app group.
+    // Keep this logic identical to previous scattered implementations.
+    @MainActor
+    func refreshWidgetData(context: ModelContext) {
+        let descriptor = FetchDescriptor<Note>(
+            sortBy: [SortDescriptor(\.modifiedDate, order: .reverse)]
+        )
+        if let notes = try? context.fetch(descriptor) {
+            let favoriteNotes = notes.filter { $0.isFavorited && !$0.isArchived }
+            let recentNotes = notes.filter { !$0.isArchived && !$0.isSystem }
+            let notesToShow = favoriteNotes.isEmpty ? recentNotes : favoriteNotes
+            saveNotesForWidget(notes: Array(notesToShow.prefix(6)))
+        }
+    }
+
+    // Convenience: build a temporary container and refresh without a provided context.
+    // Use sparingly; prefer the context-aware variant when available.
+    @MainActor
+    func refreshWidgetData() {
+        if let container = try? ModelContainer(for: Note.self, NoteCategory.self, Folder.self) {
+            let context = container.mainContext
+            refreshWidgetData(context: context)
         }
     }
     
@@ -115,6 +129,42 @@ class SharedDataManager {
             trigger: trigger
         )
         
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Failed to schedule notification: \(error)")
+            }
+        }
+    }
+    
+    // Standalone task (no note relationship)
+    func scheduleTaskNotification(for task: TaskItem) {
+        guard let dueDate = task.dueDate else { return }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Task Reminder"
+        content.body = task.text
+        content.sound = .default
+        content.badge = 1
+        content.categoryIdentifier = "TASK_REMINDER"
+        content.userInfo = [
+            "taskID": task.id.uuidString,
+            "taskTitle": task.text
+        ]
+        content.threadIdentifier = "standalone-task-\(task.id.uuidString)"
+        
+        let trigger: UNNotificationTrigger
+        if dueDate > Date() {
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
+            trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        } else {
+            return
+        }
+        
+        let request = UNNotificationRequest(
+            identifier: "task-\(task.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Failed to schedule notification: \(error)")
@@ -300,4 +350,62 @@ struct WidgetNoteData: Codable {
     let completedTaskCount: Int
     let modifiedDate: Date
     let tags: [String]
+}
+
+// Minimal dataset for standalone tasks shown in a dedicated widget
+struct WidgetTaskData: Codable {
+    let id: String
+    let text: String
+    let isCompleted: Bool
+    let dueDate: Date?
+    let priority: String
+}
+
+extension SharedDataManager {
+    @MainActor
+    func refreshStandaloneTasksWidgetData(context: ModelContext) {
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.note == nil })
+        if let tasks = try? context.fetch(descriptor) {
+            saveStandaloneTasksForWidget(tasks: tasks)
+        }
+    }
+
+    func saveStandaloneTasksForWidget(tasks: [TaskItem]) {
+        guard let containerURL = sharedContainerURL else { return }
+        do { try FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true) } catch { }
+        let widgetDataURL = containerURL.appendingPathComponent("widget_tasks.json")
+        // Sort: overdue first, then soonest due, then has due before no due, then priority
+        let order: [NotePriority:Int] = [.urgent:0, .high:1, .normal:2, .low:3]
+        let sorted = tasks.sorted { lhs, rhs in
+            let lDue = lhs.dueDate
+            let rDue = rhs.dueDate
+            let now = Date()
+            let lOver = (lDue != nil) && (lDue! < now)
+            let rOver = (rDue != nil) && (rDue! < now)
+            if lOver != rOver { return lOver && !rOver }
+            switch (lDue, rDue) {
+            case let (l?, r?):
+                if l != r { return l < r }
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                break
+            }
+            let lp = order[lhs.priority, default: 4]
+            let rp = order[rhs.priority, default: 4]
+            return lp < rp
+        }
+        let payload = sorted.prefix(8).map { t in
+            WidgetTaskData(id: t.id.uuidString, text: t.text, isCompleted: t.isCompleted, dueDate: t.dueDate, priority: t.priority.rawValue)
+        }
+        do {
+            let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+            let newData = try enc.encode(payload)
+            if let existing = try? Data(contentsOf: widgetDataURL), existing == newData { return }
+            try newData.write(to: widgetDataURL, options: .atomic)
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch { }
+    }
 }

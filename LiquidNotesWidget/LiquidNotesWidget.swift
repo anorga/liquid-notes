@@ -11,66 +11,44 @@ import AppIntents
 
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        print("🟡 Widget: placeholder() called")
         return SimpleEntry(date: Date(), notes: getSampleNotes())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> ()) {
-        print("🟡 Widget: getSnapshot called, isPreview: \(context.isPreview)")
         let notes = loadNotes()
         let entry = SimpleEntry(date: Date(), notes: notes)
-        print("🟡 Widget: getSnapshot completed with \(notes.count) notes")
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
-        print("🟡 Widget: getTimeline called")
         let notes = loadNotes()
         let entry = SimpleEntry(date: Date(), notes: notes)
         
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
         let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-        print("🟡 Widget: getTimeline completed with \(notes.count) notes, next update: \(nextUpdate)")
         completion(timeline)
     }
     
     private func loadNotes() -> [WidgetNote] {
-        print("🟡 Widget: loadNotes() called at \(Date())")
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.com.liquidnotes.shared"
         ) else { 
-            print("🔴 Widget: No shared container URL found")
             return []
         }
-        
-        print("🟡 Widget: Loading notes from shared container: \(containerURL)")
+
         let widgetDataURL = containerURL.appendingPathComponent("widget_notes.json")
-        print("🟡 Widget: Checking file at: \(widgetDataURL)")
-        
-        // List all files in the container to debug
-        do {
-            let files = try FileManager.default.contentsOfDirectory(atPath: containerURL.path)
-            print("🟡 Widget: Files in container: \(files)")
-        } catch {
-            print("🔴 Widget: Cannot list container contents: \(error)")
-        }
-        
+
         // Check if file exists
         if !FileManager.default.fileExists(atPath: widgetDataURL.path) {
-            print("🔴 Widget: widget_notes.json file does NOT exist at \(widgetDataURL.path)")
             return []
         }
         
         do {
             let data = try Data(contentsOf: widgetDataURL)
-            print("🟡 Widget: Read \(data.count) bytes from file")
             
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let widgetData = try decoder.decode([WidgetNoteData].self, from: data)
-            
-            print("🟢 Widget: Successfully loaded \(widgetData.count) notes")
-            print("🟢 Widget: Note titles: \(widgetData.map { $0.title })")
             
             let widgetNotes = widgetData.map { data in
                 WidgetNote(
@@ -83,18 +61,13 @@ struct Provider: TimelineProvider {
                     tags: data.tags
                 )
             }
-            
-            print("🟢 Widget: Returning \(widgetNotes.count) widget notes")
             return widgetNotes
         } catch {
-            print("🔴 Widget: Failed to load notes: \(error)")
-            print("🔴 Widget: Error details: \(error.localizedDescription)")
             return []
         }
     }
     
     private func getSampleNotes() -> [WidgetNote] {
-        print("🟡 Widget: getSampleNotes() called - returning sample data")
         return [
             WidgetNote(
                 id: UUID(),
@@ -175,10 +148,7 @@ struct SmallWidgetView: View {
                 Text("No Data")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
-                Text("Debug: \(notes.count) notes")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                // Debug count removed
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -203,10 +173,7 @@ struct MediumWidgetView: View {
                 Text("No Data (Medium)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
-                Text("Debug: \(notes.count) notes")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                // Debug count removed
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
@@ -242,10 +209,7 @@ struct LargeWidgetView: View {
                 Text("No Data (Large)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
-                Text("Debug: \(notes.count) notes")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                // Debug count removed
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(

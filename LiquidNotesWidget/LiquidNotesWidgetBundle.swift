@@ -14,5 +14,6 @@ struct LiquidNotesWidgetBundle: WidgetBundle {
         LiquidNotesWidget()
         QuickNoteControl()
         QuickTaskControl()
+        TasksWidget()
     }
 }
