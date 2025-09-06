@@ -42,15 +42,10 @@ extension View {
         }
     }
     
-    /// Improved hit testing for better touch responsiveness in iOS 26
+    /// Improved hit testing for better touch responsiveness (iOS-safe)
+    /// Note: `allowsWindowActivationEvents` is not relevant on iOS; keep behavior consistent.
     func compatibleAllowsHitTesting(_ enabled: Bool) -> some View {
-        if #available(iOS 26.0, *) {
-            // iOS 26: Enhanced hit testing with window activation support
-            return AnyView(self.allowsHitTesting(enabled)
-                .allowsWindowActivationEvents(enabled))
-        } else {
-            return AnyView(self.allowsHitTesting(enabled))
-        }
+        return AnyView(self.allowsHitTesting(enabled))
     }
     
     /// Enhanced material effects for iOS 18+
