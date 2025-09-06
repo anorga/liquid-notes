@@ -12,29 +12,35 @@ struct SplashView: View {
                 Color.black.ignoresSafeArea()
 
                 // Prefer asset named "AppSplashIcon"; fall back to bundled icon_source.png
-                Group {
-                    if let uiImage = UIImage(named: "AppSplashIcon") ?? UIImage(named: "icon_source") {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFit()
-                    } else {
-                        // Final fallback: simple logo text
-                        Text("Liquid Notes")
-                            .font(.system(size: 28, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
+                VStack(spacing: 16) {
+                    Group {
+                        if let uiImage = UIImage(named: "AppSplashIcon") ?? UIImage(named: "icon_source") {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFit()
+                        } else {
+                            // Final fallback: simple logo text
+                            Text("Liquidnote")
+                                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
                     }
+                    .frame(width: iconSize(for: geo), height: iconSize(for: geo))
+                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
+
+                    // App name under the icon
+                    Text("Liquidnote")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .kerning(0.5)
+                        .foregroundStyle(.white)
+                        .opacity(opacity)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .frame(width: iconSize(for: geo), height: iconSize(for: geo))
-                .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .onAppear {
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) {
-                        scale = 1.0
-                    }
-                    withAnimation(.easeOut(duration: 0.45)) {
-                        opacity = 1.0
-                    }
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { scale = 1.0 }
+                    withAnimation(.easeOut(duration: 0.45)) { opacity = 1.0 }
                 }
             }
         }

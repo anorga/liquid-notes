@@ -25,7 +25,7 @@ final class Note {
     var height: Float = 140
     var isArchived: Bool = false
     var isFavorited: Bool = false
-    // System/internal note not shown in standard lists (e.g., Quick Tasks bucket)
+    // System/internal note not shown in standard lists
     var isSystem: Bool = false
     var tags: [String] = [] // Restored tags support
     var attachments: [Data] = []
@@ -211,6 +211,12 @@ final class TaskItem {
     var createdDate: Date = Date()
     var dueDate: Date? = nil
     @Relationship var note: Note?
+    var priorityRawValue: String = "normal"
+    
+    var priority: NotePriority {
+        get { NotePriority(rawValue: priorityRawValue) ?? .normal }
+        set { priorityRawValue = newValue.rawValue }
+    }
     
     init(text: String, isCompleted: Bool = false, note: Note? = nil, dueDate: Date? = nil) {
         self.id = UUID()
@@ -221,4 +227,3 @@ final class TaskItem {
         self.dueDate = dueDate
     }
 }
-

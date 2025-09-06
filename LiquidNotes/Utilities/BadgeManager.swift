@@ -20,7 +20,7 @@ class BadgeManager: ObservableObject {
     
     private func calculateAndSetBadgeCount() async {
         do {
-            let container = try ModelContainer(for: Note.self, NoteCategory.self, Folder.self)
+            let container = try ModelContainer(for: Note.self, NoteCategory.self, Folder.self, TaskItem.self)
             let context = container.mainContext
             
             let descriptor = FetchDescriptor<Note>(
@@ -52,6 +52,22 @@ class BadgeManager: ObservableObject {
                             }
                         }
                     }
+                }
+                // Optionally include note-level due dates
+                if let noteDue = note.dueDate {
+                    let t = noteDue.timeIntervalSinceNow
+                    if t < 0 { overdueCount += 1 } else if t < 7200 { urgentCount += 1 }
+                }
+            }
+            // Include standalone tasks (note == nil)
+            let standaloneDescriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate { $0.note == nil }
+            )
+            let standalone = (try? context.fetch(standaloneDescriptor)) ?? []
+            for task in standalone where !task.isCompleted {
+                if let dueDate = task.dueDate {
+                    let t = dueDate.timeIntervalSinceNow
+                    if t < 0 { overdueCount += 1 } else if t < 7200 { urgentCount += 1 }
                 }
             }
             

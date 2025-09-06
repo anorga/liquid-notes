@@ -123,11 +123,14 @@ struct SpatialTabView: View {
             }
             .sheet(isPresented: $showingQuickTaskCapture) {
                 QuickTaskCaptureView { taskText, due in
-                    guard let vm = notesViewModel else { return }
-                    let target = fetchOrCreateQuickTasksNote(using: vm)
-                    target.addTask(taskText, dueDate: due)
-                    vm.persistChanges()
+                    // Create standalone task (not attached to a note)
+                    let task = TaskItem(text: taskText, isCompleted: false, note: nil, dueDate: due)
+                    modelContext.insert(task)
+                    try? modelContext.save()
+                    if task.dueDate != nil { SharedDataManager.shared.scheduleTaskNotification(for: task) }
+                    BadgeManager.shared.taskAdded()
                     HapticManager.shared.success()
+                    SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
                 }
                 .presentationDetents([.fraction(0.3)])
             }
@@ -596,19 +599,7 @@ struct SpatialTabView: View {
         .padding(.top, 20)
     }
     
-    private func fetchOrCreateQuickTasksNote(using vm: NotesViewModel) -> Note {
-        let title = "Quick Tasks"
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.title == title })
-        if let found = try? modelContext.fetch(descriptor).first {
-            return found
-        }
-        
-        let new = vm.createNote(in: selectedFolder, title: title, content: "")
-        new.isFavorited = false
-        new.isSystem = true
-        try? modelContext.save()
-        return new
-    }
+    // (Quick Tasks helper removed — standalone tasks are now used.)
 
 }
 
