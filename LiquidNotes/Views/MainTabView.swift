@@ -73,6 +73,7 @@ struct MainTabView: View {
         tabCore
             .toolbarBackground(.regularMaterial, for: .tabBar)
             .toolbarBackgroundVisibility(.visible, for: .tabBar)
+            .modifier(iOS26TabBarEnhancements())
     }
     
     
@@ -263,6 +264,16 @@ struct QuickTaskCaptureView: View {
 }
 
 // (Quick Tasks helper removed — standalone tasks are now used.)
+
+struct iOS26TabBarEnhancements: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
+    }
+}
 
 #Preview {
     MainTabView()

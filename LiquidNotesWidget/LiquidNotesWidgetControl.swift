@@ -40,12 +40,7 @@ struct CreateQuickNoteIntent: AppIntent {
     static var description = IntentDescription("Create a new note in Liquid Notes")
     
     func perform() async throws -> some IntentResult {
-        let urlString = "liquidnotes://create/note"
-        guard let url = URL(string: urlString) else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 
@@ -54,12 +49,7 @@ struct CreateQuickTaskIntent: AppIntent {
     static var description = IntentDescription("Add a quick task to your notes")
     
     func perform() async throws -> some IntentResult {
-        let urlString = "liquidnotes://create/task"
-        guard let url = URL(string: urlString) else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 
