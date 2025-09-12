@@ -16,12 +16,7 @@ struct ToggleFavoriteIntent: AppIntent {
     }
     
     func perform() async throws -> some IntentResult {
-        // Use URL scheme to trigger action in main app
-        guard let url = URL(string: "liquidnotes://action/toggle-favorite/\(noteID)") else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 
@@ -39,11 +34,7 @@ struct OpenNoteIntent: AppIntent {
     }
     
     func perform() async throws -> some IntentResult {
-        guard let url = URL(string: "liquidnotes://note/\(noteID)") else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 
@@ -61,12 +52,7 @@ struct ToggleTaskIntent: AppIntent {
     }
     
     func perform() async throws -> some IntentResult {
-        // Use URL scheme to trigger action in main app
-        guard let url = URL(string: "liquidnotes://action/add-task/\(noteID)") else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 
@@ -88,11 +74,6 @@ struct MarkTaskCompleteIntent: AppIntent {
     }
     
     func perform() async throws -> some IntentResult {
-        // Use URL scheme to trigger action in main app
-        guard let url = URL(string: "liquidnotes://action/complete-task/\(noteID)/\(taskIndex)") else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
