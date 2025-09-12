@@ -431,14 +431,28 @@ private extension GridNoteCard {
     var glassCard: some View {
         let corner: CGFloat = 26
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        // Use themedGlass as available in ThemeManager extensions
+        let isMidnight = themeManager.currentTheme == .midnight
+        
         return base
-            .fill(Color.clear)
+            .fill(isMidnight ? Color.gray.opacity(0.15) : Color.clear)
             .overlay(
                 AnyView(
                     EmptyView()
                         .themedGlassCard()
                 )
+            )
+            .overlay(
+                isMidnight ?
+                AnyView(
+                    base.stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.25), .gray.opacity(0.15)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+                ) : AnyView(EmptyView())
             )
             .clipShape(base)
             .frame(width: cardWidth, height: cardHeight)
@@ -465,10 +479,11 @@ private extension GridNoteCard {
 
 
     @ViewBuilder var noteHeader: some View {
+    let isMidnight = themeManager.currentTheme == .midnight
     HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
                 .font(.system(size: isLongTitle ? 15 : 16, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(isMidnight ? Color.white : .primary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
@@ -509,11 +524,12 @@ private extension GridNoteCard {
     }
 
     @ViewBuilder var contentView: some View {
+        let isMidnight = themeManager.currentTheme == .midnight
         if !note.content.isEmpty {
             Text(note.content)
                 .font(.system(size: 14))
                 .fontWeight(.regular)
-                .foregroundStyle(.primary.opacity(0.8))
+                .foregroundStyle(isMidnight ? Color.white.opacity(0.85) : .primary.opacity(0.8))
                 .lineLimit(dynamicContentLineLimit)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(2)
@@ -521,7 +537,7 @@ private extension GridNoteCard {
         } else {
             Text("No content")
                 .font(.system(size: 14))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(isMidnight ? Color.gray.opacity(0.6) : Color.secondary.opacity(0.6))
                 .italic()
         }
     }

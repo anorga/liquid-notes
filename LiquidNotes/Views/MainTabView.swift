@@ -70,18 +70,9 @@ struct MainTabView: View {
             }
             .presentationDetents([.fraction(0.3)])
         }
-        // Apply bar appearance conditionally to match iOS 26+ "glass" behavior
-        Group {
-            if #available(iOS 26.0, *) {
-                tabCore
-                    .toolbarBackground(.automatic, for: .tabBar)
-                    .toolbarBackgroundVisibility(.automatic, for: .tabBar)
-            } else {
-                tabCore
-                    .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-                    .toolbarBackgroundVisibility(.visible, for: .tabBar)
-            }
-        }
+        tabCore
+            .toolbarBackground(.regularMaterial, for: .tabBar)
+            .toolbarBackgroundVisibility(.visible, for: .tabBar)
     }
     
     
