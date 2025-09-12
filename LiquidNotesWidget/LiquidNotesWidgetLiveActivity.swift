@@ -238,12 +238,7 @@ struct CompleteTaskIntent: AppIntent {
     }
     
     func perform() async throws -> some IntentResult {
-        // Use URL scheme to trigger action in main app
-        guard let url = URL(string: "liquidnotes://action/complete-task/\(noteID)/\(taskID)") else {
-            return .result()
-        }
-        
-        return .result(opensIntent: OpenURLIntent(url))
+        return .result()
     }
 }
 

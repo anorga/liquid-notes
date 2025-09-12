@@ -1676,8 +1676,10 @@ class InteractiveTextAttachment: NSTextAttachment {
         guard gifFrames.count > 1, gifDisplayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
         
-        let optimizer = PerformanceOptimizer.shared
-        link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
+        Task { @MainActor in
+            let optimizer = PerformanceOptimizer.shared
+            link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
+        }
         
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             return
@@ -1690,7 +1692,6 @@ class InteractiveTextAttachment: NSTextAttachment {
     @objc private func stepGIF(_ link: CADisplayLink) {
         guard gifFrames.count > 1 else { return }
         
-        let optimizer = PerformanceOptimizer.shared
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             gifDisplayLink?.invalidate()
             gifDisplayLink = nil
@@ -1698,7 +1699,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         
         gifAccumulated += link.duration
-        let frameSkip = optimizer.shouldReduceGIFFrameRate ? 1 : 1
+        let frameSkip = PerformanceOptimizer.shared.shouldReduceGIFFrameRate ? 1 : 1
         
         while gifAccumulated > gifDurations[gifCurrentIndex] * Double(frameSkip) {
             gifAccumulated -= gifDurations[gifCurrentIndex] * Double(frameSkip)
