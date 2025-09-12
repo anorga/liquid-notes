@@ -29,7 +29,6 @@ struct SplashView: View {
                         }
                     }
                     .frame(width: iconSize(for: geo), height: iconSize(for: geo))
-                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
 
                     // App name under the icon with subtle shimmer
                     ZStack {
@@ -38,7 +37,6 @@ struct SplashView: View {
                             .font(.system(size: titleSize(for: geo), weight: .semibold, design: .rounded))
                             .kerning(0.6)
                             .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
 
                         // Shimmer overlay masked by the same text
                         Text("Liquidnote")

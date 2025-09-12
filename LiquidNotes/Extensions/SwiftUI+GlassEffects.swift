@@ -3,11 +3,7 @@ import UIKit
 
 extension View {
     func liquidGlassBackground() -> some View {
-        if #available(iOS 26.0, *) {
-            return AnyView(self.background(.ultraThinMaterial.opacity(0.1), in: RoundedRectangle(cornerRadius: 12)))
-        } else {
-            return AnyView(self.background(.thinMaterial.opacity(0.2), in: RoundedRectangle(cornerRadius: 12)))
-        }
+        return AnyView(self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)))
     }
     
     func liquidGlassCard() -> some View {
@@ -17,57 +13,58 @@ extension View {
     
     func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
         let theme = ThemeManager.shared
+        let isMidnight = theme.currentTheme == .midnight
         
         switch variant {
         case .regular:
             if theme.reduceMotion || theme.minimalMode {
                 return AnyView(self.background(
-                    shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.8))
+                    shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.9 : theme.glassOpacity * 0.8))
                 ))
             } else {
                 return AnyView(self.background(
                     ZStack {
-                        shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.4))
+                        shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.8 : theme.glassOpacity * 0.4))
                         
                         if !theme.highContrast {
-                            shape.stroke(.white.opacity(0.2), lineWidth: 0.5)
+                            shape.stroke(.white.opacity(isMidnight ? 0.4 : 0.2), lineWidth: 0.5)
                         }
                     }
                 ))
             }
         case .thin:
             return AnyView(self.background(
-                shape.fill(.thinMaterial.opacity(theme.glassOpacity * 0.6))
+                shape.fill(.thinMaterial.opacity(isMidnight ? 0.85 : theme.glassOpacity * 0.6))
             ))
         case .thick:
             return AnyView(self.background(
                 ZStack {
-                    shape.fill(.regularMaterial.opacity(theme.glassOpacity * 0.7))
+                    shape.fill(.regularMaterial.opacity(isMidnight ? 0.9 : theme.glassOpacity * 0.7))
                     if !theme.minimalMode {
-                        shape.stroke(.white.opacity(0.15), lineWidth: 0.8)
+                        shape.stroke(.white.opacity(isMidnight ? 0.35 : 0.15), lineWidth: 0.8)
                     }
                 }
             ))
         case .ultra:
             return AnyView(self.background(
                 ZStack {
-                    shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.5))
+                    shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.75 : theme.glassOpacity * 0.5))
                     if !theme.minimalMode {
-                        shape.stroke(.white.opacity(0.25), lineWidth: 0.8)
+                        shape.stroke(.white.opacity(isMidnight ? 0.45 : 0.25), lineWidth: 0.8)
                     }
                 }
             ))
         case .floating:
             return AnyView(self.background(
-                shape.fill(.thickMaterial.opacity(theme.glassOpacity * 0.8))
+                shape.fill(.thickMaterial.opacity(isMidnight ? 0.95 : theme.glassOpacity * 0.8))
             ))
         case .elevated:
             return AnyView(self.background(
-                shape.fill(.regularMaterial.opacity(theme.glassOpacity * 0.9))
+                shape.fill(.regularMaterial.opacity(isMidnight ? 0.98 : theme.glassOpacity * 0.9))
             ))
         case .ambient:
             return AnyView(self.background(
-                shape.fill(.ultraThinMaterial.opacity(theme.glassOpacity * 0.4))
+                shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.7 : theme.glassOpacity * 0.4))
             ))
         case .vibrant:
             return AnyView(self.background(
@@ -88,17 +85,9 @@ extension View {
     
     /// Interactive glass effect with touch response
     func interactiveGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
-        if #available(iOS 26.0, *) {
-            // Use enhanced materials for iOS 26 with spatial interaction
-            return AnyView(self.liquidGlassEffect(variant, in: shape)
-                .scaleEffect(0.98)
-                .animation(.easeInOut(duration: 0.15), value: false))
-        } else {
-            // iOS 17+ fallback with enhanced interaction
-            return AnyView(self.liquidGlassEffect(variant, in: shape)
-                .scaleEffect(0.98)
-                .animation(.easeInOut(duration: 0.15), value: false))
-        }
+        return AnyView(self.liquidGlassEffect(variant, in: shape)
+            .scaleEffect(0.98)
+            .animation(.easeInOut(duration: 0.15), value: false))
     }
 }
 

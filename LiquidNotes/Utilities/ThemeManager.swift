@@ -7,7 +7,7 @@ enum GlassTheme: String, CaseIterable {
     case cool = "Cool"
     case neon = "Neon"
     case midnight = "Midnight"
-    case aurora = "Aurora"
+    case cosmic = "Cosmic"
     
     var primaryGradient: [Color] {
         switch self {
@@ -21,10 +21,9 @@ enum GlassTheme: String, CaseIterable {
             // Bright, energetic green → cyan
             return [.green.opacity(0.40), .cyan.opacity(0.30)]
         case .midnight:
-            return [.indigo.opacity(0.45), .black.opacity(0.25)]
-        case .aurora:
-            // Calm, premium mint → teal
-            return [.mint.opacity(0.34), .teal.opacity(0.28)]
+            return [.gray.opacity(0.25), .black.opacity(0.4)]
+        case .cosmic:
+            return [.purple.opacity(0.38), .indigo.opacity(0.32)]
         }
     }
     
@@ -39,9 +38,9 @@ enum GlassTheme: String, CaseIterable {
         case .neon:
             return [.green.opacity(0.16), .cyan.opacity(0.12)]
         case .midnight:
-            return [.indigo.opacity(0.18), .purple.opacity(0.12)]
-        case .aurora:
-            return [.mint.opacity(0.14), .teal.opacity(0.10)]
+            return [.gray.opacity(0.08), .black.opacity(0.05)]
+        case .cosmic:
+            return [.purple.opacity(0.08), .indigo.opacity(0.06)]
         }
     }
     
@@ -51,8 +50,8 @@ enum GlassTheme: String, CaseIterable {
         case .warm: return 0.7
         case .cool: return 0.65
         case .neon: return 0.76
-        case .midnight: return 0.8
-        case .aurora: return 0.70
+        case .midnight: return 0.35
+        case .cosmic: return 0.68
         }
     }
     
@@ -62,8 +61,8 @@ enum GlassTheme: String, CaseIterable {
         case .warm: return 0.1
         case .cool: return 0.09
         case .neon: return 0.12
-        case .midnight: return 0.15
-        case .aurora: return 0.10
+        case .midnight: return 0.06
+        case .cosmic: return 0.11
         }
     }
 }
@@ -134,11 +133,12 @@ class ThemeManager: ObservableObject {
     }
     
     private init() {
-        var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.clear.rawValue
+        var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.midnight.rawValue
         // Migrate legacy names to new ones
         if savedTheme == "Vibrant" { savedTheme = GlassTheme.neon.rawValue }
-        if savedTheme == "Sunset" { savedTheme = GlassTheme.aurora.rawValue }
-        self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .clear
+        if savedTheme == "Sunset" { savedTheme = GlassTheme.cosmic.rawValue }
+        if savedTheme == "Aurora" { savedTheme = GlassTheme.cosmic.rawValue }
+        self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .midnight
         
         let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
         self.glassOpacity = savedOpacity == 0 ? 0.85 : savedOpacity
@@ -169,7 +169,7 @@ class ThemeManager: ObservableObject {
     
     func resetToDefaults() {
         withAnimation(.easeInOut(duration: 0.5)) {
-            currentTheme = .clear
+            currentTheme = .midnight
             glassOpacity = 0.85
             reduceMotion = false
             highContrast = false
@@ -188,10 +188,16 @@ struct ThemedGlassModifier: ViewModifier {
     }
     
     func body(content: Content) -> some View {
-        content
+        let isMidnight = themeManager.currentTheme == .midnight
+        
+        return content
             .background(
                 ZStack {
-                    shape.fill(.clear)
+                    if isMidnight {
+                        shape.fill(Color.gray.opacity(0.12))
+                    } else {
+                        shape.fill(.clear)
+                    }
                     
                     shape.fill(
                         LinearGradient(
@@ -199,7 +205,7 @@ struct ThemedGlassModifier: ViewModifier {
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
-                        .opacity(themeManager.glassOpacity)
+                        .opacity(isMidnight ? 0.8 : themeManager.glassOpacity)
                     )
                     
                     if themeManager.highContrast {
@@ -211,7 +217,7 @@ struct ThemedGlassModifier: ViewModifier {
                         shape.stroke(
                             LinearGradient(
                                 colors: [
-                                    .white.opacity(0.3),
+                                    .white.opacity(isMidnight ? 0.4 : 0.3),
                                     .clear
                                 ],
                                 startPoint: .topLeading,
