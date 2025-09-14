@@ -33,11 +33,13 @@ struct LiquidNotesBackground: View {
             // Brand base: fused theme gradient + adaptive neutral
             let theme = themeManager.currentTheme
             let isMidnight = theme == .midnight
+            let isLight = theme == .light
             let baseNeutral = isMidnight ? Color.black : Color(colorScheme == .dark ? .black : .white)
             
             if isMidnight {
-                Color.black
-                    .ignoresSafeArea()
+                Color.black.ignoresSafeArea()
+            } else if isLight {
+                Color.white.ignoresSafeArea()
             } else {
                 LinearGradient(
                     colors: [

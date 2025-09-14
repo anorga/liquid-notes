@@ -10,6 +10,7 @@ import SwiftData
 
 struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab = 0
     @State private var selectedFolder: Folder? = nil // shared across entry points
     @State private var showingQuickTaskCapture = false // single task capture
@@ -28,7 +29,8 @@ struct MainTabView: View {
             Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
             Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
             Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
-            Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
+            // Settings tab: open Settings directly
+            Tab("Settings", systemImage: "gearshape", value: 5) { SettingsView().navigationBarHidden(true) }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
         .onAppear { setupViewModel() }
@@ -72,6 +74,34 @@ struct MainTabView: View {
         tabCore
             .toolbarBackground(.thinMaterial, for: .tabBar)
             .toolbarBackgroundVisibility(.visible, for: .tabBar)
+            .onAppear {
+                if colorScheme == .light {
+                    if ThemeManager.shared.currentTheme != .light {
+                        ThemeManager.shared.applyTheme(.light)
+                    }
+                } else {
+                    // In dark mode, preserve user's dark variant if already dark
+                    let cur = ThemeManager.shared.currentTheme
+                    if cur == .light {
+                        let preferred = ThemeManager.shared.lastDarkTheme ?? .midnight
+                        ThemeManager.shared.applyTheme(preferred)
+                    }
+                }
+            }
+            .onChange(of: colorScheme) { _, newScheme in
+                if newScheme == .light {
+                    if ThemeManager.shared.currentTheme != .light {
+                        ThemeManager.shared.applyTheme(.light)
+                    }
+                } else {
+                    let cur = ThemeManager.shared.currentTheme
+                    // If coming into dark and currently on light, choose a default dark theme
+                    if cur == .light {
+                        let preferred = ThemeManager.shared.lastDarkTheme ?? .midnight
+                        ThemeManager.shared.applyTheme(preferred)
+                    }
+                }
+            }
     }
     
     

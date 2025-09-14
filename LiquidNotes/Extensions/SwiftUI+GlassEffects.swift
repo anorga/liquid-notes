@@ -6,12 +6,14 @@ extension View {
     func nativeGlassSurface(cornerRadius: CGFloat = 16, opacity: Double = 1.0) -> some View {
         let theme = ThemeManager.shared
         let isMidnight = theme.currentTheme == .midnight
-        let baseOpacity = min(1.0, max(0.0, (0.4 + theme.glassOpacity * 0.4))) * opacity
+        // Drive material strength from normalized glassIntensity for a clearer slider effect
+        let t = max(0.0, min(1.0, theme.glassIntensity))
+        let baseOpacity = (0.35 + t * 0.55) * opacity // 0.35...0.90
 
         return self
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.thinMaterial.opacity(isMidnight ? min(0.92, baseOpacity + 0.1) : baseOpacity))
+                    .fill(.thinMaterial.opacity(isMidnight ? min(0.96, baseOpacity + 0.06) : baseOpacity))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
