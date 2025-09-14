@@ -100,7 +100,7 @@ struct LiquidNotesBackground: View {
                         )
                     )
                     .blendMode(.overlay)
-                    .opacity(themeManager.minimalMode ? 0.3 : 0.5)
+                    .opacity(0.5)
             }
             .ignoresSafeArea()
             .onAppear {

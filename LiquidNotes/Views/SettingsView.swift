@@ -21,12 +21,11 @@ struct SettingsView: View {
                         VStack(spacing: 24) {
                             themeSection
                             archiveSection
-                            accessibilitySection
                             productivitySection
                             analyticsSection
                             aboutSection
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, UI.Space.xl)
                         .padding(.top, 12)
                         .padding(.bottom, 32)
                     }
@@ -131,12 +130,6 @@ struct SettingsView: View {
                 }
                 Divider().padding(.vertical, 4)
                 SettingToggle(
-                    title: "Minimal Mode",
-                    description: "Flatter surfaces & lighter shadows",
-                    icon: "rectangle.compress.vertical",
-                    isOn: $themeManager.minimalMode
-                )
-                SettingToggle(
                     title: "(Background Animation Always On)",
                     description: "",
                     icon: "sparkles",
@@ -152,39 +145,7 @@ struct SettingsView: View {
         .premiumGlassCard()
     }
     
-    private var accessibilitySection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Accessibility", systemImage: "accessibility")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            
-            VStack(spacing: 0) {
-                SettingToggle(
-                    title: "High Contrast",
-                    description: "Increase contrast for better visibility",
-                    icon: "circle.lefthalf.filled",
-                    isOn: $themeManager.highContrast
-                )
-                
-                Divider()
-                    .padding(.horizontal)
-                
-                SettingToggle(
-                    title: "Reduce Motion",
-                    description: "Minimize animations and transitions",
-                    icon: "figure.walk.motion",
-                    isOn: $themeManager.reduceMotion
-                )
-                .onChange(of: themeManager.reduceMotion) { _, newValue in
-                    MotionManager.shared.syncWithReduceMotion(newValue)
-                }
-            }
-        }
-        .padding()
-        .background(.clear)
-        .premiumGlassCard()
-    }
+    // accessibilitySection removed for production
     
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -263,7 +224,7 @@ struct SettingsView: View {
                         if dailyReviewReminderEnabled { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) }
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, UI.Space.m)
             }
         }
         .padding()
@@ -307,7 +268,7 @@ struct ThemeButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: UI.Corner.s)
                     .fill(
                         LinearGradient(
                             colors: theme.primaryGradient.map { $0.opacity(1.0) },
@@ -317,7 +278,7 @@ struct ThemeButton: View {
                     )
                     .frame(height: 60)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: UI.Corner.s)
                             .stroke(
                                 isSelected ? Color.accentColor : Color.clear,
                                 lineWidth: 3
@@ -380,7 +341,7 @@ struct SettingToggle: View {
                     HapticManager.shared.buttonTapped()
                 }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, UI.Space.m)
     }
 }
 

@@ -51,7 +51,7 @@ struct DueDateCalendarPicker: View {
                 quickChip("Next Week") { tempDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date() }
                 quickChip("Next Month") { tempDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date() }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, UI.Space.l)
             .padding(.vertical, 4)
         }
     }
@@ -59,8 +59,8 @@ struct DueDateCalendarPicker: View {
         Button(action: action) {
             Text(label)
                 .font(.caption2)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.xs)
+                .nativeGlassChip()
         }
         .buttonStyle(.plain)
     }

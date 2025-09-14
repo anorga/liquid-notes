@@ -429,35 +429,22 @@ private struct GridNoteCard: View {
 // MARK: Subviews & gestures for GridNoteCard
 private extension GridNoteCard {
     var glassCard: some View {
-        let corner: CGFloat = 26
+        let corner: CGFloat = UI.Corner.l
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        let isMidnight = themeManager.currentTheme == .midnight
-        
         return base
-            .fill(isMidnight ? Color.gray.opacity(0.15) : Color.clear)
+            .fill(Color.clear)
             .overlay(
                 AnyView(
                     EmptyView()
-                        .themedGlassCard()
+                        .modernGlassCard()
                 )
-            )
-            .overlay(
-                isMidnight ?
-                AnyView(
-                    base.stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.25), .gray.opacity(0.15)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
-                ) : AnyView(EmptyView())
             )
             .clipShape(base)
             .frame(width: cardWidth, height: cardHeight)
-            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.08 : 0.16), radius: themeManager.minimalMode ? 6 : 12, x: 0, y: themeManager.minimalMode ? 3 : 5)
-            .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : 0.1), radius: themeManager.minimalMode ? 18 : 32, x: 0, y: themeManager.minimalMode ? 10 : 20)
+            .overlay(
+                base.stroke(Color.white.opacity(0.18), lineWidth: 0.6)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 5)
     }
 
     var dragGesture: some Gesture {
@@ -493,21 +480,47 @@ private extension GridNoteCard {
     }
 
     @ViewBuilder var attachmentPreviewView: some View {
-    if showAttachmentPreview, let previewImage = spatialPreviewImage(for: note) {
+        if showAttachmentPreview, let previewImage = spatialPreviewImage(for: note) {
             ZStack(alignment: .bottom) {
-                Group {
-                    Image(uiImage: previewImage).resizable()
-                }
-                .aspectRatio(contentMode: .fill)
+                // Native glass base behind the preview for edge clarity
+                RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous)
+                    .fill(.thinMaterial)
+                    .frame(height: dynamicAttachmentHeight)
+
+                // Preview image content
+                Image(uiImage: previewImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: dynamicAttachmentHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
+
+                // Native glass reflection highlight (subtle)
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.28),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+                .blendMode(.screen)
+                .opacity(0.35)
+                .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
                 .frame(height: dynamicAttachmentHeight)
-                .clipped()
-                .cornerRadius(12)
+
+                // Bottom gradient for text legibility over image
                 if dynamicAttachmentHeight > 0 {
                     LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
                         .blendMode(.overlay)
-                        .cornerRadius(12)
+                        .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
+                        .frame(height: dynamicAttachmentHeight)
                 }
             }
+            // Hairline native border for visibility against varied backgrounds
+            .overlay(
+                RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+            )
         }
     }
 
@@ -630,7 +643,7 @@ private extension GridNoteCard {
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .nativeGlassChip()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -639,30 +652,6 @@ private extension GridNoteCard {
     
 }
 
-#Preview {
-    struct PreviewHost: View {
-        @State private var selected: Set<UUID> = []
-
-        var body: some View {
-            SpatialCanvasView(
-                notes: [],
-                folders: [],
-                onTap: { _ in },
-                onDelete: { _ in },
-                onFavorite: { _ in },
-                onFolderTap: nil,
-                onFolderDelete: nil,
-                onFolderFavorite: nil,
-                selectionMode: false,
-                selectedNoteIDs: $selected,
-                onToggleSelect: { _ in },
-                topContentInset: 12
-            )
-            .modelContainer(for: [Note.self, Folder.self], inMemory: true)
-        }
-    }
-    return PreviewHost()
-}
 
 class GIFAnimator: NSObject {
     private var displayLink: CADisplayLink?
@@ -772,7 +761,7 @@ struct AnimatedGIFView: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle()
-                    .fill(.regularMaterial)
+                    .fill(.thinMaterial)
             }
         }
         .onAppear {
@@ -804,8 +793,7 @@ struct ZoomIndicator: View {
         .foregroundStyle(.primary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+        .nativeGlassChip()
         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
     }
 }

@@ -96,11 +96,11 @@ struct SearchView: View {
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        // Apply appearance settings (glass style) specifically to search bar
-                        .liquidGlassEffect(.elevated, in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, UI.Space.m)
+                        .padding(.vertical, UI.Space.m)
+                        // Apply native glass style to search bar
+                        .nativeGlassSurface(cornerRadius: UI.Corner.m)
+                        .padding(.horizontal, UI.Space.xl)
 
                         if isSearching || !searchText.isEmpty {
                             // Filter chips
@@ -110,7 +110,7 @@ struct SearchView: View {
                                 SearchFilterChip(title: "All", index: 2, selection: $activeFilterSelection)
                                 Spacer()
                             }
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, UI.Space.xl)
                             .transition(.move(edge: .top).combined(with: .opacity))
 
                             // Recent searches
@@ -118,10 +118,12 @@ struct SearchView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
                                         ForEach(recentSearches, id: \.self) { term in
-                                            Capsule()
-                                                .fill(Color.secondary.opacity(0.12))
-                                                .overlay(Capsule().stroke(Color.secondary.opacity(0.25), lineWidth: 0.6))
-                                                .overlay(Text(term).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 10).padding(.vertical, 5))
+                                            Text(term)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, UI.Space.m)
+                                                .padding(.vertical, 5)
+                                                .nativeGlassChip()
                                                 .onTapGesture { withAnimation { searchText = term; debouncedQuery = term; isSearching = true; searchFocused = false } }
                                                 .contextMenu { Button("Remove") { ModelMutationScheduler.shared.schedule { removeRecent(term) } } }
                                         }
@@ -133,7 +135,7 @@ struct SearchView: View {
                                             .padding(.horizontal, 4)
                                         }
                                     }
-                                    .padding(.horizontal, 20)
+                                    .padding(.horizontal, UI.Space.xl)
                                 }
                                 .transition(.opacity)
                             }
@@ -143,14 +145,16 @@ struct SearchView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
                                         ForEach(topTags, id: \.self) { tag in
-                                            Capsule()
-                                                .fill(LinearGradient(colors: [Color.blue.opacity(0.25), Color.cyan.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                                .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
-                                                .overlay(Text("#" + tag).font(.caption2).foregroundStyle(.primary).padding(.horizontal, 10).padding(.vertical, 5))
+                                            Text("#" + tag)
+                                                .font(.caption2)
+                                                .foregroundStyle(.primary)
+                                                .padding(.horizontal, UI.Space.m)
+                                                .padding(.vertical, 5)
+                                                .nativeGlassChip()
                                                 .onTapGesture { withAnimation { searchText = tag; debouncedQuery = tag; isSearching = true; addRecentSearch(tag); searchFocused = false } }
                                         }
                                     }
-                                    .padding(.horizontal, 20)
+                                    .padding(.horizontal, UI.Space.xl)
                                 }
                                 .transition(.opacity)
                             }
@@ -269,9 +273,9 @@ struct SearchSuggestionCard: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(.vertical, UI.Space.l)
         .padding(.horizontal, 12)
-        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+        .modernGlassCard()
     }
 }
 
@@ -335,7 +339,7 @@ struct SearchResults: View {
                         ForEach(filteredNotes, id: \.id) { note in
                             SearchResultRow(note: note, searchText: searchText)
                                 .onTapGesture { onOpen(note) }
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, UI.Space.xl)
                         }
                         Spacer(minLength: 20)
                     }
@@ -449,8 +453,8 @@ struct SearchResultRow: View {
             }
         }
     .padding(.vertical, 14)
-    .padding(.horizontal, 16)
-    .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+    .padding(.horizontal, UI.Space.l)
+    .modernGlassCard()
     }
 }
 

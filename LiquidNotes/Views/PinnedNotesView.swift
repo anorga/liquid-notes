@@ -130,7 +130,7 @@ struct PinnedNotesView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.blue)
                 .frame(width: 56, height: 56)
-                .background(.ultraThinMaterial, in: Circle())
+                .nativeGlassCircle()
                 .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
         }
         .buttonStyle(.plain)

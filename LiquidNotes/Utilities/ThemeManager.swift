@@ -3,27 +3,15 @@ import Combine
 
 enum GlassTheme: String, CaseIterable {
     case clear = "Clear"
-    case warm = "Warm"
-    case cool = "Cool"
-    case neon = "Neon"
     case midnight = "Midnight"
-    case cosmic = "Cosmic"
+    static var allCases: [GlassTheme] { [.clear, .midnight] }
     
     var primaryGradient: [Color] {
         switch self {
         case .clear:
             return [.white.opacity(0.4), .gray.opacity(0.2)]
-        case .warm:
-            return [.orange.opacity(0.35), .pink.opacity(0.25)]
-        case .cool:
-            return [.blue.opacity(0.32), .cyan.opacity(0.22)]
-        case .neon:
-            // Bright, energetic green → cyan
-            return [.green.opacity(0.40), .cyan.opacity(0.30)]
         case .midnight:
             return [.gray.opacity(0.25), .black.opacity(0.4)]
-        case .cosmic:
-            return [.purple.opacity(0.38), .indigo.opacity(0.32)]
         }
     }
     
@@ -31,38 +19,22 @@ enum GlassTheme: String, CaseIterable {
         switch self {
         case .clear:
             return [.gray.opacity(0.1), .gray.opacity(0.06)]
-        case .warm:
-            return [.orange.opacity(0.12), .yellow.opacity(0.08)]
-        case .cool:
-            return [.blue.opacity(0.1), .mint.opacity(0.06)]
-        case .neon:
-            return [.green.opacity(0.16), .cyan.opacity(0.12)]
         case .midnight:
             return [.gray.opacity(0.08), .black.opacity(0.05)]
-        case .cosmic:
-            return [.purple.opacity(0.08), .indigo.opacity(0.06)]
         }
     }
     
     var glassOpacity: Double {
         switch self {
         case .clear: return 0.6
-        case .warm: return 0.7
-        case .cool: return 0.65
-        case .neon: return 0.76
         case .midnight: return 0.35
-        case .cosmic: return 0.68
         }
     }
     
     var shadowIntensity: Double {
         switch self {
         case .clear: return 0.08
-        case .warm: return 0.1
-        case .cool: return 0.09
-        case .neon: return 0.12
         case .midnight: return 0.06
-        case .cosmic: return 0.11
         }
     }
 }
@@ -105,14 +77,16 @@ class ThemeManager: ObservableObject {
     @Published var noteGlassDepth: Double { // 0 = subtle, 1 = vivid
         didSet { UserDefaults.standard.set(noteGlassDepth, forKey: "noteGlassDepth") }
     }
-    @Published var minimalMode: Bool { // flattens shadows, reduces blur
-        didSet { UserDefaults.standard.set(minimalMode, forKey: "minimalMode") }
-    }
+    // Minimal mode removed; native visuals are always on
     // Solid tag accent option removed; always false (use gradients)
     @Published var tagAccentSolid: Bool = false
     @Published var showAdvancedGlass: Bool { // toggles advanced controls UI only
         didSet { UserDefaults.standard.set(showAdvancedGlass, forKey: "showAdvancedGlass") }
     }
+
+    // Prefer Apple's native glass visual (iOS 26+) over custom layered glass.
+    // When enabled, surfaces will use thinner material, lighter strokes, and reduced shadows.
+    // Prefer native glass toggle removed; native visuals are enforced
 
     // Combined slider convenience (0.0 - 1.0). Setting it adjusts both glassOpacity and noteGlassDepth proportionally.
     var glassIntensity: Double {
@@ -134,10 +108,10 @@ class ThemeManager: ObservableObject {
     
     private init() {
         var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.midnight.rawValue
-        // Migrate legacy names to new ones
-        if savedTheme == "Vibrant" { savedTheme = GlassTheme.neon.rawValue }
-        if savedTheme == "Sunset" { savedTheme = GlassTheme.cosmic.rawValue }
-        if savedTheme == "Aurora" { savedTheme = GlassTheme.cosmic.rawValue }
+        // Migrate legacy names to supported themes
+        if savedTheme == "Vibrant" { savedTheme = GlassTheme.clear.rawValue }
+        if savedTheme == "Sunset" { savedTheme = GlassTheme.midnight.rawValue }
+        if savedTheme == "Aurora" { savedTheme = GlassTheme.midnight.rawValue }
         self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .midnight
         
         let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
@@ -150,9 +124,10 @@ class ThemeManager: ObservableObject {
     self.dynamicTagCycling = true
     self.noteParallax = false
     self.noteGlassDepth = UserDefaults.standard.object(forKey: "noteGlassDepth") as? Double ?? 0.75
-    self.minimalMode = UserDefaults.standard.object(forKey: "minimalMode") as? Bool ?? false
+    // minimalMode deprecated
     self.tagAccentSolid = false
     self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false
+    // preferNativeGlass deprecated
     }
     
     func applyTheme(_ theme: GlassTheme) {
@@ -177,86 +152,3 @@ class ThemeManager: ObservableObject {
     }
 }
 
-struct ThemedGlassModifier: ViewModifier {
-    @ObservedObject private var themeManager = ThemeManager.shared
-    let variant: GlassVariant
-    let shape: AnyShape
-    
-    init<S: Shape>(variant: GlassVariant = .regular, shape: S) {
-        self.variant = variant
-        self.shape = AnyShape(shape)
-    }
-    
-    func body(content: Content) -> some View {
-        let isMidnight = themeManager.currentTheme == .midnight
-        
-        return content
-            .background(
-                ZStack {
-                    if isMidnight {
-                        shape.fill(Color.gray.opacity(0.12))
-                    } else {
-                        shape.fill(.clear)
-                    }
-                    
-                    shape.fill(
-                        LinearGradient(
-                            colors: themeManager.currentTheme.primaryGradient,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .opacity(isMidnight ? 0.8 : themeManager.glassOpacity)
-                    )
-                    
-                    if themeManager.highContrast {
-                        shape.stroke(
-                            Color.primary.opacity(0.5),
-                            lineWidth: 2
-                        )
-                    } else {
-                        shape.stroke(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(isMidnight ? 0.4 : 0.3),
-                                    .clear
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                    }
-                }
-            )
-            .shadow(
-                color: .black.opacity(themeManager.currentTheme.shadowIntensity),
-                radius: themeManager.reduceMotion ? 4 : 8,
-                x: 0,
-                y: themeManager.reduceMotion ? 2 : 4
-            )
-    }
-}
-
-struct AnyShape: Shape {
-    private let makePath: @Sendable (CGRect) -> Path
-    
-    init<S: Shape>(_ shape: S) {
-        makePath = { rect in
-            shape.path(in: rect)
-        }
-    }
-    
-    func path(in rect: CGRect) -> Path {
-        makePath(rect)
-    }
-}
-
-extension View {
-    func themedGlass<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
-        self.modifier(ThemedGlassModifier(variant: variant, shape: shape))
-    }
-    
-    func themedGlassCard() -> some View {
-        self.themedGlass(.regular, in: RoundedRectangle(cornerRadius: 16))
-    }
-}

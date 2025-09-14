@@ -11,7 +11,7 @@ struct MoreView: View {
                     VStack(spacing: 14) {
                         MoreNavLink(icon: "gearshape.fill", color: .blue, title: "Settings") { SettingsView().navigationBarHidden(true) }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, UI.Space.xl)
                     .padding(.top, 12)
                     Spacer(minLength: 0)
                 }
@@ -32,10 +32,10 @@ private struct MoreNavLink<Destination: View>: View {
         NavigationLink(destination: destination().navigationBarHidden(true)) {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous)
                         .fill(color.opacity(0.12))
                         .frame(width: 40, height: 40)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 0.5))
+                        .overlay(RoundedRectangle(cornerRadius: UI.Corner.s).stroke(Color.white.opacity(0.15), lineWidth: 0.5))
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(color)
@@ -50,17 +50,8 @@ private struct MoreNavLink<Destination: View>: View {
                     .opacity(0.7)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.clear)
-                    .refinedClearGlass(cornerRadius: 22, intensity: ThemeManager.shared.noteGlassDepth)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.white.opacity(0.17), lineWidth: 0.5)
-            )
-            .shadow(color: .black.opacity(ThemeManager.shared.minimalMode ? 0.04 : 0.14), radius: ThemeManager.shared.minimalMode ? 4 : 10, x: 0, y: ThemeManager.shared.minimalMode ? 2 : 5)
+            .padding(.vertical, UI.Space.m)
+            .modernGlassCard()
         }
         .buttonStyle(.plain)
     }

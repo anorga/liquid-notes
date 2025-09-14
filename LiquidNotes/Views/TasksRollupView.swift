@@ -19,13 +19,14 @@ struct TasksRollupView: View {
     @State private var toastMessage: String? = nil
     @State private var focusedTaskID: UUID? = nil
     @State private var focusObserver: NSObjectProtocol?
+    @State private var recentlyUpdatedTaskID: UUID? = nil
     @State private var showingMoveTaskPicker = false
     @State private var taskToMove: TaskItem? = nil
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 LNHeader(title: "Tasks", subtitle: summarySubtitle) { EmptyView() }
-                
+                filters
                 if filteredNotes.isEmpty && standaloneFiltered.isEmpty {
                     VStack {
                         Spacer()
@@ -42,7 +43,6 @@ struct TasksRollupView: View {
                     }
                     .frame(maxWidth: .infinity)
                 } else {
-                    filters
                     ScrollView {
                         LazyVStack(spacing: 14) {
                             if !standaloneFiltered.isEmpty {
@@ -57,7 +57,7 @@ struct TasksRollupView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
-                                    .padding(.horizontal, 16)
+                                    .padding(.horizontal, UI.Space.l)
                                     .padding(.top, 8)
                                 }
                             }
@@ -66,7 +66,7 @@ struct TasksRollupView: View {
                                     if isExpanded(note) { taskList(note) }
                                 } header: { noteHeader(note) }
                             }
-                        }.padding(.horizontal, 18).padding(.top, 12)
+                        }.padding(.horizontal, UI.Space.xl).padding(.top, UI.Space.m)
                         Spacer(minLength: 40)
                     }
                 }
@@ -78,8 +78,7 @@ struct TasksRollupView: View {
                     Text(msg)
                         .font(.caption)
                         .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 0.5))
+                        .nativeGlassChip()
                         .padding(.top, 8)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
@@ -120,13 +119,13 @@ struct TasksRollupView: View {
                             TextField("Task description", text: $newTaskText, axis: .vertical)
                                 .lineLimit(2, reservesSpace: true)
                                 .textFieldStyle(.plain)
-                                .padding(.horizontal, 14).padding(.vertical, 12)
-                                .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.m)
+                                .nativeGlassSurface(cornerRadius: UI.Corner.sPlus)
                             HStack(spacing: 12) {
                                 if let d = newTaskDueDate {
                                     Text("Due: \(d.ln_dayDistanceString())")
                                         .font(.caption2)
-                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.xs)
                                         .background(Capsule().fill(Color.orange.opacity(0.2)))
                                         .foregroundStyle(.orange)
                                 }
@@ -135,7 +134,7 @@ struct TasksRollupView: View {
                                         .font(.title3)
                                         .foregroundStyle(newTaskDueDate == nil ? Color.secondary : Color.orange)
                                         .padding(8)
-                                        .background(.ultraThinMaterial, in: Circle())
+                                        .nativeGlassCircle()
                                 }
                                 Spacer()
                             }
@@ -162,7 +161,7 @@ struct TasksRollupView: View {
                                 } label: {
                                     Text("Add Task")
                                         .fontWeight(.semibold)
-                                        .padding(.horizontal, 20).padding(.vertical, 10)
+                                    .padding(.horizontal, UI.Space.xl).padding(.vertical, UI.Space.m)
                                         .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
                                         .clipShape(Capsule())
                                         .foregroundStyle(.white)
@@ -285,6 +284,16 @@ private extension TasksRollupView {
             .foregroundStyle(p == .normal ? Color.secondary.opacity(0.6) : p.color)
     }
 
+    func updateTaskPriority(_ task: TaskItem, to newPriority: NotePriority, noteContext: Note? = nil) {
+        task.priority = newPriority
+        try? modelContext.save()
+        // Keep the item visible even if filter differs by temporarily whitelisting it
+        recentlyUpdatedTaskID = task.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { recentlyUpdatedTaskID = nil }
+        // Optionally update widget data if needed (note context available for scheduling)
+        if let note = noteContext { SharedDataManager.shared.refreshWidgetData(context: modelContext); _ = note }
+    }
+
     func showToast(_ message: String) {
         withAnimation(.easeInOut(duration: 0.2)) { toastMessage = message }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
@@ -308,7 +317,7 @@ private extension TasksRollupView {
         }
         let priorityFiltered: [TaskItem]
         if let p = selectedPriority {
-            priorityFiltered = searchFiltered.filter { $0.priority == p }
+            priorityFiltered = searchFiltered.filter { $0.priority == p || $0.id == recentlyUpdatedTaskID }
         } else {
             priorityFiltered = searchFiltered
         }
@@ -394,10 +403,10 @@ private extension TasksRollupView {
                             showingMoveTaskPicker = true
                         } label: { Label("Move to Note…", systemImage: "arrowshape.turn.up.right") }
                         Divider()
-                        Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
-                        Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
-                        Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
-                        Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                        Button { updateTaskPriority(task, to: .low) } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                        Button { updateTaskPriority(task, to: .normal) } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                        Button { updateTaskPriority(task, to: .high) } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                        Button { updateTaskPriority(task, to: .urgent) } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                     }
                     Button(role: .destructive) {
                         // Delete standalone task
@@ -426,13 +435,13 @@ private extension TasksRollupView {
                         showingMoveTaskPicker = true
                     } label: { Label("Move to Note…", systemImage: "arrowshape.turn.up.right") }
                     Divider()
-                    Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
-                    Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
-                    Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
-                    Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                    Button { updateTaskPriority(task, to: .low) } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                    Button { updateTaskPriority(task, to: .normal) } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                    Button { updateTaskPriority(task, to: .high) } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                    Button { updateTaskPriority(task, to: .urgent) } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
+                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.m)
+                        .background(RoundedRectangle(cornerRadius: UI.Corner.sPlus).fill(Color.secondary.opacity(0.08)))
             }
         }
     }
@@ -448,7 +457,7 @@ private extension TasksRollupView {
                     }
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, UI.Space.xl)
             .padding(.vertical, 8)
         }
     }
@@ -471,8 +480,8 @@ private extension TasksRollupView {
                 Spacer()
                 Image(systemName: isExpanded(note) ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, UI.Space.l).padding(.vertical, UI.Space.m)
+            .modernGlassCard()
         }.buttonStyle(.plain)
     }
     func taskList(_ note: Note) -> some View {
@@ -539,10 +548,10 @@ private extension TasksRollupView {
                                     showToast("Detached to Standalone")
                                 } label: { Label("Detach to Standalone", systemImage: "arrowshape.turn.up.left") }
                                 Divider()
-                                Button { task.priority = .low; try? modelContext.save(); showToast("Priority: Low") } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
-                                Button { task.priority = .normal; try? modelContext.save(); showToast("Priority: Normal") } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
-                                Button { task.priority = .high; try? modelContext.save(); showToast("Priority: High") } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
-                                Button { task.priority = .urgent; try? modelContext.save(); showToast("Priority: Urgent") } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                                Button { updateTaskPriority(task, to: .low) } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                                Button { updateTaskPriority(task, to: .normal) } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                                Button { updateTaskPriority(task, to: .high) } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                                Button { updateTaskPriority(task, to: .urgent) } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                             }
                             Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             // Name edit confirm button (after delete)
@@ -652,26 +661,26 @@ private extension TasksRollupView {
                             updateWidgetData()
                         } label: { Label("Detach to Standalone", systemImage: "arrowshape.turn.up.left") }
                         Divider()
-                        Button { task.priority = .low; try? modelContext.save() } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
-                        Button { task.priority = .normal; try? modelContext.save() } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
-                        Button { task.priority = .high; try? modelContext.save() } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
-                        Button { task.priority = .urgent; try? modelContext.save() } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
+                        Button { updateTaskPriority(task, to: .low) } label: { Label("Priority: Low", systemImage: NotePriority.low.iconName) }
+                        Button { updateTaskPriority(task, to: .normal) } label: { Label("Priority: Normal", systemImage: NotePriority.normal.iconName) }
+                        Button { updateTaskPriority(task, to: .high) } label: { Label("Priority: High", systemImage: NotePriority.high.iconName) }
+                        Button { updateTaskPriority(task, to: .urgent) } label: { Label("Priority: Urgent", systemImage: NotePriority.urgent.iconName) }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.08)))
+                    .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.m)
+                    .background(RoundedRectangle(cornerRadius: UI.Corner.sPlus).fill(Color.secondary.opacity(0.08)))
                 }
             }
             Button(action: { note.addTask("New Task"); try? modelContext.save(); updateWidgetData() }) {
                 Label("Add Task", systemImage: "plus")
                     .font(.caption)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.s)
                     .background(Capsule().fill(LinearGradient(colors: [.blue.opacity(0.3), .cyan.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)))
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
             .padding(.leading, 6)
         }
-        .padding(.horizontal, 10).padding(.bottom, 14)
+        .padding(.horizontal, UI.Space.m).padding(.bottom, UI.Space.m)
     }
     func priorityBadge(_ p: NotePriority) -> some View {
         HStack(spacing: 4) {
@@ -703,7 +712,7 @@ private extension TasksRollupView {
                 .fontWeight(.semibold)
                 .foregroundStyle(.blue)
                 .frame(width: 56, height: 56)
-                .background(.ultraThinMaterial, in: Circle())
+                .nativeGlassCircle()
                 .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
