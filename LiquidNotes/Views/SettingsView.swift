@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var themeManager = ThemeManager.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showResetConfirmation = false
     @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
     @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
@@ -80,12 +81,16 @@ struct SettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
+                // Follow system appearance is always on. Only show themes valid
+                // for the current color scheme: Light in light mode; Midnight/Night in dark.
+                let allowedThemes: [GlassTheme] = (colorScheme == .dark) ? [.midnight, .night] : [.light]
+                
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 12) {
-                    ForEach(GlassTheme.allCases, id: \.self) { theme in
+                    ForEach(allowedThemes, id: \.self) { theme in
                         ThemeButton(
                             theme: theme,
                             isSelected: themeManager.currentTheme == theme
@@ -95,6 +100,8 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .opacity(1.0)
+                .allowsHitTesting(true)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -128,16 +135,7 @@ struct SettingsView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                Divider().padding(.vertical, 4)
-                SettingToggle(
-                    title: "(Background Animation Always On)",
-                    description: "",
-                    icon: "sparkles",
-                    isOn: .constant(true)
-                ).hidden()
-                Divider().padding(.vertical, 6)
-                // Note Style picker removed; unified style applied globally
-                // Advanced glass controls removed for simplification
+                // Removed unused spacing from prior setting
             }
         }
         .padding()
@@ -271,7 +269,7 @@ struct ThemeButton: View {
                 RoundedRectangle(cornerRadius: UI.Corner.s)
                     .fill(
                         LinearGradient(
-                            colors: theme.primaryGradient.map { $0.opacity(1.0) },
+                            colors: previewColors(),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -300,6 +298,20 @@ struct ThemeButton: View {
             .animation(.bouncy(duration: 0.3), value: isSelected)
         }
         .buttonStyle(.plain)
+    }
+
+    private func previewColors() -> [Color] {
+        switch theme {
+        case .light:
+            // Keep light neutral
+            return [Color.white.opacity(0.85), Color.white.opacity(0.65)]
+        case .night:
+            // Dark with a hint of green undertones
+            return [Color.black.opacity(0.55), Color.green.opacity(0.18)]
+        case .midnight:
+            // Black-ish appearance
+            return [Color.black.opacity(0.6), Color.black.opacity(0.35)]
+        }
     }
 }
 

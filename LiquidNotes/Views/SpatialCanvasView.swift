@@ -431,18 +431,67 @@ private extension GridNoteCard {
     var glassCard: some View {
         let corner: CGFloat = UI.Corner.l
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        return base
-            .fill(Color.clear)
-            .overlay(
-                AnyView(
-                    EmptyView()
-                        .modernGlassCard()
-                )
+        let isLight = themeManager.currentTheme == .light
+        let isNight = themeManager.currentTheme == .night
+        let isMidnight = themeManager.currentTheme == .midnight
+        // Neutral base tied to theme background fills (subtle, low color)
+        let neutralGradient = LinearGradient(
+            colors: themeManager.currentTheme.backgroundGradient,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        // Undertone layer brings slight cool hints in Night/Midnight without being too colorful
+        let undertoneGradient: LinearGradient? = {
+            switch themeManager.currentTheme {
+            case .light:
+                return nil
+            case .night:
+                // Dark with subtle green undertones
+                return LinearGradient(colors: [
+                    Color.green.opacity(0.14),
+                    Color.teal.opacity(0.12)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            case .midnight:
+                // Black-ish undertone (very subtle)
+                return LinearGradient(colors: [
+                    Color.black.opacity(0.18),
+                    Color.black.opacity(0.12)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }()
+        // Tie strengths to glass intensity so slider affects previews in all themes
+        let t = max(0.0, min(1.0, themeManager.glassIntensity))
+        // Subtle base range + very gentle undertone range
+        let neutralOpacity: Double = {
+            let lightRange: ClosedRange<Double> = 0.08...0.24
+            let nightRange: ClosedRange<Double> = 0.06...0.20
+            let midnightRange: ClosedRange<Double> = 0.06...0.18
+            let range = isLight ? lightRange : (isNight ? nightRange : midnightRange)
+            return range.lowerBound + t * (range.upperBound - range.lowerBound)
+        }()
+        let undertoneOpacity: Double = {
+            guard undertoneGradient != nil else { return 0 }
+            let nightRange: ClosedRange<Double> = 0.03...0.10
+            let midnightRange: ClosedRange<Double> = 0.02...0.08
+            let range = isNight ? nightRange : midnightRange
+            return range.lowerBound + t * (range.upperBound - range.lowerBound)
+        }()
+
+        // Build with material above the gradient: apply glass first, then add gradient as background
+        return Color.clear
+            .frame(width: cardWidth, height: cardHeight)
+            .nativeGlassSurface(cornerRadius: corner)
+            .background(
+                ZStack {
+                    base.fill(neutralGradient).opacity(neutralOpacity)
+                    if let undertone = undertoneGradient {
+                        base.fill(undertone).opacity(undertoneOpacity)
+                    }
+                }
             )
             .clipShape(base)
-            .frame(width: cardWidth, height: cardHeight)
             .overlay(
-                base.stroke(Color.white.opacity(0.18), lineWidth: 0.6)
+                base.stroke(Color.white.opacity(isMidnight ? 0.22 : 0.18), lineWidth: 0.6)
             )
             .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 5)
     }

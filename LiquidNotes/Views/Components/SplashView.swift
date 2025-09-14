@@ -29,6 +29,15 @@ struct SplashView: View {
                                 .frame(width: iconSize(for: geo), height: iconSize(for: geo))
                                 .clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: iconSize(for: geo) * 0.2237, style: .continuous))
+                            // Hard-mask any residual single-pixel edge from the source asset
+                            Rectangle()
+                                .fill(Color.black)
+                                .frame(height: 3)
+                                .frame(width: iconSize(for: geo))
+                                .alignmentGuide(.bottom) { d in d[.bottom] }
+                                .offset(y: (iconSize(for: geo)/2) - 1.5)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: iconSize(for: geo) * 0.2237, style: .continuous))
                         }
                         .frame(width: iconSize(for: geo), height: iconSize(for: geo))
                     } else {

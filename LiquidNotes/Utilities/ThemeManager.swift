@@ -2,13 +2,16 @@ import SwiftUI
 import Combine
 
 enum GlassTheme: String, CaseIterable {
-    case clear = "Clear"
+    case light = "Light"
+    case night = "Night"
     case midnight = "Midnight"
-    static var allCases: [GlassTheme] { [.clear, .midnight] }
+    static var allCases: [GlassTheme] { [.light, .night, .midnight] }
     
     var primaryGradient: [Color] {
         switch self {
-        case .clear:
+        case .light:
+            return [.white.opacity(0.5), .white.opacity(0.25)]
+        case .night:
             return [.white.opacity(0.4), .gray.opacity(0.2)]
         case .midnight:
             return [.gray.opacity(0.25), .black.opacity(0.4)]
@@ -17,7 +20,9 @@ enum GlassTheme: String, CaseIterable {
     
     var backgroundGradient: [Color] {
         switch self {
-        case .clear:
+        case .light:
+            return [.white.opacity(0.15), .gray.opacity(0.08)]
+        case .night:
             return [.gray.opacity(0.1), .gray.opacity(0.06)]
         case .midnight:
             return [.gray.opacity(0.08), .black.opacity(0.05)]
@@ -26,14 +31,16 @@ enum GlassTheme: String, CaseIterable {
     
     var glassOpacity: Double {
         switch self {
-        case .clear: return 0.6
+        case .light: return 0.55
+        case .night: return 0.6
         case .midnight: return 0.35
         }
     }
     
     var shadowIntensity: Double {
         switch self {
-        case .clear: return 0.08
+        case .light: return 0.07
+        case .night: return 0.08
         case .midnight: return 0.06
         }
     }
@@ -83,6 +90,14 @@ class ThemeManager: ObservableObject {
     @Published var showAdvancedGlass: Bool { // toggles advanced controls UI only
         didSet { UserDefaults.standard.set(showAdvancedGlass, forKey: "showAdvancedGlass") }
     }
+    // Remember user's last chosen dark theme (Night or Midnight) to restore when returning to dark mode
+    @Published private var lastDarkThemeRaw: String? {
+        didSet { UserDefaults.standard.set(lastDarkThemeRaw, forKey: "lastDarkTheme") }
+    }
+    var lastDarkTheme: GlassTheme? {
+        get { lastDarkThemeRaw.flatMap { GlassTheme(rawValue: $0) } }
+        set { lastDarkThemeRaw = newValue?.rawValue }
+    }
 
     // Prefer Apple's native glass visual (iOS 26+) over custom layered glass.
     // When enabled, surfaces will use thinner material, lighter strokes, and reduced shadows.
@@ -107,12 +122,12 @@ class ThemeManager: ObservableObject {
     }
     
     private init() {
-        var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.midnight.rawValue
+        var savedTheme = UserDefaults.standard.string(forKey: "selectedTheme") ?? GlassTheme.light.rawValue
         // Migrate legacy names to supported themes
-        if savedTheme == "Vibrant" { savedTheme = GlassTheme.clear.rawValue }
+        if savedTheme == "Vibrant" { savedTheme = GlassTheme.night.rawValue }
         if savedTheme == "Sunset" { savedTheme = GlassTheme.midnight.rawValue }
         if savedTheme == "Aurora" { savedTheme = GlassTheme.midnight.rawValue }
-        self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .midnight
+        self.currentTheme = GlassTheme(rawValue: savedTheme) ?? .light
         
         let savedOpacity = UserDefaults.standard.double(forKey: "glassOpacity")
         self.glassOpacity = savedOpacity == 0 ? 0.85 : savedOpacity
@@ -127,12 +142,14 @@ class ThemeManager: ObservableObject {
     // minimalMode deprecated
     self.tagAccentSolid = false
     self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false
+    self.lastDarkThemeRaw = UserDefaults.standard.string(forKey: "lastDarkTheme")
     // preferNativeGlass deprecated
     }
     
     func applyTheme(_ theme: GlassTheme) {
         withAnimation(.easeInOut(duration: 0.5)) {
             currentTheme = theme
+            if theme != .light { lastDarkTheme = theme }
         }
     }
     
@@ -144,11 +161,10 @@ class ThemeManager: ObservableObject {
     
     func resetToDefaults() {
         withAnimation(.easeInOut(duration: 0.5)) {
-            currentTheme = .midnight
+            currentTheme = .light
             glassOpacity = 0.85
             reduceMotion = false
             highContrast = false
         }
     }
 }
-
