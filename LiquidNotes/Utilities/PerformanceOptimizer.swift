@@ -127,16 +127,4 @@ extension View {
             }
         }
     }
-    
-    func conditionalGlassEffect(_ variant: GlassVariant = .regular) -> some View {
-        let optimizer = PerformanceOptimizer.shared
-        
-        return Group {
-            if optimizer.shouldUseSimplifiedGlass {
-                self.background(.ultraThinMaterial.opacity(0.6))
-            } else {
-                self.liquidGlassEffect(variant)
-            }
-        }
-    }
 }

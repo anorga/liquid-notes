@@ -21,7 +21,6 @@ struct MainTabView: View {
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     @State private var showingSettings = false
-    // Removed quick theme overlay per simplification feedback
     
     var body: some View {
         // Build the core TabView once, then apply iOS-specific bar styling below
@@ -71,9 +70,8 @@ struct MainTabView: View {
             .presentationDetents([.fraction(0.3)])
         }
         tabCore
-            .toolbarBackground(.regularMaterial, for: .tabBar)
+            .toolbarBackground(.thinMaterial, for: .tabBar)
             .toolbarBackgroundVisibility(.visible, for: .tabBar)
-            .modifier(iOS26TabBarEnhancements())
     }
     
     
@@ -153,6 +151,7 @@ extension Notification.Name { static let lnNoteAttachmentsChanged = Notification
 extension Notification.Name { static let showQuickTaskCapture = Notification.Name("showQuickTaskCapture") }
 extension Notification.Name { static let openTasksTab = Notification.Name("openTasksTab") }
 extension Notification.Name { static let focusTask = Notification.Name("focusTask") }
+extension Notification.Name { static let lnRequestInsertSketch = Notification.Name("lnRequestInsertSketch") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {
@@ -207,16 +206,16 @@ struct QuickTaskCaptureView: View {
                 LiquidNotesBackground().ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(spacing: 16) {
-                        TextField("Task description", text: $taskText, axis: .vertical)
-                            .lineLimit(2, reservesSpace: true)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                            TextField("Task description", text: $taskText, axis: .vertical)
+                                .lineLimit(2, reservesSpace: true)
+                                .textFieldStyle(.plain)
+                                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.m)
+                                .nativeGlassSurface(cornerRadius: UI.Corner.sPlus)
                         HStack(spacing: 12) {
                             if let d = dueDate {
-                                Text("Due: \(d.ln_dayDistanceString())")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                        Text("Due: \(d.ln_dayDistanceString())")
+                            .font(.caption2)
+                            .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.xs)
                                     .background(Capsule().fill(Color.orange.opacity(0.2)))
                                     .foregroundStyle(.orange)
                             }
@@ -225,7 +224,7 @@ struct QuickTaskCaptureView: View {
                                     .font(.title3)
                                     .foregroundStyle(dueDate == nil ? Color.secondary : Color.orange)
                                     .padding(8)
-                                    .background(.ultraThinMaterial, in: Circle())
+                                    .nativeGlassCircle()
                             }
                             Spacer()
                         }
@@ -242,7 +241,7 @@ struct QuickTaskCaptureView: View {
                             } label: {
                                 Text("Add Task")
                                     .fontWeight(.semibold)
-                                    .padding(.horizontal, 20).padding(.vertical, 10)
+                                    .padding(.horizontal, UI.Space.xl).padding(.vertical, UI.Space.m)
                                     .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
                                     .clipShape(Capsule())
                                     .foregroundStyle(.white)
@@ -264,16 +263,6 @@ struct QuickTaskCaptureView: View {
 }
 
 // (Quick Tasks helper removed — standalone tasks are now used.)
-
-struct iOS26TabBarEnhancements: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
-        }
-    }
-}
 
 #Preview {
     MainTabView()

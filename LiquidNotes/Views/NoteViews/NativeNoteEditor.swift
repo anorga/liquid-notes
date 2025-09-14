@@ -4,7 +4,6 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 import Photos
-import ObjectiveC
 import ImageIO
 
 struct NativeNoteEditor: View {
@@ -25,30 +24,17 @@ struct NativeNoteEditor: View {
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingGifPicker = false
+    @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: TimeInterval = 0.6
     
     // Compute optimal content width based on device and size class
     private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? {
-        let screenWidth = geometry.size.width
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         
         if isIPad {
-            // iPad: Progressive width constraints based on available space
-            
-            // Threshold for when to stop constraining width (near full screen)
-            let fullScreenThreshold: CGFloat = 1100
-            
-            if screenWidth < fullScreenThreshold {
-                // Below threshold: Use full width for better space utilization
-                return nil
-            } else {
-                // Above threshold: Apply reading width constraint
-                // This creates a smooth transition as window approaches full screen
-                let maxReadingWidth: CGFloat = 900
-                let padding: CGFloat = 100
-                return min(screenWidth - padding, maxReadingWidth)
-            }
+            // iPad: Use full available width/height for an open canvas feel
+            return nil
         } else {
             // iPhone: Always use full width
             return nil
@@ -59,9 +45,9 @@ struct NativeNoteEditor: View {
         NavigationStack {
             GeometryReader { geometry in
                 ZStack {
-                    // Pure liquid glass background - no borders
+                    // Native-feeling glass background
                     Color.clear
-                        .background(.ultraThinMaterial)
+                        .nativeGlassBarBackground()
                         .ignoresSafeArea()
                     
                     VStack(spacing: 0) {
@@ -97,17 +83,44 @@ struct NativeNoteEditor: View {
                             )
                         }
                         
-                        // Bottom formatting toolbar
+                    }
+                }
+                // Floating formatting bar for iPad/regular width
+                .overlay(alignment: .bottom) {
+                    if UIDevice.current.userInterfaceIdiom == .pad || horizontalSizeClass == .regular {
                         formattingToolbar
-                            .padding(.horizontal)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
+                            .background(
+                                Capsule()
+                                    .fill(.thinMaterial)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.18), lineWidth: 0.6)
+                            )
+                            .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                            .padding(.bottom, 12)
                     }
                 }
             }
             // Use system-provided glass on iOS 26+, fallback to material on older iOS
             .modifier(BottomBarCompatStyle())
             .navigationBarHidden(true)
+            .toolbar { // Native keyboard toolbar for quick formatting/media actions
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button { applyTextStyle(.title) } label: { Image(systemName: "textformat.size.larger") }
+                    Button { (textView as? NativeTextView)?.formatBold() } label: { Image(systemName: "bold") }
+                    Button { (textView as? NativeTextView)?.formatItalic() } label: { Image(systemName: "italic") }
+                    Divider()
+                    Button { (textView as? NativeTextView)?.insertBulletList() } label: { Image(systemName: "list.bullet") }
+                    Button { (textView as? NativeTextView)?.insertNumberedList() } label: { Image(systemName: "list.number") }
+                    Divider()
+                    Button { showingPhotoPicker = true } label: { Image(systemName: "photo") }
+                    Button { showingDocumentPicker = true } label: { Image(systemName: "doc") }
+                    Button { showingSketchSheet = true } label: { Image(systemName: "pencil.and.outline") }
+                }
+            }
             .onAppear { 
                 setupEditor()
                 if let nativeTextView = textView as? NativeTextView {
@@ -136,6 +149,13 @@ struct NativeNoteEditor: View {
             .sheet(isPresented: $showingGifPicker) {
                 GiphyPicker(isPresented: $showingGifPicker) { gifData in
                     handleGiphySelection(gifData)
+                }
+            }
+            .sheet(isPresented: $showingSketchSheet) {
+                SketchSheet { image, data in
+                    if let nativeTextView = textView as? NativeTextView {
+                        nativeTextView.insertInlineImage(image, data: data)
+                    }
                 }
             }
         }
@@ -235,15 +255,21 @@ struct NativeNoteEditor: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
+                    .nativeGlassChip()
                     .foregroundStyle(.primary)
+                    .fixedSize()
             }
             
             Button(action: { 
                 showingDocumentPicker = true
             }) {
                 Image(systemName: "doc")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
+            
+            Button(action: { showingSketchSheet = true }) {
+                Image(systemName: "pencil.and.outline")
                     .font(.title2)
                     .foregroundStyle(.primary)
             }
@@ -276,15 +302,19 @@ struct NativeNoteEditor: View {
             .fontWeight(.semibold)
             .foregroundStyle(.blue)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, UI.Space.xl)
+        .padding(.vertical, UI.Space.m)
+        .nativeGlassBarBackground()
         .modifier(NavBarCompatStyle())
     }
     
     private func setupEditor() {
         isNewNote = note.title.isEmpty && note.content.isEmpty
         hasChanges = isNewNote
+        // Listen for sketch insert requests from the text selection menu
+        NotificationCenter.default.addObserver(forName: .lnRequestInsertSketch, object: nil, queue: .main) { _ in
+            showingSketchSheet = true
+        }
     }
     
     private func shareNote() {
@@ -705,6 +735,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
     private var lastScheduledItemKey = "LNTextSaveWorkItem"
     private static var workItems: [String: DispatchWorkItem] = [:]
     
+    
+    @objc func requestInsertSketch() {
+        NotificationCenter.default.post(name: .lnRequestInsertSketch, object: nil)
+    }
+    
     override func awakeFromNib() {
         super.awakeFromNib()
         setupTapGesture()
@@ -724,6 +759,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tapGesture.delegate = self
         addGestureRecognizer(tapGesture)
+        // Add iOS 16+ edit menu interaction for Sketch action
+        if #available(iOS 16.0, *) {
+            let interaction = UIEditMenuInteraction(delegate: self)
+            addInteraction(interaction)
+        }
     }
     
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -838,6 +878,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         return super.canPerformAction(action, withSender: sender) || 
+               action == #selector(requestInsertSketch) ||
                action == #selector(formatBold) ||
                action == #selector(formatItalic) ||
                action == #selector(formatUnderline) ||
@@ -1182,10 +1223,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
     // Persist into note model - determine type based on data
     let isGIF = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38])
-    let imageType = isGIF ? "image/gif" : "image/jpeg"
+    let isPNG = data.count > 4 && data.subdata(in: 0..<4) == Data([0x89, 0x50, 0x4E, 0x47])
+    let imageType = isGIF ? "image/gif" : (isPNG ? "image/png" : "image/jpeg")
         hasChangesBinding?.wrappedValue = true
         if let modelNote = attachment.note ?? self.note {
-            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") { id, _, _ in
+            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: (imageType == "image/gif" ? "gif" : (imageType == "image/png" ? "png" : "jpg"))) { id, _, _ in
                 if let id { attachment.attachmentID = id }
                 NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
             }
@@ -1453,6 +1495,16 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     
     
+}
+
+@available(iOS 16.0, *)
+extension NativeTextView: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let sketch = UIAction(title: "Sketch", image: UIImage(systemName: "pencil.and.outline")) { [weak self] _ in
+            self?.requestInsertSketch()
+        }
+        return UIMenu(children: [sketch] + suggestedActions)
+    }
 }
 
 // MARK: - Extensions
@@ -1873,9 +1925,3 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 }
 
 // GIF picker now uses GiphyPicker from Components
-
-#Preview {
-    let note = Note(title: "Sample", content: "Content")
-    NativeNoteEditor(note: note)
-        .modelContainer(for: [Note.self], inMemory: true)
-}

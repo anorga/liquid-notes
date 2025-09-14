@@ -346,7 +346,7 @@ struct FontPicker: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, UI.Space.xl)
         .padding(.vertical, 8)
         .actionSheet(isPresented: $showingFontPicker) {
             ActionSheet(
@@ -365,4 +365,3 @@ struct FontPicker: View {
         availableFonts.first { $0.value == selectedFont }?.key ?? "System"
     }
 }
-

@@ -1,5 +1,5 @@
 //
-//  SwiftUI+iOS18Compatibility.swift
+//  SwiftUI+iOS26Compatibility.swift
 //  LiquidNotes
 //
 //  Created by Claude Code on 8/21/25.
@@ -48,18 +48,18 @@ extension View {
         return AnyView(self.allowsHitTesting(enabled))
     }
     
-    /// Enhanced material effects for iOS 18+
+    /// Enhanced material effects for iOS 26+
     func compatibleMaterial(_ material: Material = .ultraThinMaterial) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 26.0, *) {
             return AnyView(self.background(material))
         } else {
             return AnyView(self.background(.ultraThinMaterial))
         }
     }
     
-    /// Improved animation performance for iOS 18+
+    /// Improved animation performance for iOS 26+
     func compatibleAnimation<V: Equatable>(_ animation: Animation?, value: V) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 26.0, *) {
             return AnyView(self.animation(animation, value: value))
         } else {
             return AnyView(self.animation(animation, value: value))
@@ -68,7 +68,7 @@ extension View {
     
     /// Enhanced content shape recognition
     func compatibleContentShape<S: Shape>(_ shape: S) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 26.0, *) {
             return AnyView(self.contentShape(shape))
         } else {
             return AnyView(self.contentShape(shape))
@@ -79,9 +79,9 @@ extension View {
 // MARK: - Image Compatibility
 
 extension Image {
-    /// Improved image rendering for iOS 18+
+    /// Improved image rendering for iOS 26+
     func compatibleResizable(capInsets: EdgeInsets = EdgeInsets(), resizingMode: Image.ResizingMode = .stretch) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 26.0, *) {
             return AnyView(self.resizable(capInsets: capInsets, resizingMode: resizingMode))
         } else {
             return AnyView(self.resizable(capInsets: capInsets, resizingMode: resizingMode))
@@ -90,7 +90,7 @@ extension Image {
     
     /// Enhanced aspect ratio handling
     func compatibleAspectRatio(_ aspectRatio: CGFloat? = nil, contentMode: ContentMode) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 26.0, *) {
             return AnyView(self.aspectRatio(aspectRatio, contentMode: contentMode))
         } else {
             return AnyView(self.aspectRatio(aspectRatio, contentMode: contentMode))

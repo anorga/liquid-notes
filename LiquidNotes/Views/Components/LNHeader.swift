@@ -15,7 +15,7 @@ struct LNHeader<Trailing: View>: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 34, weight: .bold, design: .default))
+                    .font(.largeTitle).bold()
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 if let subtitle { Text(subtitle).font(.caption2).foregroundStyle(.secondary).transition(.opacity) }
@@ -23,9 +23,9 @@ struct LNHeader<Trailing: View>: View {
             Spacer(minLength: 12)
             trailing()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .padding(.bottom, 8)
+        .padding(.horizontal, UI.Space.xl)
+        .padding(.top, UI.Space.l)
+        .padding(.bottom, UI.Space.s)
         .background(Color.clear)
     }
 }

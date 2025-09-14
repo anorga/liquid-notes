@@ -21,8 +21,8 @@ struct DailyReviewView: View {
                             SectionCard(title: "Overdue", icon: "exclamationmark.triangle", color: .orange, notes: overdue)
                             SectionCard(title: "Revisit Favorites", icon: "arrow.counterclockwise", color: .purple, notes: staleImportant)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
+                        .padding(.horizontal, UI.Space.xl)
+                        .padding(.top, UI.Space.l)
                         .padding(.bottom, 40)
                     }
                 }
@@ -65,13 +65,13 @@ private struct SectionCard: View {
                             Spacer()
                             if let due = note.dueDate { Text(due.ln_dayDistanceString()).font(.caption2).foregroundStyle(.secondary) }
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.07)))
+                        .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.s)
+                        .background(RoundedRectangle(cornerRadius: UI.Corner.s).fill(Color.secondary.opacity(0.07)))
                     }
                 }
             }
         }
-        .padding(16)
+        .padding(UI.Space.l)
         .background(.clear)
         .premiumGlassCard()
     }

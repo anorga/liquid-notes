@@ -41,7 +41,7 @@ struct TaskListView: View {
                         )
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, UI.Space.l)
             .padding(.top, 12)
             
             if isAddingTask {
@@ -61,7 +61,7 @@ struct TaskListView: View {
                             .font(.title3)
                             .foregroundStyle(newTaskDueDate == nil ? Color.primary : Color.orange)
                             .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .nativeGlassCircle()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(newTaskDueDate == nil ? "Add due date" : "Edit due date"))
@@ -90,8 +90,8 @@ struct TaskListView: View {
                             .font(.callout)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, UI.Space.l)
+                            .padding(.vertical, UI.Space.m)
                             .background(
                                 LinearGradient(
                                     colors: [.blue, .cyan],
@@ -103,7 +103,7 @@ struct TaskListView: View {
                     }
                     .disabled(newTaskText.isEmpty)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, UI.Space.l)
                 .transition(.asymmetric(
                     insertion: .scale.combined(with: .opacity),
                     removal: .scale.combined(with: .opacity)
@@ -135,7 +135,7 @@ struct TaskListView: View {
                         )
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, UI.Space.l)
                 .padding(.bottom, 12)
             }
             .frame(maxHeight: 300)
@@ -257,7 +257,7 @@ struct TaskRowView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: UI.Corner.s)
                 .fill(.clear)
                 .background(
                     task.isCompleted ?

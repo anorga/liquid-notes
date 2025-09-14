@@ -30,8 +30,8 @@ struct TagView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, UI.Space.m)
+        .padding(.vertical, UI.Space.xs)
         .background(
             Capsule()
                 .fill(
@@ -46,12 +46,12 @@ struct TagView: View {
                         lineWidth: themeManager.highContrast ? 0.9 : 0.6
                     )
                     .blendMode(.plusLighter)
-                    .opacity(themeManager.minimalMode ? 0.55 : 0.82)
+                    .opacity(0.82)
                 )
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Tag \(tag)"))
-    .scaleEffect(isPressed ? (themeManager.minimalMode ? 0.98 : 0.95) : 1.0)
+    .scaleEffect(isPressed ? 0.95 : 1.0)
         .onTapGesture {
             withAnimation(.bouncy(duration: 0.2)) {
                 isPressed = true
@@ -82,7 +82,7 @@ private extension TagView {
                 colors: animatedGradient(),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-            ).opacity(themeManager.glassOpacity * (themeManager.minimalMode ? 0.55 : 0.9))
+            ).opacity(themeManager.glassOpacity * 0.9)
         )
     }
 }
@@ -116,8 +116,8 @@ struct TagListView: View {
                     TextField("New tag...", text: $newTagText)
                         .textFieldStyle(.plain)
                         .font(.callout)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                    .padding(.horizontal, UI.Space.l)
+                    .padding(.vertical, UI.Space.m)
                         .background(.clear)
                         .modernGlassCard()
                         .onSubmit { addNewTag(onAdd: onAdd) }
@@ -126,8 +126,8 @@ struct TagListView: View {
                             .font(.callout)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                    .padding(.horizontal, UI.Space.l)
+                    .padding(.vertical, UI.Space.m)
                             .background(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(Capsule())
                     }
@@ -152,7 +152,7 @@ struct TagListView: View {
                     .padding(.horizontal, 4)
             }
         }
-        .padding(16)
+        .padding(UI.Space.l)
         .background(.clear)
         .premiumGlassCard()
     }
