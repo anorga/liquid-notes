@@ -13,6 +13,8 @@ struct SpatialTabView: View {
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    struct NoteRef: Identifiable { let id: UUID }
+    @State private var iPadEditorRef: NoteRef? = nil
     @State private var showingNoteEditor = false
     // Multi-select state
     @State private var selectionMode: Bool = false
@@ -106,17 +108,27 @@ struct SpatialTabView: View {
             }
             .onChange(of: folders) { ensureFolderSelection() }
             .onDisappear { clearSelection() }
-            .sheet(item: $selectedNote) { note in
-                if UIDevice.current.userInterfaceIdiom == .pad {
-                    NoteEditorView(note: note)
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.hidden)
-                } else {
-                    NoteEditorView(note: note)
-                        .presentationDetents([.medium, .large])
-                        .presentationDragIndicator(.visible)
-                }
+        .sheet(item: $selectedNote) { note in
+            NoteEditorView(note: note)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $iPadEditorRef) { ref in
+            let targetID = ref.id
+            if let fetched = try? modelContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == targetID })).first {
+                NoteEditorView(note: fetched)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            } else {
+                Text("Note not found")
             }
+        }
+        .onChange(of: selectedNote) { _, newVal in
+            if UIDevice.current.userInterfaceIdiom == .pad, let note = newVal {
+                iPadEditorRef = NoteRef(id: note.id)
+                selectedNote = nil
+            }
+        }
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
             .sheet(isPresented: $showingDailyReview) {
                 DailyReviewView()
@@ -132,7 +144,7 @@ struct SpatialTabView: View {
                     HapticManager.shared.success()
                     SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
                 }
-                .presentationDetents([.fraction(0.3)])
+                .presentationDetents([.medium])
             }
         }
     }

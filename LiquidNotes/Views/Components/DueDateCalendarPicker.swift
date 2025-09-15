@@ -14,19 +14,25 @@ struct DueDateCalendarPicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 18) {
-                DatePicker(
-                    "Due Date",
-                    selection: $tempDate,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .padding(.horizontal, 12)
+                VStack(alignment: .leading, spacing: 8) {
+                    DatePicker(
+                        "Due Date",
+                        selection: $tempDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .padding(8)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .premiumGlassCard()
+
                 quickChips
                 Spacer(minLength: 0)
             }
             .padding(.top, 12)
             .padding(.bottom, 4)
-            .background(LiquidNotesBackground().ignoresSafeArea())
+            .background(LiquidNotesBackground())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItemGroup(placement: .confirmationAction) {

@@ -21,6 +21,8 @@ struct MainTabView: View {
     @State private var openTasksObserver: NSObjectProtocol?
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    struct NoteRef: Identifiable { let id: UUID }
+    @State private var iPadEditorRef: NoteRef? = nil
     @State private var showingSettings = false
     
     var body: some View {
@@ -44,15 +46,27 @@ struct MainTabView: View {
     .onDisappear { if let obs = openTasksObserver { NotificationCenter.default.removeObserver(obs) } }
     // Command system removed
     // Removed reindex trigger (simplification)
+        // iPhone: sheet; iPad: sheet (reverted to original size)
         .sheet(item: $selectedNote) { note in
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                NoteEditorView(note: note)
+            NoteEditorView(note: note)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $iPadEditorRef) { ref in
+            let targetID = ref.id
+            if let fetched = try? modelContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == targetID })).first {
+                NoteEditorView(note: fetched)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.hidden)
             } else {
-                NoteEditorView(note: note)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                Text("Note not found")
+            }
+        }
+        .onChange(of: selectedNote) { _, newVal in
+            if UIDevice.current.userInterfaceIdiom == .pad, let note = newVal {
+                // Route to full-screen cover on iPad using ID to avoid context detach
+                iPadEditorRef = NoteRef(id: note.id)
+                selectedNote = nil
             }
         }
         .sheet(isPresented: $showingDailyReview) {
@@ -69,7 +83,7 @@ struct MainTabView: View {
                 HapticManager.shared.success()
                 SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
             }
-            .presentationDetents([.fraction(0.3)])
+            .presentationDetents([.medium])
         }
         tabCore
             .toolbarBackground(.thinMaterial, for: .tabBar)
@@ -260,8 +274,15 @@ struct QuickTaskCaptureView: View {
                         }
                         Spacer(minLength: 0)
                         HStack {
-                            Button("Cancel") { dismiss() }
-                                .buttonStyle(.borderless)
+                            Button {
+                                dismiss()
+                            } label: {
+                                Text("Cancel")
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, UI.Space.l).padding(.vertical, UI.Space.s)
+                                    .nativeGlassChip()
+                            }
+                            .buttonStyle(.plain)
                             Spacer()
                             Button {
                                 let trimmed = taskText.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -138,7 +138,7 @@ struct TaskListView: View {
                 .padding(.horizontal, UI.Space.l)
                 .padding(.bottom, 12)
             }
-            .frame(maxHeight: 300)
+            .frame(maxHeight: UIDevice.current.userInterfaceIdiom == .pad ? .infinity : 300)
         }
         .background(.clear)
         .ambientGlassEffect()
@@ -246,9 +246,14 @@ struct TaskRowView: View {
             .transition(.scale.combined(with: .opacity))
             if isEditingText {
                 Button(action: commitEdit) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.green)
+                    Text("Save")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .clipShape(Capsule())
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
                 .transition(.scale.combined(with: .opacity))
@@ -269,7 +274,9 @@ struct TaskRowView: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering }
         }
-        .onTapGesture { onToggle() }
+        // Enter editor on row tap (except dedicated buttons)
+        .contentShape(Rectangle())
+        .highPriorityGesture(TapGesture().onEnded { if !isEditingText { enterEdit() } })
         .sheet(isPresented: $showingCalendar) {
             DueDateCalendarPicker(initialDate: task.dueDate) { selected in
                 task.dueDate = selected

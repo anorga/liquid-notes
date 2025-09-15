@@ -10,6 +10,15 @@ struct LiquidNotesBackground: View {
     }
     
     private var ambientColors: [Color] {
+        // Use cool palette for Night and Midnight to avoid warm/brown cast
+        let theme = themeManager.currentTheme
+        if theme == .night || theme == .midnight {
+            return [
+                .blue.opacity(0.06),
+                .cyan.opacity(0.05),
+                .teal.opacity(0.04)
+            ]
+        }
         switch currentHour {
         case 5..<8:
             return [.orange.opacity(0.1), .pink.opacity(0.08), .yellow.opacity(0.05)]

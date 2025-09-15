@@ -446,10 +446,10 @@ private extension GridNoteCard {
             case .light:
                 return nil
             case .night:
-                // Dark with subtle green undertones
+                // Cool cyan/blue undertones (no brown cast)
                 return LinearGradient(colors: [
-                    Color.green.opacity(0.14),
-                    Color.teal.opacity(0.12)
+                    Color.cyan.opacity(0.20),
+                    Color.blue.opacity(0.16)
                 ], startPoint: .topLeading, endPoint: .bottomTrailing)
             case .midnight:
                 // Black-ish undertone (very subtle)
