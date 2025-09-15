@@ -28,18 +28,8 @@ struct NativeNoteEditor: View {
     @State private var pendingSaveWorkItem: DispatchWorkItem?
     private let saveDebounceInterval: TimeInterval = 0.6
     
-    // Compute optimal content width based on device and size class
-    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? {
-        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
-        
-        if isIPad {
-            // iPad: Use full available width/height for an open canvas feel
-            return nil
-        } else {
-            // iPhone: Always use full width
-            return nil
-        }
-    }
+    // Reverted: no special iPad width; use full width content.
+    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? { nil }
     
     var body: some View {
         NavigationStack {
@@ -56,21 +46,18 @@ struct NativeNoteEditor: View {
                         
                         // Centered content container with responsive width
                         if let maxWidth = optimalWidth(for: geometry) {
-                            // iPad with optimal width - center the content
+                            // iPad: centered wide column that resizes with window
                             HStack {
-                                Spacer()
-                                VStack(spacing: 0) {
-                                    // Native text editor canvas
-                                    NativeTextCanvas(
-                                        note: note,
-                                        textView: $textView,
-                                        hasChanges: $hasChanges,
-                                        selectedTextStyle: $selectedTextStyle,
-                                        modelContext: modelContext
-                                    )
-                                }
-                                .frame(maxWidth: maxWidth)
-                                Spacer()
+                                Spacer(minLength: 0)
+                                NativeTextCanvas(
+                                    note: note,
+                                    textView: $textView,
+                                    hasChanges: $hasChanges,
+                                    selectedTextStyle: $selectedTextStyle,
+                                    modelContext: modelContext
+                                )
+                                .frame(width: maxWidth, alignment: .topLeading)
+                                Spacer(minLength: 0)
                             }
                         } else {
                             // iPhone or compact iPad - use full width
@@ -81,27 +68,27 @@ struct NativeNoteEditor: View {
                                 selectedTextStyle: $selectedTextStyle,
                                 modelContext: modelContext
                             )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                         
                     }
                 }
-                // Floating formatting bar for iPad/regular width
+                // Floating, centered tool picker (iPad + iPhone) constrained within editor bounds
                 .overlay(alignment: .bottom) {
-                    if UIDevice.current.userInterfaceIdiom == .pad || horizontalSizeClass == .regular {
-                        formattingToolbar
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(.thinMaterial)
-                            )
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.white.opacity(0.18), lineWidth: 0.6)
-                            )
-                            .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
-                            .padding(.bottom, 12)
+                    HStack {
+                        Spacer(minLength: 0)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            formattingToolbar
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(.thinMaterial))
+                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
+                                .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                        }
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
                 }
             }
             // Use system-provided glass on iOS 26+, fallback to material on older iOS
@@ -531,14 +518,17 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: 20, weight: .regular) // Increased from 17
+        textView.font = .systemFont(ofSize: 20, weight: .regular) // Larger for readability
         textView.textColor = .label // Dynamic color for light/dark mode
         
-        // Responsive insets based on device
+        // Responsive insets based on device (original values)
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         let horizontalInset: CGFloat = isIPad ? 40 : 20
         let verticalInset: CGFloat = isIPad ? 24 : 16
         textView.textContainerInset = UIEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: horizontalInset)
+        // No additional content inset (original sizing)
+        textView.contentInset = .zero
+        textView.scrollIndicatorInsets = .zero
         
         textView.isScrollEnabled = true
         textView.keyboardDismissMode = .interactive
@@ -818,6 +808,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
 
     // Prune file-based attachments that were removed from the text (image runs deleted)
+    @MainActor
     func reconcileFileAttachments() {
         guard let note else { return }
         // Collect IDs present in current attributed text

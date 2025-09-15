@@ -175,7 +175,7 @@ struct TasksRollupView: View {
                 }
                 .navigationBarHidden(true)
             }
-            .presentationDetents([.fraction(0.3)])
+            .presentationDetents([.medium])
         }
         .sheet(isPresented: $showingTaskDuePicker) {
             DueDateCalendarPicker(initialDate: newTaskDueDate) { selected in newTaskDueDate = selected }
@@ -629,17 +629,28 @@ private extension TasksRollupView {
                             }
                             Button(role: .destructive, action: { note.removeTask(at: idx); try? modelContext.save(); updateWidgetData() }) { Image(systemName: "trash").font(.caption2) }.buttonStyle(.borderless)
                             if editingTaskID == task.id {
-                                // Name edit confirm button (placed after delete)
+                                // Name edit confirm button (Save capsule)
                                 Button(action: { editingTaskID = nil }) {
-                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Save")
                                         .font(.caption)
-                                        .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .fontWeight(.semibold)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .clipShape(Capsule())
+                                        .foregroundStyle(.white)
                                 }
                                 .buttonStyle(.plain)
                                 .transition(.opacity.combined(with: .scale))
                             }
                         }
                     }
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(TapGesture().onEnded {
+                        if editingTaskID != task.id && !task.isCompleted {
+                            editingTaskID = task.id
+                        }
+                    })
                     .contentShape(Rectangle())
                     .contextMenu {
                         if task.dueDate != nil {

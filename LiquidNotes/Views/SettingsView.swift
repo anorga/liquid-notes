@@ -306,8 +306,8 @@ struct ThemeButton: View {
             // Keep light neutral
             return [Color.white.opacity(0.85), Color.white.opacity(0.65)]
         case .night:
-            // Dark with a hint of green undertones
-            return [Color.black.opacity(0.55), Color.green.opacity(0.18)]
+            // Subtle cool undertones to match previews
+            return [Color.blue.opacity(0.28), Color.cyan.opacity(0.24)]
         case .midnight:
             // Black-ish appearance
             return [Color.black.opacity(0.6), Color.black.opacity(0.35)]

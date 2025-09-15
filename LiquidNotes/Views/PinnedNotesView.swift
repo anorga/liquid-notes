@@ -8,6 +8,8 @@ struct PinnedNotesView: View {
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    struct NoteRef: Identifiable { let id: UUID }
+    @State private var iPadEditorRef: NoteRef? = nil
     @State private var showingNoteEditor = false
     // Multi-select support for SpatialCanvasView
     @State private var selectedNoteIDs: Set<UUID> = []
@@ -62,6 +64,22 @@ struct PinnedNotesView: View {
             .sheet(item: $selectedNote) { note in
                 NoteEditorView(note: note)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(item: $iPadEditorRef) { ref in
+                let targetID = ref.id
+                if let fetched = try? modelContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == targetID })).first {
+                    NoteEditorView(note: fetched)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.hidden)
+                } else {
+                    Text("Note not found")
+                }
+            }
+            .onChange(of: selectedNote) { _, newVal in
+                if UIDevice.current.userInterfaceIdiom == .pad, let note = newVal {
+                    iPadEditorRef = NoteRef(id: note.id)
+                    selectedNote = nil
+                }
             }
         }
     }
