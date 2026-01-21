@@ -324,15 +324,7 @@ struct NativeNoteEditor: View {
             VStack(spacing: 12) {
                 SuggestedTagsView(note: note)
                     .onAppear {
-                        if note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil {
-                            NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
-                                ModelMutationScheduler.shared.schedule {
-                                    note.suggestedTags = tags.filter { !note.tags.contains($0) }
-                                    note.tagConfidences = confidences
-                                    note.lastAnalyzedDate = Date()
-                                }
-                            }
-                        }
+                        triggerNoteAnalysis()
                     }
 
                 RelatedNotesView(
@@ -340,23 +332,34 @@ struct NativeNoteEditor: View {
                     allNotes: allNotes.filter { !$0.isSystem && $0.id != note.id },
                     onNoteTap: { _ in }
                 )
-                .onAppear {
-                    if note.contentEmbedding == nil {
-                        let text = "\(note.title) \(note.content)"
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
-                            DispatchQueue.main.async {
-                                ModelMutationScheduler.shared.schedule {
-                                    note.contentEmbedding = embedding
-                                }
-                            }
-                        }
-                    }
-                }
             }
             .padding(.horizontal, UI.Space.xl)
             .padding(.top, 8)
             .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private func triggerNoteAnalysis() {
+        guard note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil else { return }
+        let noteTitle = note.title
+        let noteContent = note.content
+        let existingTags = note.tags
+
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            let filteredTags = tags.filter { !existingTags.contains($0) }
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = filteredTags
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+        }
+
+        if note.contentEmbedding == nil {
+            let text = "\(noteTitle) \(noteContent)"
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            ModelMutationScheduler.shared.schedule {
+                note.contentEmbedding = embedding
+            }
         }
     }
     

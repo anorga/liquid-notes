@@ -300,25 +300,26 @@ struct RelatedNotesView: View {
 
     @State private var relatedNotes: [Note] = []
     @State private var isLoading = false
+    @State private var hasSearched = false
 
     var body: some View {
-        if !relatedNotes.isEmpty || isLoading {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "link")
-                        .foregroundStyle(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    Text("Related Notes")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
+        Group {
+            if !relatedNotes.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "link")
+                            .foregroundStyle(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        Text("Related Notes")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if isLoading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
                     }
-                }
 
-                if !relatedNotes.isEmpty {
                     VStack(spacing: 8) {
                         ForEach(relatedNotes, id: \.id) { relatedNote in
                             Button {
@@ -352,20 +353,31 @@ struct RelatedNotesView: View {
                         }
                     }
                 }
+                .padding(UI.Space.m)
+                .nativeGlassSurface(cornerRadius: UI.Corner.m)
+            } else if isLoading {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Finding related notes...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(UI.Space.m)
             }
-            .padding(UI.Space.m)
-            .nativeGlassSurface(cornerRadius: UI.Corner.m)
+        }
+        .onAppear {
+            guard !hasSearched else { return }
+            hasSearched = true
+            findRelatedNotes()
         }
     }
 
-    func findRelatedNotes() {
+    private func findRelatedNotes() {
+        guard note.contentEmbedding != nil else { return }
         isLoading = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            let similar = NoteIntelligenceService.shared.suggestLinkedNotes(for: note, from: allNotes)
-            DispatchQueue.main.async {
-                relatedNotes = similar
-                isLoading = false
-            }
-        }
+        let results = NoteIntelligenceService.shared.suggestLinkedNotes(for: note, from: allNotes)
+        relatedNotes = results
+        isLoading = false
     }
 }
