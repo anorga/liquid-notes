@@ -12,9 +12,11 @@ struct NativeNoteEditor: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    
+
+    @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
+
     let note: Note
-    
+
     @State private var textView: UITextView?
     @State private var hasChanges = false
     @State private var isNewNote = false
@@ -26,6 +28,9 @@ struct NativeNoteEditor: View {
     @State private var showingGifPicker = false
     @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
+    @State private var showingAIPanel = false
+    @State private var suggestedTagsView: SuggestedTagsView?
+    @State private var relatedNotesView: RelatedNotesView?
     private let saveDebounceInterval: TimeInterval = 0.6
     
     // Reverted: no special iPad width; use full width content.
@@ -41,10 +46,10 @@ struct NativeNoteEditor: View {
                         .ignoresSafeArea()
                     
                     VStack(spacing: 0) {
-                        // Minimal top navigation - native style
                         nativeTopBar
-                        
-                        // Centered content container with responsive width
+
+                        aiPanel
+
                         if let maxWidth = optimalWidth(for: geometry) {
                             // iPad: centered wide column that resizes with window
                             HStack {
@@ -285,15 +290,21 @@ struct NativeNoteEditor: View {
             }
             .foregroundStyle(.secondary)
             .font(.body)
-            
+
             Spacer()
-            
+
+            Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showingAIPanel.toggle() } }) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(showingAIPanel ? LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing) : LinearGradient(colors: [.secondary, .secondary], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+
             Button(action: { shareNote() }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.title3)
                     .foregroundStyle(.blue)
             }
-            
+
             Button("Done") {
                 saveNote()
                 dismiss()
@@ -305,6 +316,48 @@ struct NativeNoteEditor: View {
         .padding(.vertical, UI.Space.m)
         .nativeGlassBarBackground()
         .modifier(NavBarCompatStyle())
+    }
+
+    @ViewBuilder
+    private var aiPanel: some View {
+        if showingAIPanel {
+            VStack(spacing: 12) {
+                SuggestedTagsView(note: note)
+                    .onAppear {
+                        if note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil {
+                            NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+                                ModelMutationScheduler.shared.schedule {
+                                    note.suggestedTags = tags.filter { !note.tags.contains($0) }
+                                    note.tagConfidences = confidences
+                                    note.lastAnalyzedDate = Date()
+                                }
+                            }
+                        }
+                    }
+
+                RelatedNotesView(
+                    note: note,
+                    allNotes: allNotes.filter { !$0.isSystem && $0.id != note.id },
+                    onNoteTap: { _ in }
+                )
+                .onAppear {
+                    if note.contentEmbedding == nil {
+                        let text = "\(note.title) \(note.content)"
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+                            DispatchQueue.main.async {
+                                ModelMutationScheduler.shared.schedule {
+                                    note.contentEmbedding = embedding
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, UI.Space.xl)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
     }
     
     private func setupEditor() {
