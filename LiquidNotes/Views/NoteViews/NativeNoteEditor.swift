@@ -13,8 +13,6 @@ struct NativeNoteEditor: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
-    @Query(sort: \Note.modifiedDate, order: .reverse) private var allNotes: [Note]
-
     let note: Note
 
     @State private var textView: UITextView?
@@ -28,9 +26,6 @@ struct NativeNoteEditor: View {
     @State private var showingGifPicker = false
     @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
-    @State private var showingAIPanel = false
-    @State private var suggestedTagsView: SuggestedTagsView?
-    @State private var relatedNotesView: RelatedNotesView?
     private let saveDebounceInterval: TimeInterval = 0.6
     
     // Reverted: no special iPad width; use full width content.
@@ -47,8 +42,6 @@ struct NativeNoteEditor: View {
                     
                     VStack(spacing: 0) {
                         nativeTopBar
-
-                        aiPanel
 
                         if let maxWidth = optimalWidth(for: geometry) {
                             // iPad: centered wide column that resizes with window
@@ -293,12 +286,6 @@ struct NativeNoteEditor: View {
 
             Spacer()
 
-            Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showingAIPanel.toggle() } }) {
-                Image(systemName: "sparkles")
-                    .font(.title3)
-                    .foregroundStyle(showingAIPanel ? LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing) : LinearGradient(colors: [.secondary, .secondary], startPoint: .topLeading, endPoint: .bottomTrailing))
-            }
-
             Button(action: { shareNote() }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.title3)
@@ -316,51 +303,6 @@ struct NativeNoteEditor: View {
         .padding(.vertical, UI.Space.m)
         .nativeGlassBarBackground()
         .modifier(NavBarCompatStyle())
-    }
-
-    @ViewBuilder
-    private var aiPanel: some View {
-        if showingAIPanel {
-            VStack(spacing: 12) {
-                SuggestedTagsView(note: note)
-                    .onAppear {
-                        triggerNoteAnalysis()
-                    }
-
-                RelatedNotesView(
-                    note: note,
-                    allNotes: allNotes.filter { !$0.isSystem && $0.id != note.id },
-                    onNoteTap: { _ in }
-                )
-            }
-            .padding(.horizontal, UI.Space.xl)
-            .padding(.top, 8)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
-
-    private func triggerNoteAnalysis() {
-        guard note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil else { return }
-        let noteTitle = note.title
-        let noteContent = note.content
-        let existingTags = note.tags
-
-        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
-            let filteredTags = tags.filter { !existingTags.contains($0) }
-            ModelMutationScheduler.shared.schedule {
-                note.suggestedTags = filteredTags
-                note.tagConfidences = confidences
-                note.lastAnalyzedDate = Date()
-            }
-        }
-
-        if note.contentEmbedding == nil {
-            let text = "\(noteTitle) \(noteContent)"
-            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
-            ModelMutationScheduler.shared.schedule {
-                note.contentEmbedding = embedding
-            }
-        }
     }
     
     private func setupEditor() {
