@@ -160,30 +160,64 @@ class NotesViewModel {
         persistChanges()
     }
     
+    var semanticSearchEnabled = false
+
+    func analyzeNote(_ note: Note) {
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = tags.filter { !note.tags.contains($0) }
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+        }
+        updateNoteEmbedding(note)
+    }
+
+    func updateNoteEmbedding(_ note: Note) {
+        let text = "\(note.title) \(note.content)"
+        let noteID = note.id
+        backgroundQueue.async { [weak self] in
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == noteID })
+                if let fetchedNote = try? self.modelContext.fetch(descriptor).first {
+                    ModelMutationScheduler.shared.schedule {
+                        fetchedNote.contentEmbedding = embedding
+                    }
+                }
+            }
+        }
+    }
+
+    func findSimilarNotes(to note: Note, from notes: [Note]) -> [Note] {
+        NoteIntelligenceService.shared.suggestLinkedNotes(for: note, from: notes)
+    }
+
     // MARK: - Search and Filtering
-    
+
     func filteredNotes(from notes: [Note]) -> [Note] {
         let currentTime = CACurrentMediaTime()
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         if query.isEmpty {
             return notes.filter { !$0.isArchived }
         }
-        
+
         if let cached = queryCache[query],
            currentTime - lastQueryTime < queryThrottleInterval {
             return cached
         }
-        
+
         let result = performFiltering(notes: notes, query: query)
-        
+
         queryCache[query] = result
         lastQueryTime = currentTime
-        
+
         if queryCache.count > 50 {
             queryCache.removeAll()
         }
-        
+
         return result
     }
     
@@ -197,12 +231,16 @@ class NotesViewModel {
         var dueBefore: Date? = nil
         var tagModeAll = true
         var textTerms: [String] = []
-        
+        var semanticTerms: [String] = []
+
         query.split(separator: " ").forEach { tokenSub in
             let token = String(tokenSub)
             if token.hasPrefix("#") {
                 let tag = String(token.dropFirst())
                 if !tag.isEmpty { requiredTags.append(tag.lowercased()) }
+            } else if token.hasPrefix("~") {
+                let term = String(token.dropFirst())
+                if !term.isEmpty { semanticTerms.append(term) }
             } else if token.lowercased() == "is:fav" || token.lowercased() == "is:favorite" { requireFavorite = true }
             else if token.lowercased() == "has:task" || token.lowercased() == "has:tasks" { requireHasTask = true }
             else if token.lowercased() == "is:overdue" { requireOverdue = true }
@@ -220,16 +258,25 @@ class NotesViewModel {
             else if token.lowercased() == "tag:any" { tagModeAll = false }
             else { textTerms.append(token) }
         }
-        
+
+        if semanticSearchEnabled || !semanticTerms.isEmpty {
+            let searchQuery = semanticTerms.isEmpty ? textTerms.joined(separator: " ") : semanticTerms.joined(separator: " ")
+            if !searchQuery.isEmpty {
+                let semanticResults = NoteIntelligenceService.shared.semanticSearch(query: searchQuery, in: notes)
+                return semanticResults.map { $0.0 }.filter { !$0.isArchived && !$0.isSystem }
+            }
+        }
+
         return notes.filter { note in
             if note.isArchived { return false }
+            if note.isSystem { return false }
             if requireFavorite && !note.isFavorited { return false }
             if requireHasTask && (note.tasks?.isEmpty ?? true) { return false }
             if let pf = priorityFilter, note.priority != pf { return false }
             if let mp = minProgress, note.progress < mp { return false }
             if requireOverdue, let due = note.dueDate { if due > Date() { return false } } else if requireOverdue && note.dueDate == nil { return false }
             if let db = dueBefore, let due = note.dueDate { if due > db { return false } } else if dueBefore != nil && note.dueDate == nil { return false }
-            
+
             if !requiredTags.isEmpty {
                 let lowered = note.tags.map { $0.lowercased() }
                 if tagModeAll {
@@ -240,7 +287,7 @@ class NotesViewModel {
                     if !matchAny { return false }
                 }
             }
-            
+
             if !textTerms.isEmpty {
                 let tagsJoined = note.tags.joined(separator: " ")
                 let tasksJoined = (note.tasks ?? []).map { $0.text }.joined(separator: " ")

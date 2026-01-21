@@ -4,7 +4,6 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 import Photos
-import ObjectiveC
 import ImageIO
 
 struct NativeNoteEditor: View {
@@ -13,9 +12,9 @@ struct NativeNoteEditor: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    
+
     let note: Note
-    
+
     @State private var textView: UITextView?
     @State private var hasChanges = false
     @State private var isNewNote = false
@@ -25,66 +24,39 @@ struct NativeNoteEditor: View {
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingGifPicker = false
+    @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
+    @State private var showingAISheet = false
     private let saveDebounceInterval: TimeInterval = 0.6
     
-    // Compute optimal content width based on device and size class
-    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? {
-        let screenWidth = geometry.size.width
-        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
-        
-        if isIPad {
-            // iPad: Progressive width constraints based on available space
-            
-            // Threshold for when to stop constraining width (near full screen)
-            let fullScreenThreshold: CGFloat = 1100
-            
-            if screenWidth < fullScreenThreshold {
-                // Below threshold: Use full width for better space utilization
-                return nil
-            } else {
-                // Above threshold: Apply reading width constraint
-                // This creates a smooth transition as window approaches full screen
-                let maxReadingWidth: CGFloat = 900
-                let padding: CGFloat = 100
-                return min(screenWidth - padding, maxReadingWidth)
-            }
-        } else {
-            // iPhone: Always use full width
-            return nil
-        }
-    }
+    // Reverted: no special iPad width; use full width content.
+    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? { nil }
     
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
                 ZStack {
-                    // Pure liquid glass background - no borders
+                    // Native-feeling glass background
                     Color.clear
-                        .background(.ultraThinMaterial)
+                        .nativeGlassBarBackground()
                         .ignoresSafeArea()
                     
                     VStack(spacing: 0) {
-                        // Minimal top navigation - native style
                         nativeTopBar
-                        
-                        // Centered content container with responsive width
+
                         if let maxWidth = optimalWidth(for: geometry) {
-                            // iPad with optimal width - center the content
+                            // iPad: centered wide column that resizes with window
                             HStack {
-                                Spacer()
-                                VStack(spacing: 0) {
-                                    // Native text editor canvas
-                                    NativeTextCanvas(
-                                        note: note,
-                                        textView: $textView,
-                                        hasChanges: $hasChanges,
-                                        selectedTextStyle: $selectedTextStyle,
-                                        modelContext: modelContext
-                                    )
-                                }
-                                .frame(maxWidth: maxWidth)
-                                Spacer()
+                                Spacer(minLength: 0)
+                                NativeTextCanvas(
+                                    note: note,
+                                    textView: $textView,
+                                    hasChanges: $hasChanges,
+                                    selectedTextStyle: $selectedTextStyle,
+                                    modelContext: modelContext
+                                )
+                                .frame(width: maxWidth, alignment: .topLeading)
+                                Spacer(minLength: 0)
                             }
                         } else {
                             // iPhone or compact iPad - use full width
@@ -95,19 +67,52 @@ struct NativeNoteEditor: View {
                                 selectedTextStyle: $selectedTextStyle,
                                 modelContext: modelContext
                             )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
                         
-                        // Bottom formatting toolbar
-                        formattingToolbar
-                            .padding(.horizontal)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
                     }
+                }
+                // Floating, centered tool picker (iPad + iPhone) constrained within editor bounds.
+                // The pill stays centered and fixed; only the contents scroll when overflowing.
+                .overlay(alignment: .bottom) {
+                    let w = geometry.size.width
+                    let pillWidth = max(240, min(w - 48, 740))
+                    HStack {
+                        Spacer(minLength: 0)
+                        ZStack {
+                            Capsule()
+                                .fill(.thinMaterial)
+                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
+                                .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                formattingToolbar
+                                    .padding(.horizontal, 16)
+                            }
+                            .clipShape(Capsule())
+                        }
+                        .frame(width: pillWidth, height: 44)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.bottom, 12)
                 }
             }
             // Use system-provided glass on iOS 26+, fallback to material on older iOS
             .modifier(BottomBarCompatStyle())
             .navigationBarHidden(true)
+            .toolbar { // Native keyboard toolbar for quick formatting/media actions
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button { applyTextStyle(.title) } label: { Image(systemName: "textformat.size.larger") }
+                    Button { (textView as? NativeTextView)?.formatBold() } label: { Image(systemName: "bold") }
+                    Button { (textView as? NativeTextView)?.formatItalic() } label: { Image(systemName: "italic") }
+                    Divider()
+                    Button { (textView as? NativeTextView)?.insertBulletList() } label: { Image(systemName: "list.bullet") }
+                    Button { (textView as? NativeTextView)?.insertNumberedList() } label: { Image(systemName: "list.number") }
+                    Divider()
+                    Button { showingPhotoPicker = true } label: { Image(systemName: "photo") }
+                    Button { showingDocumentPicker = true } label: { Image(systemName: "doc") }
+                    Button { showingSketchSheet = true } label: { Image(systemName: "pencil.and.outline") }
+                }
+            }
             .onAppear { 
                 setupEditor()
                 if let nativeTextView = textView as? NativeTextView {
@@ -119,6 +124,9 @@ struct NativeNoteEditor: View {
                 if let nativeTextView = textView as? NativeTextView {
                     nativeTextView.pauseGIFAnimations()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                saveIfNeeded()
             }
             .sheet(isPresented: $showingShareSheet) {
                 ShareSheet(activityItems: [shareItem])
@@ -137,6 +145,18 @@ struct NativeNoteEditor: View {
                 GiphyPicker(isPresented: $showingGifPicker) { gifData in
                     handleGiphySelection(gifData)
                 }
+            }
+            .sheet(isPresented: $showingSketchSheet) {
+                SketchSheet { image, data in
+                    if let nativeTextView = textView as? NativeTextView {
+                        nativeTextView.insertInlineImage(image, data: data)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAISheet) {
+                NoteAISheet(note: note)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -235,9 +255,9 @@ struct NativeNoteEditor: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
+                    .nativeGlassChip()
                     .foregroundStyle(.primary)
+                    .fixedSize()
             }
             
             Button(action: { 
@@ -248,8 +268,11 @@ struct NativeNoteEditor: View {
                     .foregroundStyle(.primary)
             }
             
-            
-            Spacer()
+            Button(action: { showingSketchSheet = true }) {
+                Image(systemName: "pencil.and.outline")
+                    .font(.title2)
+                    .foregroundStyle(.primary)
+            }
         }
     }
     
@@ -260,15 +283,21 @@ struct NativeNoteEditor: View {
             }
             .foregroundStyle(.secondary)
             .font(.body)
-            
+
             Spacer()
-            
+
+            Button(action: { showingAISheet = true }) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+
             Button(action: { shareNote() }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.title3)
                     .foregroundStyle(.blue)
             }
-            
+
             Button("Done") {
                 saveNote()
                 dismiss()
@@ -276,15 +305,19 @@ struct NativeNoteEditor: View {
             .fontWeight(.semibold)
             .foregroundStyle(.blue)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, UI.Space.xl)
+        .padding(.vertical, UI.Space.m)
+        .nativeGlassBarBackground()
         .modifier(NavBarCompatStyle())
     }
     
     private func setupEditor() {
         isNewNote = note.title.isEmpty && note.content.isEmpty
         hasChanges = isNewNote
+        // Listen for sketch insert requests from the text selection menu
+        NotificationCenter.default.addObserver(forName: .lnRequestInsertSketch, object: nil, queue: .main) { _ in
+            showingSketchSheet = true
+        }
     }
     
     private func shareNote() {
@@ -501,14 +534,17 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: 20, weight: .regular) // Increased from 17
+        textView.font = .systemFont(ofSize: 20, weight: .regular) // Larger for readability
         textView.textColor = .label // Dynamic color for light/dark mode
         
-        // Responsive insets based on device
+        // Responsive insets based on device (original values)
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         let horizontalInset: CGFloat = isIPad ? 40 : 20
         let verticalInset: CGFloat = isIPad ? 24 : 16
         textView.textContainerInset = UIEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: horizontalInset)
+        // No additional content inset (original sizing)
+        textView.contentInset = .zero
+        textView.scrollIndicatorInsets = .zero
         
         textView.isScrollEnabled = true
         textView.keyboardDismissMode = .interactive
@@ -648,47 +684,63 @@ struct NativeTextCanvas: UIViewRepresentable {
         for i in 0..<count {
             let range = attachmentRanges[i]
             guard let old = mutable.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment else { continue }
-            // Load corresponding file data
             let id = note.fileAttachmentIDs[i]
             let type = i < note.fileAttachmentTypes.count ? note.fileAttachmentTypes[i] : "image/jpeg"
             let fileName = i < note.fileAttachmentNames.count ? note.fileAttachmentNames[i] : ""
-            var data: Data? = nil
-            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty {
-                let url = dir.appendingPathComponent(fileName)
-                data = try? Data(contentsOf: url)
-            }
-            // Build interactive attachment
+
+            // Build interactive attachment without blocking for I/O
             let newAttachment = InteractiveTextAttachment()
             newAttachment.note = note
             newAttachment.attachmentID = id
-            if type.hasPrefix("image"), let d = data {
-                // GIF support
-                if type == "image/gif", let animated = animatedImage(fromGIFData: d) {
-                    newAttachment.image = animated
-                } else if let img = UIImage(data: d) {
-                    newAttachment.image = img
-                } else if let img = old.image { // fallback
-                    newAttachment.image = img
-                }
-                newAttachment.imageData = d
-            } else if let img = old.image {
-                newAttachment.image = img
-            }
-            // Determine intrinsic size
-            var size = newAttachment.image?.size ?? old.image?.size ?? CGSize(width: 200, height: 200)
-            // Scale
+
+            // Use any existing image immediately to avoid stalls
+            if let img = old.image { newAttachment.image = img }
+
+            // Set an initial size from available image or a placeholder
+            var size = newAttachment.image?.size ?? CGSize(width: 200, height: 200)
             if size.width > maxWidth || size.height > maxHeight {
                 let scale = min(maxWidth / max(size.width, 1), maxHeight / max(size.height, 1))
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
-            if size.width < minWidth { // upscale very small icons
+            if size.width < minWidth {
                 let scale = minWidth / max(size.width, 1)
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
             newAttachment.bounds = CGRect(x: 0, y: -5, width: size.width, height: size.height)
-            // Replace in attributed string
+
+            // Replace inline immediately
             let replacement = NSAttributedString(attachment: newAttachment)
             mutable.replaceCharacters(in: range, with: replacement)
+
+            // Load actual file data off the main thread and update the attachment when ready
+            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty, type.hasPrefix("image") {
+                let url = dir.appendingPathComponent(fileName)
+                DispatchQueue.global(qos: .userInitiated).async { [weak textView] in
+                    autoreleasepool {
+                    guard let data = try? Data(contentsOf: url) else { return }
+                    var nextImage: UIImage? = nil
+                    if type == "image/gif", let animated = animatedImage(fromGIFData: data) { nextImage = animated }
+                    else { nextImage = UIImage(data: data) }
+                    guard let img = nextImage else { return }
+                    // Compute scaled bounds
+                    var scaled = img.size
+                    if scaled.width > maxWidth || scaled.height > maxHeight {
+                        let scale = min(maxWidth / max(scaled.width, 1), maxHeight / max(scaled.height, 1))
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    if scaled.width < minWidth {
+                        let scale = minWidth / max(scaled.width, 1)
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    DispatchQueue.main.async {
+                        newAttachment.image = img
+                        newAttachment.imageData = data
+                        newAttachment.bounds = CGRect(x: 0, y: -5, width: scaled.width, height: scaled.height)
+                        textView?.setNeedsDisplay()
+                    }
+                    }
+                }
+            }
         }
     }
 }
@@ -698,12 +750,27 @@ class NativeTextView: UITextView, UITextViewDelegate {
     var hasChangesBinding: Binding<Bool>?
     var modelContext: ModelContext?
     private var debounceInterval: TimeInterval {
-        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { return 1.2 }
-        return 0.6
+        // Slow down autosave shortly after media insertion
+        var base: TimeInterval = 0.6
+        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { base = 1.5 }
+        // Scale with document length to avoid heavy work during rapid typing on large notes
+        let len = attributedText?.length ?? 0
+        if len > 10_000 { base = max(base, 1.4) }
+        else if len > 5_000 { base = max(base, 1.0) }
+        return base
     }
     private var recentMediaInsertionDate: Date = .distantPast
     private var lastScheduledItemKey = "LNTextSaveWorkItem"
     private static var workItems: [String: DispatchWorkItem] = [:]
+    // Save rate limiting
+    private let minimumSaveSpacing: TimeInterval = 2.0
+    private var lastSavedAt: CFTimeInterval = 0
+    // Attachment change gating for preview broadcasts
+    fileprivate var attachmentsMutated: Bool = false
+    
+    @objc func requestInsertSketch() {
+        NotificationCenter.default.post(name: .lnRequestInsertSketch, object: nil)
+    }
     
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -724,6 +791,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tapGesture.delegate = self
         addGestureRecognizer(tapGesture)
+        // Add iOS 16+ edit menu interaction for Sketch action
+        if #available(iOS 16.0, *) {
+            let interaction = UIEditMenuInteraction(delegate: self)
+            addInteraction(interaction)
+        }
     }
     
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -778,6 +850,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
 
     // Prune file-based attachments that were removed from the text (image runs deleted)
+    @MainActor
     func reconcileFileAttachments() {
         guard let note else { return }
         // Collect IDs present in current attributed text
@@ -787,9 +860,12 @@ class NativeTextView: UITextView, UITextViewDelegate {
         }
         // Remove any fileAttachmentIDs not present
         let existing = note.fileAttachmentIDs
+        var removed = false
         for id in existing where !presentIDs.contains(id) {
             note.removeFileAttachment(id: id)
+            removed = true
         }
+        if removed { attachmentsMutated = true }
     }
 
     func scheduleDebouncedSave() {
@@ -799,6 +875,17 @@ class NativeTextView: UITextView, UITextViewDelegate {
         if let existing = NativeTextView.workItems[key] { existing.cancel() }
         let item = DispatchWorkItem { [weak self] in
             guard let self, let ctx = self.modelContext else { return }
+            // Enforce minimum spacing between heavy saves
+            let now = CACurrentMediaTime()
+            let delta = now - self.lastSavedAt
+            if delta < self.minimumSaveSpacing {
+                let delay = self.minimumSaveSpacing - delta
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.scheduleDebouncedSave()
+                }
+                return
+            }
+            self.lastSavedAt = now
             let attributed = self.attributedText ?? NSAttributedString(string: self.text ?? "")
             // Extract plain text quickly (skip attachments replaced by newline)
             var plainBuilder = ""
@@ -822,7 +909,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
                     DispatchQueue.main.async {
                         if hash != note.richTextHash { note.richTextData = data; note.richTextHash = hash }
                         try? ctx.save()
-                        NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                        // Only broadcast if attachments changed recently
+                        if self.attachmentsMutated {
+                            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                            self.attachmentsMutated = false
+                        }
                     }
                 }
             }
@@ -833,11 +924,20 @@ class NativeTextView: UITextView, UITextViewDelegate {
 
     func broadcastLivePreviewUpdate() {
         guard let note else { return }
+        // Throttle and gate: only broadcast on attachment mutations or after longer idle window
+        let now = CACurrentMediaTime()
+        let minInterval: CFTimeInterval = attachmentsMutated ? 0.5 : 1.5
+        if now - lastBroadcastTime < minInterval { return }
+        lastBroadcastTime = now
         NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+        attachmentsMutated = false
     }
+
+    private var lastBroadcastTime: CFTimeInterval = 0
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         return super.canPerformAction(action, withSender: sender) || 
+               action == #selector(requestInsertSketch) ||
                action == #selector(formatBold) ||
                action == #selector(formatItalic) ||
                action == #selector(formatUnderline) ||
@@ -1182,16 +1282,18 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
     // Persist into note model - determine type based on data
     let isGIF = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38])
-    let imageType = isGIF ? "image/gif" : "image/jpeg"
+    let isPNG = data.count > 4 && data.subdata(in: 0..<4) == Data([0x89, 0x50, 0x4E, 0x47])
+    let imageType = isGIF ? "image/gif" : (isPNG ? "image/png" : "image/jpeg")
         hasChangesBinding?.wrappedValue = true
         if let modelNote = attachment.note ?? self.note {
-            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") { id, _, _ in
+            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: (imageType == "image/gif" ? "gif" : (imageType == "image/png" ? "png" : "jpg"))) { id, _, _ in
                 if let id { attachment.attachmentID = id }
                 NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
             }
         }
     if isGIF { attachment.configureGIFAnimation(with: data, in: self) }
     recentMediaInsertionDate = Date()
+    attachmentsMutated = true
     }
     
     func insertInlineFile(_ url: URL) {
@@ -1224,6 +1326,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         // Sync with note model
         hasChangesBinding?.wrappedValue = true
+        attachmentsMutated = true
     }
     
     private func createFileIcon(for fileExtension: String) -> UIImage {
@@ -1455,6 +1558,16 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
 }
 
+@available(iOS 16.0, *)
+extension NativeTextView: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let sketch = UIAction(title: "Sketch", image: UIImage(systemName: "pencil.and.outline")) { [weak self] _ in
+            self?.requestInsertSketch()
+        }
+        return UIMenu(children: [sketch] + suggestedActions)
+    }
+}
+
 // MARK: - Extensions
 
 extension NativeTextView: UIGestureRecognizerDelegate {
@@ -1560,16 +1673,17 @@ class InteractiveTextAttachment: NSTextAttachment {
     fileprivate weak var hostingTextView: UITextView?
     fileprivate var gifAccumulated: Double = 0
     
-    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
-        return bounds
-    }
+    fileprivate var compositeCache: UIImage?
+    fileprivate var compositeCacheSize: CGSize = .zero
     
     override func image(forBounds imageBounds: CGRect, textContainer: NSTextContainer?, characterIndex charIndex: Int) -> UIImage? {
-        // Add delete button overlay for images
-        if let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) {
-            return addDeleteButton(to: baseImage)
-        }
-        return image
+        // Cache the composited overlay image at the requested size to avoid repeated redraws
+        if let cached = compositeCache, compositeCacheSize.equalTo(imageBounds.size) { return cached }
+        guard let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) else { return image }
+        let composited = addDeleteButton(to: baseImage)
+        compositeCache = composited
+        compositeCacheSize = imageBounds.size
+        return composited
     }
     
     private func addDeleteButton(to baseImage: UIImage) -> UIImage {
@@ -1601,6 +1715,14 @@ class InteractiveTextAttachment: NSTextAttachment {
             context.cgContext.addLine(to: CGPoint(x: buttonFrame.minX + inset, y: buttonFrame.maxY - inset))
             context.cgContext.strokePath()
         }
+    }
+    
+    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
+        // Invalidate composite cache when size changes
+        if !compositeCacheSize.equalTo(bounds.size) {
+            compositeCache = nil
+        }
+        return bounds
     }
     
     // Handle tap on attachment
@@ -1646,6 +1768,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.hasChangesBinding?.wrappedValue = true
+            nativeTextView.attachmentsMutated = true
         }
     }
 
@@ -1676,10 +1799,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         guard gifFrames.count > 1, gifDisplayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
         
-        Task { @MainActor in
-            let optimizer = PerformanceOptimizer.shared
-            link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
-        }
+        link.preferredFramesPerSecond = 8
         
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             return
@@ -1706,12 +1826,10 @@ class InteractiveTextAttachment: NSTextAttachment {
             gifCurrentIndex = (gifCurrentIndex + frameSkip) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
             
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self,
-                      let tv = self.hostingTextView,
-                      let lm = tv.layoutManager as NSLayoutManager?,
-                      let full = tv.attributedText else { return }
-                
+            // CADisplayLink runs on main; invalidate display inline to avoid extra dispatch overhead
+            if let tv = self.hostingTextView,
+               let lm = tv.layoutManager as NSLayoutManager?,
+               let full = tv.attributedText {
                 let searchRange = NSRange(location: 0, length: full.length)
                 var targetRange: NSRange?
                 full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
@@ -1720,9 +1838,7 @@ class InteractiveTextAttachment: NSTextAttachment {
                         stop.pointee = true
                     }
                 }
-                if let r = targetRange {
-                    lm.invalidateDisplay(forCharacterRange: r)
-                }
+                if let r = targetRange { lm.invalidateDisplay(forCharacterRange: r) }
             }
             break
         }
@@ -1874,8 +1990,185 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 
 // GIF picker now uses GiphyPicker from Components
 
-#Preview {
-    let note = Note(title: "Sample", content: "Content")
-    NativeNoteEditor(note: note)
-        .modelContainer(for: [Note.self], inMemory: true)
+struct NoteAISheet: View {
+    let note: Note
+    @Environment(\.dismiss) private var dismiss
+    @State private var isAnalyzing = false
+    @State private var analysisComplete = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+
+                    if !note.suggestedTags.isEmpty {
+                        suggestedTagsSection
+                    } else if isAnalyzing {
+                        analyzingSection
+                    } else if !analysisComplete {
+                        analyzeButton
+                    }
+
+                    if analysisComplete && note.suggestedTags.isEmpty {
+                        noSuggestionsSection
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("AI Assistant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            if note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil {
+                analyzeNote()
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.largeTitle)
+                .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+
+            Text("Note Intelligence")
+                .font(.headline)
+
+            Text("AI-powered suggestions based on your note content")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical)
+    }
+
+    private var suggestedTagsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Suggested Tags", systemImage: "tag")
+                .font(.headline)
+
+            FlowLayout(spacing: 8) {
+                ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { index, tag in
+                    HStack(spacing: 6) {
+                        Text(tag)
+                            .font(.callout)
+
+                        Button {
+                            HapticManager.shared.success()
+                            ModelMutationScheduler.shared.schedule {
+                                note.acceptSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Button {
+                            HapticManager.shared.buttonTapped()
+                            ModelMutationScheduler.shared.schedule {
+                                note.dismissSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+                    .overlay(Capsule().stroke(Color.purple.opacity(0.3), lineWidth: 0.5))
+                }
+            }
+
+            if !note.tags.isEmpty {
+                Divider().padding(.vertical, 8)
+                Label("Current Tags", systemImage: "tag.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 8) {
+                    ForEach(note.tags, id: \.self) { tag in
+                        Text(tag)
+                            .font(.callout)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.blue.opacity(0.15)))
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var analyzingSection: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Analyzing note content...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 40)
+    }
+
+    private var analyzeButton: some View {
+        Button {
+            analyzeNote()
+        } label: {
+            Label("Analyze Note", systemImage: "wand.and.stars")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private var noSuggestionsSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.title)
+                .foregroundStyle(.green)
+            Text("No suggestions needed")
+                .font(.subheadline)
+            Text("Your note is already well-organized")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 20)
+    }
+
+    private func analyzeNote() {
+        isAnalyzing = true
+        let existingTags = note.tags
+
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            let filteredTags = tags.filter { !existingTags.contains($0) }
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = filteredTags
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+            isAnalyzing = false
+            analysisComplete = true
+        }
+
+        if note.contentEmbedding == nil {
+            let text = "\(note.title) \(note.content)"
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            ModelMutationScheduler.shared.schedule {
+                note.contentEmbedding = embedding
+            }
+        }
+    }
 }

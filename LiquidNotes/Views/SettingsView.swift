@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var themeManager = ThemeManager.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showResetConfirmation = false
     @AppStorage("showArchivedInPlace") private var showArchivedInPlace = false
     @AppStorage("enableSwipeAffordance") private var enableSwipeAffordance = true
@@ -20,13 +21,13 @@ struct SettingsView: View {
 
                         VStack(spacing: 24) {
                             themeSection
+                            canvasSection
                             archiveSection
-                            accessibilitySection
                             productivitySection
                             analyticsSection
                             aboutSection
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, UI.Space.xl)
                         .padding(.top, 12)
                         .padding(.bottom, 32)
                     }
@@ -65,8 +66,30 @@ struct SettingsView: View {
     }
 
     private var archiveSection: some View {
-    // Simplified per feedback: removed inline archive visibility / swipe / undo options
-    EmptyView()
+        EmptyView()
+    }
+
+    @AppStorage("spatialMagneticClustering") private var magneticClustering = false
+
+    private var canvasSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Canvas", systemImage: "rectangle.on.rectangle.angled")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Magnetic Clustering",
+                    description: "Notes snap to align with nearby notes",
+                    icon: "magnet",
+                    isOn: $magneticClustering
+                )
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
     }
     
     private var themeSection: some View {
@@ -81,12 +104,16 @@ struct SettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
+                // Follow system appearance is always on. Only show themes valid
+                // for the current color scheme: Light in light mode; Midnight/Night in dark.
+                let allowedThemes: [GlassTheme] = (colorScheme == .dark) ? [.midnight, .night] : [.light]
+                
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 12) {
-                    ForEach(GlassTheme.allCases, id: \.self) { theme in
+                    ForEach(allowedThemes, id: \.self) { theme in
                         ThemeButton(
                             theme: theme,
                             isSelected: themeManager.currentTheme == theme
@@ -96,6 +123,8 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .opacity(1.0)
+                .allowsHitTesting(true)
             }
             
             VStack(alignment: .leading, spacing: 8) {
@@ -119,7 +148,7 @@ struct SettingsView: View {
                     Text("Glass Intensity")
                 }
                 .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
-                
+
                 HStack {
                     Text("Subtle")
                         .font(.caption2)
@@ -129,22 +158,37 @@ struct SettingsView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                Divider().padding(.vertical, 4)
-                SettingToggle(
-                    title: "Minimal Mode",
-                    description: "Flatter surfaces & lighter shadows",
-                    icon: "rectangle.compress.vertical",
-                    isOn: $themeManager.minimalMode
+            }
+
+            Divider().padding(.vertical, 8)
+
+            SettingToggle(
+                title: "Motion Parallax",
+                description: "Cards shift subtly with device tilt",
+                icon: "gyroscope",
+                isOn: Binding(
+                    get: { themeManager.noteParallax },
+                    set: { newVal in
+                        themeManager.noteParallax = newVal
+                        if newVal && themeManager.isMotionAllowed {
+                            MotionManager.shared.startTracking()
+                        } else {
+                            MotionManager.shared.stopTracking()
+                        }
+                    }
                 )
-                SettingToggle(
-                    title: "(Background Animation Always On)",
-                    description: "",
-                    icon: "sparkles",
-                    isOn: .constant(true)
-                ).hidden()
-                Divider().padding(.vertical, 6)
-                // Note Style picker removed; unified style applied globally
-                // Advanced glass controls removed for simplification
+            )
+
+            if themeManager.noteParallax && UIAccessibility.isReduceMotionEnabled {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text("Reduce Motion is enabled in system settings")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 48)
             }
         }
         .padding()
@@ -152,39 +196,7 @@ struct SettingsView: View {
         .premiumGlassCard()
     }
     
-    private var accessibilitySection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Accessibility", systemImage: "accessibility")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            
-            VStack(spacing: 0) {
-                SettingToggle(
-                    title: "High Contrast",
-                    description: "Increase contrast for better visibility",
-                    icon: "circle.lefthalf.filled",
-                    isOn: $themeManager.highContrast
-                )
-                
-                Divider()
-                    .padding(.horizontal)
-                
-                SettingToggle(
-                    title: "Reduce Motion",
-                    description: "Minimize animations and transitions",
-                    icon: "figure.walk.motion",
-                    isOn: $themeManager.reduceMotion
-                )
-                .onChange(of: themeManager.reduceMotion) { _, newValue in
-                    MotionManager.shared.syncWithReduceMotion(newValue)
-                }
-            }
-        }
-        .padding()
-        .background(.clear)
-        .premiumGlassCard()
-    }
+    // accessibilitySection removed for production
     
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -263,7 +275,7 @@ struct SettingsView: View {
                         if dailyReviewReminderEnabled { NotificationScheduler.scheduleDailyReview(hour: dailyReviewReminderHour) }
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, UI.Space.m)
             }
         }
         .padding()
@@ -307,17 +319,17 @@ struct ThemeButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: UI.Corner.s)
                     .fill(
                         LinearGradient(
-                            colors: theme.primaryGradient.map { $0.opacity(1.0) },
+                            colors: previewColors(),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(height: 60)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: UI.Corner.s)
                             .stroke(
                                 isSelected ? Color.accentColor : Color.clear,
                                 lineWidth: 3
@@ -339,6 +351,20 @@ struct ThemeButton: View {
             .animation(.bouncy(duration: 0.3), value: isSelected)
         }
         .buttonStyle(.plain)
+    }
+
+    private func previewColors() -> [Color] {
+        switch theme {
+        case .light:
+            // Keep light neutral
+            return [Color.white.opacity(0.85), Color.white.opacity(0.65)]
+        case .night:
+            // Subtle cool undertones to match previews
+            return [Color.blue.opacity(0.28), Color.cyan.opacity(0.24)]
+        case .midnight:
+            // Black-ish appearance
+            return [Color.black.opacity(0.6), Color.black.opacity(0.35)]
+        }
     }
 }
 
@@ -380,7 +406,7 @@ struct SettingToggle: View {
                     HapticManager.shared.buttonTapped()
                 }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, UI.Space.m)
     }
 }
 

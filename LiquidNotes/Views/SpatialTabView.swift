@@ -13,6 +13,8 @@ struct SpatialTabView: View {
     
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    struct NoteRef: Identifiable { let id: UUID }
+    @State private var iPadEditorRef: NoteRef? = nil
     @State private var showingNoteEditor = false
     // Multi-select state
     @State private var selectionMode: Bool = false
@@ -106,17 +108,27 @@ struct SpatialTabView: View {
             }
             .onChange(of: folders) { ensureFolderSelection() }
             .onDisappear { clearSelection() }
-            .sheet(item: $selectedNote) { note in
-                if UIDevice.current.userInterfaceIdiom == .pad {
-                    NoteEditorView(note: note)
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.hidden)
-                } else {
-                    NoteEditorView(note: note)
-                        .presentationDetents([.medium, .large])
-                        .presentationDragIndicator(.visible)
-                }
+        .sheet(item: $selectedNote) { note in
+            NoteEditorView(note: note)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $iPadEditorRef) { ref in
+            let targetID = ref.id
+            if let fetched = try? modelContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == targetID })).first {
+                NoteEditorView(note: fetched)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+            } else {
+                Text("Note not found")
             }
+        }
+        .onChange(of: selectedNote) { _, newVal in
+            if UIDevice.current.userInterfaceIdiom == .pad, let note = newVal {
+                iPadEditorRef = NoteRef(id: note.id)
+                selectedNote = nil
+            }
+        }
             .sheet(isPresented: $showingMoveSheet) { moveSheet }
             .sheet(isPresented: $showingDailyReview) {
                 DailyReviewView()
@@ -132,7 +144,7 @@ struct SpatialTabView: View {
                     HapticManager.shared.success()
                     SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
                 }
-                .presentationDetents([.fraction(0.3)])
+                .presentationDetents([.medium])
             }
         }
     }
@@ -152,7 +164,7 @@ struct SpatialTabView: View {
                     Button { createNewFolder() } label: {
                         Image(systemName: "plus")
                             .font(.body)
-                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .padding(.horizontal, UI.Space.l).padding(.vertical, UI.Space.m)
                             .background(Capsule().fill(Color.secondary.opacity(0.15)))
                     }.buttonStyle(.plain)
                 } else {
@@ -162,13 +174,13 @@ struct SpatialTabView: View {
                     Button { createNewFolder() } label: {
                         Image(systemName: "plus")
                             .font(.body)
-                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .padding(.horizontal, UI.Space.l).padding(.vertical, UI.Space.m)
                             .background(Capsule().fill(Color.secondary.opacity(0.15)))
                     }.buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            .padding(.horizontal, UI.Space.xl)
+            .padding(.vertical, UI.Space.m)
         }
     }
     // Selected folder now externally bindable so other creation entry points (FAB, Quick Capture, Commands) honor current folder
@@ -203,8 +215,8 @@ struct SpatialTabView: View {
             if !isRenaming { favoriteButton(folder) }
             if !isRenaming { folderMenu(folder) }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, UI.Space.l)
+        .padding(.vertical, UI.Space.m)
         .background(Capsule().fill(baseFill))
         .overlay(Capsule().stroke(strokeColor, lineWidth: strokeWidth))
         .contentShape(Rectangle())
@@ -287,7 +299,7 @@ struct SpatialTabView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, UI.Space.xl)
             .padding(.top, 6)
             .padding(.bottom, foldersCollapsed ? 8 : 0)
             if !foldersCollapsed { folderBar.transition(.opacity.combined(with: .move(edge: .top))) }
@@ -340,15 +352,11 @@ struct SpatialTabView: View {
             .accessibilityLabel("Clear selection")
             .buttonStyle(.borderless)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.07), lineWidth: 0.6)
-        )
+        .padding(.horizontal, UI.Space.xl)
+        .padding(.vertical, UI.Space.m)
+        .nativeGlassChip()
         .padding(.bottom, 20)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, UI.Space.xl)
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
         .animation(.easeInOut(duration: 0.2), value: selectedNoteIDs.count)
     }
@@ -528,7 +536,7 @@ struct SpatialTabView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(.blue)
                 .frame(width: 56, height: 56)
-                .background(.ultraThinMaterial, in: Circle())
+                .nativeGlassCircle()
                 .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
@@ -542,8 +550,8 @@ struct SpatialTabView: View {
                         Text("New Note")
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, UI.Space.l)
+                .padding(.vertical, UI.Space.m)
                 }
                 .buttonStyle(.plain)
                 
@@ -557,8 +565,8 @@ struct SpatialTabView: View {
                         Text("Quick Task")
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, UI.Space.l)
+                .padding(.vertical, UI.Space.m)
                 }
                 .buttonStyle(.plain)
                 
@@ -572,8 +580,8 @@ struct SpatialTabView: View {
                         Text("New Folder")
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, UI.Space.l)
+                .padding(.vertical, UI.Space.m)
                 }
                 .buttonStyle(.plain)
                 
@@ -587,8 +595,8 @@ struct SpatialTabView: View {
                         Text("Daily Review")
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, UI.Space.l)
+                .padding(.vertical, UI.Space.m)
                 }
                 .buttonStyle(.plain)
             }

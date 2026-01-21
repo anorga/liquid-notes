@@ -10,6 +10,7 @@ import SwiftData
 
 struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab = 0
     @State private var selectedFolder: Folder? = nil // shared across entry points
     @State private var showingQuickTaskCapture = false // single task capture
@@ -20,8 +21,9 @@ struct MainTabView: View {
     @State private var openTasksObserver: NSObjectProtocol?
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
+    struct NoteRef: Identifiable { let id: UUID }
+    @State private var iPadEditorRef: NoteRef? = nil
     @State private var showingSettings = false
-    // Removed quick theme overlay per simplification feedback
     
     var body: some View {
         // Build the core TabView once, then apply iOS-specific bar styling below
@@ -29,7 +31,8 @@ struct MainTabView: View {
             Tab("Notes", systemImage: "note.text", value: 0) { SpatialTabView(selectedFolder: $selectedFolder) }
             Tab("Favorites", systemImage: "star.fill", value: 1) { PinnedNotesView() }
             Tab("Tasks", systemImage: "checklist", value: 4) { TasksRollupView() }
-            Tab("More", systemImage: "ellipsis", value: 5) { MoreView() }
+            // Settings tab: open Settings directly
+            Tab("Settings", systemImage: "gearshape", value: 5) { SettingsView().navigationBarHidden(true) }
             Tab("Search", systemImage: "magnifyingglass", value: 2, role: .search) { SearchView() }
         }
         .onAppear { setupViewModel() }
@@ -43,15 +46,27 @@ struct MainTabView: View {
     .onDisappear { if let obs = openTasksObserver { NotificationCenter.default.removeObserver(obs) } }
     // Command system removed
     // Removed reindex trigger (simplification)
+        // iPhone: sheet; iPad: sheet (reverted to original size)
         .sheet(item: $selectedNote) { note in
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                NoteEditorView(note: note)
+            NoteEditorView(note: note)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $iPadEditorRef) { ref in
+            let targetID = ref.id
+            if let fetched = try? modelContext.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == targetID })).first {
+                NoteEditorView(note: fetched)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.hidden)
             } else {
-                NoteEditorView(note: note)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                Text("Note not found")
+            }
+        }
+        .onChange(of: selectedNote) { _, newVal in
+            if UIDevice.current.userInterfaceIdiom == .pad, let note = newVal {
+                // Route to full-screen cover on iPad using ID to avoid context detach
+                iPadEditorRef = NoteRef(id: note.id)
+                selectedNote = nil
             }
         }
         .sheet(isPresented: $showingDailyReview) {
@@ -68,12 +83,39 @@ struct MainTabView: View {
                 HapticManager.shared.success()
                 SharedDataManager.shared.refreshStandaloneTasksWidgetData(context: modelContext)
             }
-            .presentationDetents([.fraction(0.3)])
+            .presentationDetents([.medium])
         }
         tabCore
-            .toolbarBackground(.regularMaterial, for: .tabBar)
+            .toolbarBackground(.thinMaterial, for: .tabBar)
             .toolbarBackgroundVisibility(.visible, for: .tabBar)
-            .modifier(iOS26TabBarEnhancements())
+            .onAppear {
+                if colorScheme == .light {
+                    if ThemeManager.shared.currentTheme != .light {
+                        ThemeManager.shared.applyTheme(.light)
+                    }
+                } else {
+                    // In dark mode, preserve user's dark variant if already dark
+                    let cur = ThemeManager.shared.currentTheme
+                    if cur == .light {
+                        let preferred = ThemeManager.shared.lastDarkTheme ?? .midnight
+                        ThemeManager.shared.applyTheme(preferred)
+                    }
+                }
+            }
+            .onChange(of: colorScheme) { _, newScheme in
+                if newScheme == .light {
+                    if ThemeManager.shared.currentTheme != .light {
+                        ThemeManager.shared.applyTheme(.light)
+                    }
+                } else {
+                    let cur = ThemeManager.shared.currentTheme
+                    // If coming into dark and currently on light, choose a default dark theme
+                    if cur == .light {
+                        let preferred = ThemeManager.shared.lastDarkTheme ?? .midnight
+                        ThemeManager.shared.applyTheme(preferred)
+                    }
+                }
+            }
     }
     
     
@@ -153,6 +195,7 @@ extension Notification.Name { static let lnNoteAttachmentsChanged = Notification
 extension Notification.Name { static let showQuickTaskCapture = Notification.Name("showQuickTaskCapture") }
 extension Notification.Name { static let openTasksTab = Notification.Name("openTasksTab") }
 extension Notification.Name { static let focusTask = Notification.Name("focusTask") }
+extension Notification.Name { static let lnRequestInsertSketch = Notification.Name("lnRequestInsertSketch") }
 
 private extension MainTabView {
     func registerOpenNoteObserver() {
@@ -207,16 +250,16 @@ struct QuickTaskCaptureView: View {
                 LiquidNotesBackground().ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(spacing: 16) {
-                        TextField("Task description", text: $taskText, axis: .vertical)
-                            .lineLimit(2, reservesSpace: true)
-                            .textFieldStyle(.plain)
-                            .padding(.horizontal, 14).padding(.vertical, 12)
-                            .liquidGlassEffect(.thin, in: RoundedRectangle(cornerRadius: 14))
+                            TextField("Task description", text: $taskText, axis: .vertical)
+                                .lineLimit(2, reservesSpace: true)
+                                .textFieldStyle(.plain)
+                                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.m)
+                                .nativeGlassSurface(cornerRadius: UI.Corner.sPlus)
                         HStack(spacing: 12) {
                             if let d = dueDate {
-                                Text("Due: \(d.ln_dayDistanceString())")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                        Text("Due: \(d.ln_dayDistanceString())")
+                            .font(.caption2)
+                            .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.xs)
                                     .background(Capsule().fill(Color.orange.opacity(0.2)))
                                     .foregroundStyle(.orange)
                             }
@@ -225,14 +268,21 @@ struct QuickTaskCaptureView: View {
                                     .font(.title3)
                                     .foregroundStyle(dueDate == nil ? Color.secondary : Color.orange)
                                     .padding(8)
-                                    .background(.ultraThinMaterial, in: Circle())
+                                    .nativeGlassCircle()
                             }
                             Spacer()
                         }
                         Spacer(minLength: 0)
                         HStack {
-                            Button("Cancel") { dismiss() }
-                                .buttonStyle(.borderless)
+                            Button {
+                                dismiss()
+                            } label: {
+                                Text("Cancel")
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, UI.Space.l).padding(.vertical, UI.Space.s)
+                                    .nativeGlassChip()
+                            }
+                            .buttonStyle(.plain)
                             Spacer()
                             Button {
                                 let trimmed = taskText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -242,7 +292,7 @@ struct QuickTaskCaptureView: View {
                             } label: {
                                 Text("Add Task")
                                     .fontWeight(.semibold)
-                                    .padding(.horizontal, 20).padding(.vertical, 10)
+                                    .padding(.horizontal, UI.Space.xl).padding(.vertical, UI.Space.m)
                                     .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
                                     .clipShape(Capsule())
                                     .foregroundStyle(.white)
@@ -264,16 +314,6 @@ struct QuickTaskCaptureView: View {
 }
 
 // (Quick Tasks helper removed — standalone tasks are now used.)
-
-struct iOS26TabBarEnhancements: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
-        }
-    }
-}
 
 #Preview {
     MainTabView()

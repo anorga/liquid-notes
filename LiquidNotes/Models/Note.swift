@@ -39,12 +39,17 @@ final class Note {
     // Lightweight plain excerpt for fast previews / search (body only, no title)
     var previewExcerpt: String = ""
     // File-based attachment metadata (future: migrate away from in-DB Data arrays)
-    var fileAttachmentIDs: [String] = []          // stable IDs
-    var fileAttachmentTypes: [String] = []        // MIME types
-    var fileAttachmentNames: [String] = []        // stored file names (with extension)
-    var fileAttachmentThumbNames: [String] = []   // thumbnail file names (optional)
-    // One-time flag to prevent repeated legacy attachment migration
+    var fileAttachmentIDs: [String] = []
+    var fileAttachmentTypes: [String] = []
+    var fileAttachmentNames: [String] = []
+    var fileAttachmentThumbNames: [String] = []
     var legacyMigrationDone: Bool = false
+
+    var suggestedTags: [String] = []
+    var tagConfidences: [Double] = []
+    var contentEmbedding: Data? = nil
+    var linkedNoteIDs: [String] = []
+    var lastAnalyzedDate: Date? = nil
     
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.note) var tasks: [TaskItem]? // CloudKit requires optional relationships
     var dueDate: Date?
@@ -200,6 +205,46 @@ final class Note {
     func removeTag(_ tag: String) {
         tags.removeAll { $0 == tag }
         updateModifiedDate()
+    }
+
+    func acceptSuggestedTag(_ tag: String) {
+        guard suggestedTags.contains(tag) else { return }
+        if !tags.contains(tag) {
+            tags.append(tag)
+        }
+        if let idx = suggestedTags.firstIndex(of: tag) {
+            suggestedTags.remove(at: idx)
+            if idx < tagConfidences.count {
+                tagConfidences.remove(at: idx)
+            }
+        }
+        updateModifiedDate()
+    }
+
+    func dismissSuggestedTag(_ tag: String) {
+        if let idx = suggestedTags.firstIndex(of: tag) {
+            suggestedTags.remove(at: idx)
+            if idx < tagConfidences.count {
+                tagConfidences.remove(at: idx)
+            }
+        }
+    }
+
+    func addLinkedNote(_ noteID: UUID) {
+        let idString = noteID.uuidString
+        if !linkedNoteIDs.contains(idString) {
+            linkedNoteIDs.append(idString)
+            updateModifiedDate()
+        }
+    }
+
+    func removeLinkedNote(_ noteID: UUID) {
+        linkedNoteIDs.removeAll { $0 == noteID.uuidString }
+        updateModifiedDate()
+    }
+
+    func isLinkedTo(_ noteID: UUID) -> Bool {
+        linkedNoteIDs.contains(noteID.uuidString)
     }
 }
 

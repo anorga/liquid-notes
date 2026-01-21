@@ -2,143 +2,47 @@ import SwiftUI
 import UIKit
 
 extension View {
-    func liquidGlassBackground() -> some View {
-        return AnyView(self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)))
-    }
-    
-    func liquidGlassCard() -> some View {
-        self.liquidGlassBackground()
-            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 1)
-    }
-    
-    func liquidGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
+    /// Uses iOS 26 native materials with subtle hairline strokes and light shadow.
+    func nativeGlassSurface(cornerRadius: CGFloat = 16, opacity: Double = 1.0) -> some View {
         let theme = ThemeManager.shared
         let isMidnight = theme.currentTheme == .midnight
-        
-        switch variant {
-        case .regular:
-            if theme.reduceMotion || theme.minimalMode {
-                return AnyView(self.background(
-                    shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.9 : theme.glassOpacity * 0.8))
-                ))
-            } else {
-                return AnyView(self.background(
-                    ZStack {
-                        shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.8 : theme.glassOpacity * 0.4))
-                        
-                        if !theme.highContrast {
-                            shape.stroke(.white.opacity(isMidnight ? 0.4 : 0.2), lineWidth: 0.5)
-                        }
-                    }
-                ))
-            }
-        case .thin:
-            return AnyView(self.background(
-                shape.fill(.thinMaterial.opacity(isMidnight ? 0.85 : theme.glassOpacity * 0.6))
-            ))
-        case .thick:
-            return AnyView(self.background(
-                ZStack {
-                    shape.fill(.regularMaterial.opacity(isMidnight ? 0.9 : theme.glassOpacity * 0.7))
-                    if !theme.minimalMode {
-                        shape.stroke(.white.opacity(isMidnight ? 0.35 : 0.15), lineWidth: 0.8)
-                    }
-                }
-            ))
-        case .ultra:
-            return AnyView(self.background(
-                ZStack {
-                    shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.75 : theme.glassOpacity * 0.5))
-                    if !theme.minimalMode {
-                        shape.stroke(.white.opacity(isMidnight ? 0.45 : 0.25), lineWidth: 0.8)
-                    }
-                }
-            ))
-        case .floating:
-            return AnyView(self.background(
-                shape.fill(.thickMaterial.opacity(isMidnight ? 0.95 : theme.glassOpacity * 0.8))
-            ))
-        case .elevated:
-            return AnyView(self.background(
-                shape.fill(.regularMaterial.opacity(isMidnight ? 0.98 : theme.glassOpacity * 0.9))
-            ))
-        case .ambient:
-            return AnyView(self.background(
-                shape.fill(.ultraThinMaterial.opacity(isMidnight ? 0.7 : theme.glassOpacity * 0.4))
-            ))
-        case .vibrant:
-            return AnyView(self.background(
-                ZStack {
-                    shape.fill(.thickMaterial.opacity(theme.glassOpacity))
-                    if !theme.minimalMode {
-                        shape.stroke(.white.opacity(0.3), lineWidth: 0.5)
-                    }
-                }
-            ))
-        }
-    }
-    
-    /// Convenience overload for common shapes  
-    func liquidGlassEffect(_ variant: GlassVariant = .regular) -> some View {
-        self.liquidGlassEffect(variant, in: Capsule())
-    }
-    
-    /// Interactive glass effect with touch response
-    func interactiveGlassEffect<S: Shape>(_ variant: GlassVariant = .regular, in shape: S) -> some View {
-        return AnyView(self.liquidGlassEffect(variant, in: shape)
-            .scaleEffect(0.98)
-            .animation(.easeInOut(duration: 0.15), value: false))
-    }
-}
+        // Drive material strength from normalized glassIntensity for a clearer slider effect
+        let t = max(0.0, min(1.0, theme.glassIntensity))
+        let baseOpacity = (0.35 + t * 0.55) * opacity // 0.35...0.90
 
-// MARK: - Glass Effect Types
-
-enum GlassVariant {
-    case regular
-    case thin
-    case thick
-    case ultra
-    case floating
-    case elevated
-    case ambient
-    case vibrant
-    
-    func tint(_ color: Color) -> TintedGlassVariant {
-        TintedGlassVariant(base: self, tint: color)
+        return self
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.thinMaterial.opacity(isMidnight ? min(0.96, baseOpacity + 0.06) : baseOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(.white.opacity(isMidnight ? 0.22 : 0.16), lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
-    
-    func interactive() -> InteractiveGlassVariant {
-        InteractiveGlassVariant(base: self)
+
+    func nativeGlassBarBackground() -> some View {
+        let theme = ThemeManager.shared
+        let isMidnight = theme.currentTheme == .midnight
+        let opacity = isMidnight ? 0.92 : (0.44 + theme.glassOpacity * 0.36)
+        return self.background(Rectangle().fill(.thinMaterial.opacity(opacity)))
     }
-}
 
-struct TintedGlassVariant {
-    let base: GlassVariant
-    let tint: Color
-    
-    func interactive() -> InteractiveTintedGlassVariant {
-        InteractiveTintedGlassVariant(base: base, tint: tint)
+    func nativeGlassChip(opacity: Double = 1.0) -> some View {
+        let theme = ThemeManager.shared
+        return self
+            .background(Capsule().fill(.thinMaterial.opacity((0.44 + theme.glassOpacity * 0.36) * opacity)))
+            .overlay(Capsule().stroke(.white.opacity(theme.currentTheme == .midnight ? 0.22 : 0.16), lineWidth: 0.5))
     }
-}
 
-struct InteractiveGlassVariant {
-    let base: GlassVariant
-}
+    func nativeGlassCircle(opacity: Double = 1.0) -> some View {
+        let theme = ThemeManager.shared
+        return self
+            .background(Circle().fill(.thinMaterial.opacity((0.44 + theme.glassOpacity * 0.36) * opacity)))
+            .overlay(Circle().stroke(.white.opacity(theme.currentTheme == .midnight ? 0.22 : 0.16), lineWidth: 0.5))
+    }
 
-struct InteractiveTintedGlassVariant {
-    let base: GlassVariant  
-    let tint: Color
-}
-
-struct GlassDepthLayer {
-    let opacity: Double
-    let blur: CGFloat
-    let offset: CGSize
-    let tint: Color
-    
-    static let subtle = GlassDepthLayer(opacity: 0.05, blur: 1, offset: CGSize(width: 0, height: 0.5), tint: .white)
-    static let medium = GlassDepthLayer(opacity: 0.1, blur: 2, offset: CGSize(width: 0, height: 1), tint: .white)
-    static let pronounced = GlassDepthLayer(opacity: 0.15, blur: 4, offset: CGSize(width: 0, height: 2), tint: .white)
 }
 
 struct RoundedCorner: Shape {
@@ -160,72 +64,93 @@ extension View {
         clipShape(RoundedCorner(radius: radius, corners: corners))
     }
     
-    func modernGlassCard() -> some View {
-        self.liquidGlassEffect(.floating, in: RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-            .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-    }
+    func modernGlassCard() -> some View { self.nativeGlassSurface(cornerRadius: UI.Corner.m) }
     
-    func premiumGlassCard() -> some View {
-        self.liquidGlassEffect(.elevated, in: RoundedRectangle(cornerRadius: 20))
-            .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 6)
-            .shadow(color: .white.opacity(0.2), radius: 1, x: 0, y: -1)
-    }
+    func premiumGlassCard() -> some View { self.nativeGlassSurface(cornerRadius: UI.Corner.l) }
     
-    func ambientGlassEffect() -> some View {
-        self.liquidGlassEffect(.ambient, in: RoundedRectangle(cornerRadius: 14))
-            .shadow(color: .blue.opacity(0.1), radius: 6, x: 0, y: 3)
-    }
+    func ambientGlassEffect() -> some View { self.nativeGlassSurface(cornerRadius: UI.Corner.sPlus, opacity: 0.9) }
     
     func glassTabBar() -> some View {
-        self.liquidGlassEffect(.ultra, in: RoundedRectangle(cornerRadius: 0))
+        self.nativeGlassSurface(cornerRadius: 0)
             .shadow(color: .black.opacity(0.06), radius: 1, x: 0, y: -1)
     }
     
     func interactiveGlassButton() -> some View {
-        self.liquidGlassEffect(.vibrant, in: Capsule())
+        self.nativeGlassChip()
             .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
             .scaleEffect(0.98)
             .animation(.interactiveSpring(response: 0.4, dampingFraction: 0.8), value: false)
     }
 }
 
-// MARK: - Refined Clear Glass (modernized)
-extension View {
-    func refinedClearGlass(cornerRadius: CGFloat = 22, intensity: Double = 1.0) -> some View {
-        let theme = ThemeManager.shared
-        let materialOpacity = 0.4 + (intensity * theme.glassOpacity * 0.4)
-        
-        return Group {
-            if theme.minimalMode || theme.reduceMotion {
-                self
-                    .background(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(.ultraThinMaterial.opacity(materialOpacity))
-                    )
-                    .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-            } else {
-                self
-                    .background(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(.ultraThinMaterial.opacity(materialOpacity))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(.white.opacity(0.2), lineWidth: 0.5)
-                    )
-                    .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
-                    .shadow(color: .white.opacity(0.1), radius: 20, x: 0, y: 10)
+// MARK: - Motion-Responsive Effects
+
+struct ParallaxModifier: ViewModifier {
+    @ObservedObject private var motionManager = MotionManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    let intensity: CGFloat
+
+    func body(content: Content) -> some View {
+        let motion = motionManager.normalizedMotionValues()
+        let offsetX = themeManager.isMotionAllowed ? motion.x * intensity : 0
+        let offsetY = themeManager.isMotionAllowed ? motion.y * intensity : 0
+
+        content
+            .offset(x: offsetX, y: offsetY)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: offsetX)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: offsetY)
+            .onAppear {
+                if themeManager.isMotionAllowed {
+                    motionManager.startTracking()
+                }
             }
-        }
     }
-    
-    func subtleParallax(_ motion: MotionManager = .shared, maxOffset: CGFloat = 8) -> some View {
-        let values = motion.normalizedMotionValues()
-        return self.offset(x: values.x * maxOffset, y: values.y * maxOffset)
+}
+
+struct GlassShimmerModifier: ViewModifier {
+    @ObservedObject private var motionManager = MotionManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    func body(content: Content) -> some View {
+        let motion = motionManager.normalizedMotionValues()
+        let shimmerX = themeManager.isMotionAllowed ? 0.3 + motion.x * 0.2 : 0.3
+        let shimmerY = themeManager.isMotionAllowed ? 0.1 + motion.y * 0.15 : 0.1
+
+        content
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(themeManager.isMotionAllowed ? 0.25 : 0),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: UnitPoint(x: shimmerX, y: shimmerY),
+                    endPoint: UnitPoint(x: shimmerX + 0.5, y: shimmerY + 0.5)
+                )
+                .blendMode(.overlay)
+                .allowsHitTesting(false)
+            )
+            .animation(.easeInOut(duration: 0.2), value: shimmerX)
+            .onAppear {
+                if themeManager.isMotionAllowed {
+                    motionManager.startTracking()
+                }
+            }
+    }
+}
+
+extension View {
+    func parallaxEffect(intensity: CGFloat = 8) -> some View {
+        modifier(ParallaxModifier(intensity: intensity))
     }
 
-    // Reusable subtle liquid border (hairline) for small components (chips, icons)
+    func glassShimmer() -> some View {
+        modifier(GlassShimmerModifier())
+    }
+}
+
+// MARK: - Refined Clear Glass (modernized)
+extension View {
     func liquidBorderHairline(cornerRadius: CGFloat = 12) -> some View {
         let theme = ThemeManager.shared
         let combined = theme.noteGlassDepth * theme.glassOpacity
@@ -240,7 +165,7 @@ extension View {
                     ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: theme.highContrast ? 1 : 0.6
                 )
                 .blendMode(.plusLighter)
-                .opacity(theme.minimalMode ? 0.55 : 0.85)
+                .opacity(0.85)
         )
     }
 }

@@ -83,8 +83,7 @@ struct NoteCardView: View {
             }
         }
         .padding()
-        .liquidGlassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)  // Apple-style subtle shadow
+        .modernGlassCard()
         .frame(width: 160, height: 120)
         .contentShape(Rectangle())
         .contextMenu {

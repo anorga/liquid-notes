@@ -41,7 +41,7 @@ struct TaskListView: View {
                         )
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, UI.Space.l)
             .padding(.top, 12)
             
             if isAddingTask {
@@ -61,7 +61,7 @@ struct TaskListView: View {
                             .font(.title3)
                             .foregroundStyle(newTaskDueDate == nil ? Color.primary : Color.orange)
                             .padding(8)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .nativeGlassCircle()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(newTaskDueDate == nil ? "Add due date" : "Edit due date"))
@@ -90,8 +90,8 @@ struct TaskListView: View {
                             .font(.callout)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, UI.Space.l)
+                            .padding(.vertical, UI.Space.m)
                             .background(
                                 LinearGradient(
                                     colors: [.blue, .cyan],
@@ -103,7 +103,7 @@ struct TaskListView: View {
                     }
                     .disabled(newTaskText.isEmpty)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, UI.Space.l)
                 .transition(.asymmetric(
                     insertion: .scale.combined(with: .opacity),
                     removal: .scale.combined(with: .opacity)
@@ -135,10 +135,10 @@ struct TaskListView: View {
                         )
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, UI.Space.l)
                 .padding(.bottom, 12)
             }
-            .frame(maxHeight: 300)
+            .frame(maxHeight: UIDevice.current.userInterfaceIdiom == .pad ? .infinity : 300)
         }
         .background(.clear)
         .ambientGlassEffect()
@@ -246,9 +246,14 @@ struct TaskRowView: View {
             .transition(.scale.combined(with: .opacity))
             if isEditingText {
                 Button(action: commitEdit) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.green)
+                    Text("Save")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .clipShape(Capsule())
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.plain)
                 .transition(.scale.combined(with: .opacity))
@@ -257,7 +262,7 @@ struct TaskRowView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: UI.Corner.s)
                 .fill(.clear)
                 .background(
                     task.isCompleted ?
@@ -269,7 +274,9 @@ struct TaskRowView: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering }
         }
-        .onTapGesture { onToggle() }
+        // Enter editor on row tap (except dedicated buttons)
+        .contentShape(Rectangle())
+        .highPriorityGesture(TapGesture().onEnded { if !isEditingText { enterEdit() } })
         .sheet(isPresented: $showingCalendar) {
             DueDateCalendarPicker(initialDate: task.dueDate) { selected in
                 task.dueDate = selected

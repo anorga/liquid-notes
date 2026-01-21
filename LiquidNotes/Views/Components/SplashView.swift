@@ -16,19 +16,37 @@ struct SplashView: View {
 
                 // Prefer asset named "AppSplashIcon"; fall back to bundled icon_source.png
                 VStack(spacing: 18) {
-                    Group {
-                        if let uiImage = UIImage(named: "AppSplashIcon") ?? UIImage(named: "icon_source") {
+                    if let uiImage = UIImage(named: "AppSplashIcon") ?? UIImage(named: "icon_source") {
+                        ZStack {
+                            Color.black
+                                .frame(width: iconSize(for: geo), height: iconSize(for: geo))
+                            
                             Image(uiImage: uiImage)
                                 .resizable()
-                                .scaledToFit()
-                        } else {
-                            // Final fallback: simple logo text
-                            Text("Liquidnote")
-                                .font(.system(size: 28, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white)
+                                .scaledToFill()
+                                .frame(width: iconSize(for: geo) + 10, height: iconSize(for: geo) + 10)
+                                .offset(y: -8) // Shift image up significantly to hide bottom
+                                .frame(width: iconSize(for: geo), height: iconSize(for: geo))
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: iconSize(for: geo) * 0.2237, style: .continuous))
+                            // Hard-mask any residual single-pixel edge from the source asset
+                            Rectangle()
+                                .fill(Color.black)
+                                .frame(height: 3)
+                                .frame(width: iconSize(for: geo))
+                                .alignmentGuide(.bottom) { d in d[.bottom] }
+                                .offset(y: (iconSize(for: geo)/2) - 1.5)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: iconSize(for: geo) * 0.2237, style: .continuous))
                         }
+                        .frame(width: iconSize(for: geo), height: iconSize(for: geo))
+                    } else {
+                        // Final fallback: simple logo text
+                        Text("Liquidnote")
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(width: iconSize(for: geo), height: iconSize(for: geo))
                     }
-                    .frame(width: iconSize(for: geo), height: iconSize(for: geo))
 
                     // App name under the icon with subtle shimmer
                     ZStack {
@@ -38,7 +56,7 @@ struct SplashView: View {
                             .kerning(0.6)
                             .foregroundStyle(.white)
 
-                        // Shimmer overlay masked by the same text
+                        // Shimmer overlay masked by the same text - MORE DRAMATIC
                         Text("Liquidnote")
                             .font(.system(size: titleSize(for: geo), weight: .semibold, design: .rounded))
                             .kerning(0.6)
@@ -47,16 +65,15 @@ struct SplashView: View {
                                 LinearGradient(
                                     colors: [
                                         .white.opacity(0.0),
-                                        .white.opacity(0.25),
-                                        .white.opacity(0.9),
-                                        .white.opacity(0.25),
+                                        .white.opacity(0.3),
+                                        .white.opacity(1.0),
+                                        .white.opacity(0.3),
                                         .white.opacity(0.0)
                                     ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
+                                    startPoint: .leading,
+                                    endPoint: .trailing
                                 )
-                                .frame(width: max(140, min(geo.size.width * 0.5, 320)), height: titleSize(for: geo) * 1.6)
-                                .rotationEffect(.degrees(18))
+                                .frame(width: 120)
                                 .offset(x: shimmerX)
                                 .blendMode(.screen)
                             )
@@ -73,19 +90,19 @@ struct SplashView: View {
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .onAppear {
-                    // Icon bounce + fade
-                    withAnimation(.spring(response: 0.6, dampingFraction: 0.82)) { scale = 1.06 }
-                    withAnimation(.easeOut(duration: 0.45)) { opacity = 1.0 }
-                    // Settle from slight overshoot
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.9).delay(0.15)) { scale = 1.0 }
-                    // Title slide/fade
-                    withAnimation(.easeOut(duration: 0.5).delay(0.2)) {
+                    // More dramatic icon bounce + fade
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.65)) { scale = 1.15 }
+                    withAnimation(.easeOut(duration: 0.35)) { opacity = 1.0 }
+                    // Settle from larger overshoot
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2)) { scale = 1.0 }
+                    // Title slide/fade with more drama
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.25)) {
                         titleOpacity = 1.0
                         titleOffset = 0
                     }
-                    // Shimmer sweep across the title
+                    // Faster, more frequent shimmer sweep
                     shimmerX = -geo.size.width
-                    withAnimation(.linear(duration: 1.35).delay(0.35).repeatForever(autoreverses: false)) {
+                    withAnimation(.linear(duration: 0.9).delay(0.4).repeatForever(autoreverses: false)) {
                         shimmerX = geo.size.width
                     }
                 }
@@ -101,20 +118,21 @@ struct SplashView: View {
         if isPad {
             let landscape = w > h
             let narrow = w < 800 // split view or compact window
-            // Make icon larger overall on iPad, still considerate of split view
-            let factor: CGFloat = (landscape && narrow) ? 0.28 : 0.36
-            let cap: CGFloat = (landscape && narrow) ? 340 : 400
-            return max(140, min(side * factor, cap))
+            // Increased by ~33% from previous values
+            let factor: CGFloat = (landscape && narrow) ? 0.37 : 0.48
+            let cap: CGFloat = (landscape && narrow) ? 450 : 530
+            return max(185, min(side * factor, cap))
         } else {
-            // Make icon larger on iPhone as well
-            return max(120, min(side * 0.48, 240))
+            // Increased by ~33% for iPhone
+            return max(160, min(side * 0.64, 320))
         }
     }
 
     private func titleSize(for geo: GeometryProxy) -> CGFloat {
         let side = min(geo.size.width, geo.size.height)
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
-        return isPad ? min(28, side * 0.05) : min(24, side * 0.07)
+        // Increased text size by ~40%
+        return isPad ? min(40, side * 0.07) : min(34, side * 0.10)
     }
 }
 
