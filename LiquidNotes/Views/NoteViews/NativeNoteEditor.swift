@@ -26,6 +26,7 @@ struct NativeNoteEditor: View {
     @State private var showingGifPicker = false
     @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
+    @State private var showingAISheet = false
     private let saveDebounceInterval: TimeInterval = 0.6
     
     // Reverted: no special iPad width; use full width content.
@@ -84,15 +85,12 @@ struct NativeNoteEditor: View {
                                 .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
                                 .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 16) {
-                                    formattingToolbar
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
+                                formattingToolbar
+                                    .padding(.horizontal, 16)
                             }
                             .clipShape(Capsule())
                         }
-                        .frame(width: pillWidth)
+                        .frame(width: pillWidth, height: 44)
                         Spacer(minLength: 0)
                     }
                     .padding(.bottom, 12)
@@ -154,6 +152,11 @@ struct NativeNoteEditor: View {
                         nativeTextView.insertInlineImage(image, data: data)
                     }
                 }
+            }
+            .sheet(isPresented: $showingAISheet) {
+                NoteAISheet(note: note)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -270,9 +273,6 @@ struct NativeNoteEditor: View {
                     .font(.title2)
                     .foregroundStyle(.primary)
             }
-            
-            
-            Spacer()
         }
     }
     
@@ -285,6 +285,12 @@ struct NativeNoteEditor: View {
             .font(.body)
 
             Spacer()
+
+            Button(action: { showingAISheet = true }) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
 
             Button(action: { shareNote() }) {
                 Image(systemName: "square.and.arrow.up")
@@ -1983,3 +1989,225 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 }
 
 // GIF picker now uses GiphyPicker from Components
+
+struct NoteAISheet: View {
+    let note: Note
+    @Environment(\.dismiss) private var dismiss
+    @State private var isAnalyzing = false
+    @State private var analysisComplete = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+
+                    if !note.suggestedTags.isEmpty {
+                        suggestedTagsSection
+                    } else if isAnalyzing {
+                        analyzingSection
+                    } else if !analysisComplete {
+                        analyzeButton
+                    }
+
+                    if analysisComplete && note.suggestedTags.isEmpty {
+                        noSuggestionsSection
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("AI Assistant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            if note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil {
+                analyzeNote()
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.largeTitle)
+                .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+
+            Text("Note Intelligence")
+                .font(.headline)
+
+            Text("AI-powered suggestions based on your note content")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical)
+    }
+
+    private var suggestedTagsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Suggested Tags", systemImage: "tag")
+                .font(.headline)
+
+            FlowLayout(spacing: 8) {
+                ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { index, tag in
+                    HStack(spacing: 6) {
+                        Text(tag)
+                            .font(.callout)
+
+                        Button {
+                            HapticManager.shared.success()
+                            ModelMutationScheduler.shared.schedule {
+                                note.acceptSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Button {
+                            HapticManager.shared.buttonTapped()
+                            ModelMutationScheduler.shared.schedule {
+                                note.dismissSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+                    .overlay(Capsule().stroke(Color.purple.opacity(0.3), lineWidth: 0.5))
+                }
+            }
+
+            if !note.tags.isEmpty {
+                Divider().padding(.vertical, 8)
+                Label("Current Tags", systemImage: "tag.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 8) {
+                    ForEach(note.tags, id: \.self) { tag in
+                        Text(tag)
+                            .font(.callout)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(.blue.opacity(0.15)))
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var analyzingSection: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Analyzing note content...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 40)
+    }
+
+    private var analyzeButton: some View {
+        Button {
+            analyzeNote()
+        } label: {
+            Label("Analyze Note", systemImage: "wand.and.stars")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private var noSuggestionsSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.title)
+                .foregroundStyle(.green)
+            Text("No suggestions needed")
+                .font(.subheadline)
+            Text("Your note is already well-organized")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 20)
+    }
+
+    private func analyzeNote() {
+        isAnalyzing = true
+        let existingTags = note.tags
+
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            let filteredTags = tags.filter { !existingTags.contains($0) }
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = filteredTags
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+            isAnalyzing = false
+            analysisComplete = true
+        }
+
+        if note.contentEmbedding == nil {
+            let text = "\(note.title) \(note.content)"
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            ModelMutationScheduler.shared.schedule {
+                note.contentEmbedding = embedding
+            }
+        }
+    }
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = arrangeSubviews(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrangeSubviews(proposal: proposal, subviews: subviews)
+        for (index, frame) in result.frames.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: .init(frame.size))
+        }
+    }
+
+    private func arrangeSubviews(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
+        let maxWidth = proposal.width ?? .infinity
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var frames: [CGRect] = []
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+            frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
+            lineHeight = max(lineHeight, size.height)
+            currentX += size.width + spacing
+        }
+
+        let totalHeight = currentY + lineHeight
+        return (CGSize(width: maxWidth, height: totalHeight), frames)
+    }
+}
