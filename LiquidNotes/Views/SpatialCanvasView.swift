@@ -51,17 +51,25 @@ struct SpatialCanvasView: View {
     @State private var showMinimap = true
 
     private var canvasBounds: CGRect {
-        guard !notes.isEmpty else { return CGRect(x: 0, y: 0, width: 800, height: 600) }
-        let minX = notes.map { CGFloat($0.positionX) }.min() ?? 0
-        let maxX = notes.map { CGFloat($0.positionX) + cardWidth }.max() ?? 800
-        let minY = notes.map { CGFloat($0.positionY) }.min() ?? 0
-        let maxY = notes.map { CGFloat($0.positionY) + cardHeight }.max() ?? 600
-        let padding: CGFloat = 200
+        guard !notes.isEmpty else { return CGRect(x: 0, y: 0, width: 1200, height: 1000) }
+
+        let positioned = notes.filter { $0.positionX != 0 || $0.positionY != 0 }
+        guard !positioned.isEmpty else {
+            let cols = 4
+            let rows = max(1, (notes.count + cols - 1) / cols)
+            return CGRect(x: 0, y: 0, width: CGFloat(cols) * 200 + 200, height: CGFloat(rows) * 220 + 200)
+        }
+
+        let minX = positioned.map { CGFloat($0.positionX) }.min() ?? 0
+        let maxX = positioned.map { CGFloat($0.positionX) + cardWidth }.max() ?? 800
+        let minY = positioned.map { CGFloat($0.positionY) }.min() ?? 0
+        let maxY = positioned.map { CGFloat($0.positionY) + cardHeight }.max() ?? 600
+        let padding: CGFloat = 300
         return CGRect(
-            x: minX - padding,
-            y: minY - padding,
-            width: max(800, maxX - minX + padding * 2),
-            height: max(600, maxY - minY + padding * 2)
+            x: min(0, minX - padding),
+            y: min(0, minY - padding),
+            width: max(1200, maxX - minX + padding * 2),
+            height: max(1000, maxY - minY + padding * 2)
         )
     }
 
@@ -77,7 +85,8 @@ struct SpatialCanvasView: View {
                         NoteConnectionsView(notes: notes, cardWidth: cardWidth, cardHeight: cardHeight, offset: CGPoint(x: -canvasBounds.minX, y: -canvasBounds.minY))
                             .scaleEffect(zoomScale, anchor: .topLeading)
 
-                        ForEach(notes, id: \.id) { note in
+                        ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                            let notePos = effectivePosition(for: note, at: index)
                             GridNoteCard(
                                 note: note,
                                 selectionMode: selectionMode,
@@ -87,9 +96,10 @@ struct SpatialCanvasView: View {
                                 onFavorite: { onFavorite(note) },
                                 onMoveRequest: { movedNote, translation in
                                     let currentZoom = zoomScale
+                                    let currentPos = effectivePosition(for: movedNote, at: index)
                                     ModelMutationScheduler.shared.schedule {
-                                        var newX = movedNote.positionX + Float(translation.x / currentZoom)
-                                        var newY = movedNote.positionY + Float(translation.y / currentZoom)
+                                        var newX = Float(currentPos.x) + Float(translation.x / currentZoom)
+                                        var newY = Float(currentPos.y) + Float(translation.y / currentZoom)
                                         if magneticClustering {
                                             (newX, newY) = applyMagneticSnap(noteID: movedNote.id, x: newX, y: newY)
                                         }
@@ -104,8 +114,8 @@ struct SpatialCanvasView: View {
                                 cardHeight: cardHeight
                             )
                             .position(
-                                x: (CGFloat(note.positionX) - canvasBounds.minX + cardWidth / 2) * zoomScale,
-                                y: (CGFloat(note.positionY) - canvasBounds.minY + cardHeight / 2) * zoomScale
+                                x: (notePos.x - canvasBounds.minX + cardWidth / 2) * zoomScale,
+                                y: (notePos.y - canvasBounds.minY + cardHeight / 2) * zoomScale
                             )
                         }
                     }
@@ -161,22 +171,34 @@ struct SpatialCanvasView: View {
         .onDisappear { zoomIndicatorTimer?.invalidate() }
     }
 
+    private func effectivePosition(for note: Note, at index: Int) -> CGPoint {
+        if note.positionX != 0 || note.positionY != 0 {
+            return CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
+        }
+        let columns = 4
+        let spacingX: CGFloat = cardWidth + 16
+        let spacingY: CGFloat = cardHeight + 16
+        let col = index % columns
+        let row = index / columns
+        return CGPoint(x: CGFloat(col) * spacingX + 50, y: CGFloat(row) * spacingY + 50)
+    }
+
     private func assignInitialPositionsIfNeeded() {
         let unpositioned = notes.filter { $0.positionX == 0 && $0.positionY == 0 }
         guard !unpositioned.isEmpty else { return }
 
         let columns = 4
-        let spacing: Float = 200
-        var index = notes.count - unpositioned.count
+        let spacingX: Float = Float(cardWidth) + 16
+        let spacingY: Float = Float(cardHeight) + 16
 
-        for note in unpositioned {
-            let col = index % columns
-            let row = index / columns
+        for (i, note) in unpositioned.enumerated() {
+            let globalIndex = notes.count - unpositioned.count + i
+            let col = globalIndex % columns
+            let row = globalIndex / columns
             ModelMutationScheduler.shared.schedule {
-                note.positionX = Float(col) * spacing + 100
-                note.positionY = Float(row) * spacing + 100
+                note.positionX = Float(col) * spacingX + 50
+                note.positionY = Float(row) * spacingY + 50
             }
-            index += 1
         }
     }
 
