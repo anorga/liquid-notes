@@ -73,21 +73,30 @@ struct NativeNoteEditor: View {
                         
                     }
                 }
-                // Floating, centered tool picker (iPad + iPhone) constrained within editor bounds
+                // Floating, centered tool picker (iPad + iPhone) constrained within editor bounds.
+                // The pill stays centered and fixed; only the contents scroll when overflowing.
                 .overlay(alignment: .bottom) {
+                    let w = geometry.size.width
+                    let pillWidth = max(240, min(w - 48, 740))
                     HStack {
                         Spacer(minLength: 0)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            formattingToolbar
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Capsule().fill(.thinMaterial))
+                        ZStack {
+                            Capsule()
+                                .fill(.thinMaterial)
                                 .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
                                 .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 16) {
+                                    formattingToolbar
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                            }
+                            .clipShape(Capsule())
                         }
+                        .frame(width: pillWidth)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 12)
                     .padding(.bottom, 12)
                 }
             }
@@ -119,6 +128,9 @@ struct NativeNoteEditor: View {
                 if let nativeTextView = textView as? NativeTextView {
                     nativeTextView.pauseGIFAnimations()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                saveIfNeeded()
             }
             .sheet(isPresented: $showingShareSheet) {
                 ShareSheet(activityItems: [shareItem])
@@ -668,47 +680,63 @@ struct NativeTextCanvas: UIViewRepresentable {
         for i in 0..<count {
             let range = attachmentRanges[i]
             guard let old = mutable.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment else { continue }
-            // Load corresponding file data
             let id = note.fileAttachmentIDs[i]
             let type = i < note.fileAttachmentTypes.count ? note.fileAttachmentTypes[i] : "image/jpeg"
             let fileName = i < note.fileAttachmentNames.count ? note.fileAttachmentNames[i] : ""
-            var data: Data? = nil
-            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty {
-                let url = dir.appendingPathComponent(fileName)
-                data = try? Data(contentsOf: url)
-            }
-            // Build interactive attachment
+
+            // Build interactive attachment without blocking for I/O
             let newAttachment = InteractiveTextAttachment()
             newAttachment.note = note
             newAttachment.attachmentID = id
-            if type.hasPrefix("image"), let d = data {
-                // GIF support
-                if type == "image/gif", let animated = animatedImage(fromGIFData: d) {
-                    newAttachment.image = animated
-                } else if let img = UIImage(data: d) {
-                    newAttachment.image = img
-                } else if let img = old.image { // fallback
-                    newAttachment.image = img
-                }
-                newAttachment.imageData = d
-            } else if let img = old.image {
-                newAttachment.image = img
-            }
-            // Determine intrinsic size
-            var size = newAttachment.image?.size ?? old.image?.size ?? CGSize(width: 200, height: 200)
-            // Scale
+
+            // Use any existing image immediately to avoid stalls
+            if let img = old.image { newAttachment.image = img }
+
+            // Set an initial size from available image or a placeholder
+            var size = newAttachment.image?.size ?? CGSize(width: 200, height: 200)
             if size.width > maxWidth || size.height > maxHeight {
                 let scale = min(maxWidth / max(size.width, 1), maxHeight / max(size.height, 1))
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
-            if size.width < minWidth { // upscale very small icons
+            if size.width < minWidth {
                 let scale = minWidth / max(size.width, 1)
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
             newAttachment.bounds = CGRect(x: 0, y: -5, width: size.width, height: size.height)
-            // Replace in attributed string
+
+            // Replace inline immediately
             let replacement = NSAttributedString(attachment: newAttachment)
             mutable.replaceCharacters(in: range, with: replacement)
+
+            // Load actual file data off the main thread and update the attachment when ready
+            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty, type.hasPrefix("image") {
+                let url = dir.appendingPathComponent(fileName)
+                DispatchQueue.global(qos: .userInitiated).async { [weak textView] in
+                    autoreleasepool {
+                    guard let data = try? Data(contentsOf: url) else { return }
+                    var nextImage: UIImage? = nil
+                    if type == "image/gif", let animated = animatedImage(fromGIFData: data) { nextImage = animated }
+                    else { nextImage = UIImage(data: data) }
+                    guard let img = nextImage else { return }
+                    // Compute scaled bounds
+                    var scaled = img.size
+                    if scaled.width > maxWidth || scaled.height > maxHeight {
+                        let scale = min(maxWidth / max(scaled.width, 1), maxHeight / max(scaled.height, 1))
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    if scaled.width < minWidth {
+                        let scale = minWidth / max(scaled.width, 1)
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    DispatchQueue.main.async {
+                        newAttachment.image = img
+                        newAttachment.imageData = data
+                        newAttachment.bounds = CGRect(x: 0, y: -5, width: scaled.width, height: scaled.height)
+                        textView?.setNeedsDisplay()
+                    }
+                    }
+                }
+            }
         }
     }
 }
@@ -718,13 +746,23 @@ class NativeTextView: UITextView, UITextViewDelegate {
     var hasChangesBinding: Binding<Bool>?
     var modelContext: ModelContext?
     private var debounceInterval: TimeInterval {
-        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { return 1.2 }
-        return 0.6
+        // Slow down autosave shortly after media insertion
+        var base: TimeInterval = 0.6
+        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { base = 1.5 }
+        // Scale with document length to avoid heavy work during rapid typing on large notes
+        let len = attributedText?.length ?? 0
+        if len > 10_000 { base = max(base, 1.4) }
+        else if len > 5_000 { base = max(base, 1.0) }
+        return base
     }
     private var recentMediaInsertionDate: Date = .distantPast
     private var lastScheduledItemKey = "LNTextSaveWorkItem"
     private static var workItems: [String: DispatchWorkItem] = [:]
-    
+    // Save rate limiting
+    private let minimumSaveSpacing: TimeInterval = 2.0
+    private var lastSavedAt: CFTimeInterval = 0
+    // Attachment change gating for preview broadcasts
+    fileprivate var attachmentsMutated: Bool = false
     
     @objc func requestInsertSketch() {
         NotificationCenter.default.post(name: .lnRequestInsertSketch, object: nil)
@@ -818,9 +856,12 @@ class NativeTextView: UITextView, UITextViewDelegate {
         }
         // Remove any fileAttachmentIDs not present
         let existing = note.fileAttachmentIDs
+        var removed = false
         for id in existing where !presentIDs.contains(id) {
             note.removeFileAttachment(id: id)
+            removed = true
         }
+        if removed { attachmentsMutated = true }
     }
 
     func scheduleDebouncedSave() {
@@ -830,6 +871,17 @@ class NativeTextView: UITextView, UITextViewDelegate {
         if let existing = NativeTextView.workItems[key] { existing.cancel() }
         let item = DispatchWorkItem { [weak self] in
             guard let self, let ctx = self.modelContext else { return }
+            // Enforce minimum spacing between heavy saves
+            let now = CACurrentMediaTime()
+            let delta = now - self.lastSavedAt
+            if delta < self.minimumSaveSpacing {
+                let delay = self.minimumSaveSpacing - delta
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.scheduleDebouncedSave()
+                }
+                return
+            }
+            self.lastSavedAt = now
             let attributed = self.attributedText ?? NSAttributedString(string: self.text ?? "")
             // Extract plain text quickly (skip attachments replaced by newline)
             var plainBuilder = ""
@@ -853,7 +905,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
                     DispatchQueue.main.async {
                         if hash != note.richTextHash { note.richTextData = data; note.richTextHash = hash }
                         try? ctx.save()
-                        NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                        // Only broadcast if attachments changed recently
+                        if self.attachmentsMutated {
+                            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                            self.attachmentsMutated = false
+                        }
                     }
                 }
             }
@@ -864,8 +920,16 @@ class NativeTextView: UITextView, UITextViewDelegate {
 
     func broadcastLivePreviewUpdate() {
         guard let note else { return }
+        // Throttle and gate: only broadcast on attachment mutations or after longer idle window
+        let now = CACurrentMediaTime()
+        let minInterval: CFTimeInterval = attachmentsMutated ? 0.5 : 1.5
+        if now - lastBroadcastTime < minInterval { return }
+        lastBroadcastTime = now
         NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+        attachmentsMutated = false
     }
+
+    private var lastBroadcastTime: CFTimeInterval = 0
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         return super.canPerformAction(action, withSender: sender) || 
@@ -1225,6 +1289,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         }
     if isGIF { attachment.configureGIFAnimation(with: data, in: self) }
     recentMediaInsertionDate = Date()
+    attachmentsMutated = true
     }
     
     func insertInlineFile(_ url: URL) {
@@ -1257,6 +1322,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         // Sync with note model
         hasChangesBinding?.wrappedValue = true
+        attachmentsMutated = true
     }
     
     private func createFileIcon(for fileExtension: String) -> UIImage {
@@ -1607,12 +1673,17 @@ class InteractiveTextAttachment: NSTextAttachment {
         return bounds
     }
     
+    fileprivate var compositeCache: UIImage?
+    fileprivate var compositeCacheSize: CGSize = .zero
+    
     override func image(forBounds imageBounds: CGRect, textContainer: NSTextContainer?, characterIndex charIndex: Int) -> UIImage? {
-        // Add delete button overlay for images
-        if let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) {
-            return addDeleteButton(to: baseImage)
-        }
-        return image
+        // Cache the composited overlay image at the requested size to avoid repeated redraws
+        if let cached = compositeCache, compositeCacheSize.equalTo(imageBounds.size) { return cached }
+        guard let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) else { return image }
+        let composited = addDeleteButton(to: baseImage)
+        compositeCache = composited
+        compositeCacheSize = imageBounds.size
+        return composited
     }
     
     private func addDeleteButton(to baseImage: UIImage) -> UIImage {
@@ -1644,6 +1715,14 @@ class InteractiveTextAttachment: NSTextAttachment {
             context.cgContext.addLine(to: CGPoint(x: buttonFrame.minX + inset, y: buttonFrame.maxY - inset))
             context.cgContext.strokePath()
         }
+    }
+    
+    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
+        // Invalidate composite cache when size changes
+        if !compositeCacheSize.equalTo(bounds.size) {
+            compositeCache = nil
+        }
+        return bounds
     }
     
     // Handle tap on attachment
@@ -1689,6 +1768,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.hasChangesBinding?.wrappedValue = true
+            nativeTextView.attachmentsMutated = true
         }
     }
 
@@ -1719,10 +1799,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         guard gifFrames.count > 1, gifDisplayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
         
-        Task { @MainActor in
-            let optimizer = PerformanceOptimizer.shared
-            link.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 12 : 20
-        }
+        link.preferredFramesPerSecond = 8
         
         if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
             return
@@ -1749,12 +1826,10 @@ class InteractiveTextAttachment: NSTextAttachment {
             gifCurrentIndex = (gifCurrentIndex + frameSkip) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
             
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self,
-                      let tv = self.hostingTextView,
-                      let lm = tv.layoutManager as NSLayoutManager?,
-                      let full = tv.attributedText else { return }
-                
+            // CADisplayLink runs on main; invalidate display inline to avoid extra dispatch overhead
+            if let tv = self.hostingTextView,
+               let lm = tv.layoutManager as NSLayoutManager?,
+               let full = tv.attributedText {
                 let searchRange = NSRange(location: 0, length: full.length)
                 var targetRange: NSRange?
                 full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
@@ -1763,9 +1838,7 @@ class InteractiveTextAttachment: NSTextAttachment {
                         stop.pointee = true
                     }
                 }
-                if let r = targetRange {
-                    lm.invalidateDisplay(forCharacterRange: r)
-                }
+                if let r = targetRange { lm.invalidateDisplay(forCharacterRange: r) }
             }
             break
         }
