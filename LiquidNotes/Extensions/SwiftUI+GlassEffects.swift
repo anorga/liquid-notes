@@ -83,11 +83,74 @@ extension View {
     }
 }
 
+// MARK: - Motion-Responsive Effects
+
+struct ParallaxModifier: ViewModifier {
+    @ObservedObject private var motionManager = MotionManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    let intensity: CGFloat
+
+    func body(content: Content) -> some View {
+        let motion = motionManager.normalizedMotionValues()
+        let offsetX = themeManager.isMotionAllowed ? motion.x * intensity : 0
+        let offsetY = themeManager.isMotionAllowed ? motion.y * intensity : 0
+
+        content
+            .offset(x: offsetX, y: offsetY)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: offsetX)
+            .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8), value: offsetY)
+            .onAppear {
+                if themeManager.isMotionAllowed {
+                    motionManager.startTracking()
+                }
+            }
+    }
+}
+
+struct GlassShimmerModifier: ViewModifier {
+    @ObservedObject private var motionManager = MotionManager.shared
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    func body(content: Content) -> some View {
+        let motion = motionManager.normalizedMotionValues()
+        let shimmerX = themeManager.isMotionAllowed ? 0.3 + motion.x * 0.2 : 0.3
+        let shimmerY = themeManager.isMotionAllowed ? 0.1 + motion.y * 0.15 : 0.1
+
+        content
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(themeManager.isMotionAllowed ? 0.25 : 0),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: UnitPoint(x: shimmerX, y: shimmerY),
+                    endPoint: UnitPoint(x: shimmerX + 0.5, y: shimmerY + 0.5)
+                )
+                .blendMode(.overlay)
+                .allowsHitTesting(false)
+            )
+            .animation(.easeInOut(duration: 0.2), value: shimmerX)
+            .onAppear {
+                if themeManager.isMotionAllowed {
+                    motionManager.startTracking()
+                }
+            }
+    }
+}
+
+extension View {
+    func parallaxEffect(intensity: CGFloat = 8) -> some View {
+        modifier(ParallaxModifier(intensity: intensity))
+    }
+
+    func glassShimmer() -> some View {
+        modifier(GlassShimmerModifier())
+    }
+}
+
 // MARK: - Refined Clear Glass (modernized)
 extension View {
-    // Removed refinedClearGlass and subtleParallax (native style enforced)
-
-    // Reusable subtle liquid border (hairline) for small components (chips, icons)
     func liquidBorderHairline(cornerRadius: CGFloat = 12) -> some View {
         let theme = ThemeManager.shared
         let combined = theme.noteGlassDepth * theme.glassOpacity

@@ -384,6 +384,8 @@ private struct GridNoteCard: View {
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
         .opacity(note.isArchived ? 0.45 : 1.0)
         .saturation(note.isArchived ? 0.4 : 1.0)
+        .parallaxEffect(intensity: 6)
+        .glassShimmer()
         .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
         .onTapGesture { 
             if selectionMode { 
