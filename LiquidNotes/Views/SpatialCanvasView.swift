@@ -45,48 +45,24 @@ struct SpatialCanvasView: View {
     @State private var pinchAnchorPoint: CGPoint = .zero
     @State private var lastSnappedDetent: CGFloat?
     
-    private let cardWidth: CGFloat = 180
-    private let cardHeight: CGFloat = 190
-    @AppStorage("spatialMagneticClustering") private var magneticClustering = false
-    @State private var showMinimap = true
-
-    private var canvasBounds: CGRect {
-        guard !notes.isEmpty else { return CGRect(x: 0, y: 0, width: 1200, height: 1000) }
-
-        let positioned = notes.filter { $0.positionX != 0 || $0.positionY != 0 }
-        guard !positioned.isEmpty else {
-            let cols = 4
-            let rows = max(1, (notes.count + cols - 1) / cols)
-            return CGRect(x: 0, y: 0, width: CGFloat(cols) * 200 + 200, height: CGFloat(rows) * 220 + 200)
-        }
-
-        let minX = positioned.map { CGFloat($0.positionX) }.min() ?? 0
-        let maxX = positioned.map { CGFloat($0.positionX) + cardWidth }.max() ?? 800
-        let minY = positioned.map { CGFloat($0.positionY) }.min() ?? 0
-        let maxY = positioned.map { CGFloat($0.positionY) + cardHeight }.max() ?? 600
-        let padding: CGFloat = 300
-        return CGRect(
-            x: min(0, minX - padding),
-            y: min(0, minY - padding),
-            width: max(1200, maxX - minX + padding * 2),
-            height: max(1000, maxY - minY + padding * 2)
-        )
+    private let gapSpacing: CGFloat = 12
+    private var targetColumns: Int {
+        horizontalSizeClass == .regular ? 4 : 2
+    }
+    @State private var computedCardWidth: CGFloat = 160
+    private var cardBaseHeight: CGFloat {
+        horizontalSizeClass == .regular ? 210 : 190
+    }
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 60), spacing: gapSpacing, alignment: .topLeading), count: targetColumns)
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                ScrollView([.horizontal, .vertical], showsIndicators: false) {
-                    ZStack(alignment: .topLeading) {
-                        Rectangle()
-                            .fill(Color.clear)
-                            .frame(width: canvasBounds.width * zoomScale, height: canvasBounds.height * zoomScale)
-
-                        NoteConnectionsView(notes: notes, cardWidth: cardWidth, cardHeight: cardHeight, offset: CGPoint(x: -canvasBounds.minX, y: -canvasBounds.minY))
-                            .scaleEffect(zoomScale, anchor: .topLeading)
-
-                        ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
-                            let notePos = effectivePosition(for: note, at: index)
+        ZStack {
+            GeometryReader { geometry in
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gapSpacing) {
+                        ForEach(notes, id: \.id) { note in
                             GridNoteCard(
                                 note: note,
                                 selectionMode: selectionMode,
@@ -96,74 +72,65 @@ struct SpatialCanvasView: View {
                                 onFavorite: { onFavorite(note) },
                                 onMoveRequest: { movedNote, translation in
                                     let currentZoom = zoomScale
-                                    let currentPos = effectivePosition(for: movedNote, at: index)
                                     ModelMutationScheduler.shared.schedule {
-                                        var newX = Float(currentPos.x) + Float(translation.x / currentZoom)
-                                        var newY = Float(currentPos.y) + Float(translation.y / currentZoom)
-                                        if magneticClustering {
-                                            (newX, newY) = applyMagneticSnap(noteID: movedNote.id, x: newX, y: newY)
-                                        }
-                                        movedNote.positionX = newX
-                                        movedNote.positionY = newY
+                                        movedNote.positionX += Float(translation.x / currentZoom)
+                                        movedNote.positionY += Float(translation.y / currentZoom)
                                         movedNote.updateModifiedDate()
                                         HapticManager.shared.noteMoved()
                                     }
                                 },
                                 onToggleSelect: { onToggleSelect(note) },
-                                cardWidth: cardWidth,
-                                cardHeight: cardHeight
-                            )
-                            .position(
-                                x: (notePos.x - canvasBounds.minX + cardWidth / 2) * zoomScale,
-                                y: (notePos.y - canvasBounds.minY + cardHeight / 2) * zoomScale
+                                cardWidth: computedCardWidth,
+                                cardHeight: cardBaseHeight
                             )
                         }
                     }
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: ContentSizeKey.self, value: proxy.size)
+                        }
+                    )
+                    .padding(.horizontal, gapSpacing)
                     .padding(.top, topContentInset)
+                    .padding(.bottom, 12)
                 }
+                .scaleEffect(zoomScale, anchor: .center)
+                .offset(canvasOffset)
                 .gesture(pinchGesture)
                 .onTapGesture(count: 2) { resetZoom() }
+                .onPreferenceChange(ContentSizeKey.self) { size in
+                    guard !isPinching else { return }
+                    guard size != contentSize else { return }
+                    contentSize = size
+                }
                 .onAppear {
                     viewportSize = geometry.size
-                    assignInitialPositionsIfNeeded()
+                    recalcCardWidth(totalWidth: geometry.size.width)
                 }
                 .onChange(of: geometry.size) { _, newSize in
                     viewportSize = newSize
+                    recalcCardWidth(totalWidth: newSize.width)
                 }
-
-                if showZoomIndicator {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            ZoomIndicator(scale: zoomScale)
-                                .padding()
-                                .transition(.asymmetric(
-                                    insertion: .scale.combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-                        Spacer()
-                    }
-                    .allowsHitTesting(false)
+                .onChange(of: horizontalSizeClass) { _, _ in
+                    recalcCardWidth(totalWidth: geometry.size.width)
                 }
+            }
 
-                if showMinimap && notes.count > 3 {
-                    VStack {
+            if showZoomIndicator {
+                VStack {
+                    HStack {
                         Spacer()
-                        HStack {
-                            Spacer()
-                            CanvasMinimap(
-                                notes: notes,
-                                canvasBounds: canvasBounds,
-                                viewportSize: viewportSize,
-                                zoomScale: zoomScale,
-                                cardWidth: cardWidth,
-                                cardHeight: cardHeight
-                            )
+                        ZoomIndicator(scale: zoomScale)
                             .padding()
-                        }
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .opacity
+                            ))
                     }
+                    Spacer()
                 }
+                .allowsHitTesting(false)
             }
         }
         .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: zoomScale)
@@ -171,65 +138,13 @@ struct SpatialCanvasView: View {
         .onDisappear { zoomIndicatorTimer?.invalidate() }
     }
 
-    private func effectivePosition(for note: Note, at index: Int) -> CGPoint {
-        if note.positionX != 0 || note.positionY != 0 {
-            return CGPoint(x: CGFloat(note.positionX), y: CGFloat(note.positionY))
-        }
-        let columns = 4
-        let spacingX: CGFloat = cardWidth + 16
-        let spacingY: CGFloat = cardHeight + 16
-        let col = index % columns
-        let row = index / columns
-        return CGPoint(x: CGFloat(col) * spacingX + 50, y: CGFloat(row) * spacingY + 50)
-    }
-
-    private func assignInitialPositionsIfNeeded() {
-        let unpositioned = notes.filter { $0.positionX == 0 && $0.positionY == 0 }
-        guard !unpositioned.isEmpty else { return }
-
-        let columns = 4
-        let spacingX: Float = Float(cardWidth) + 16
-        let spacingY: Float = Float(cardHeight) + 16
-
-        for (i, note) in unpositioned.enumerated() {
-            let globalIndex = notes.count - unpositioned.count + i
-            let col = globalIndex % columns
-            let row = globalIndex / columns
-            ModelMutationScheduler.shared.schedule {
-                note.positionX = Float(col) * spacingX + 50
-                note.positionY = Float(row) * spacingY + 50
-            }
-        }
-    }
-
-    private func applyMagneticSnap(noteID: UUID, x: Float, y: Float) -> (Float, Float) {
-        let snapDistance: Float = 30
-        var resultX = x
-        var resultY = y
-
-        for note in notes where note.id != noteID {
-            let dx = note.positionX - x
-            let dy = note.positionY - y
-
-            if abs(dx) < snapDistance && abs(dx) > 0 {
-                resultX = note.positionX
-            }
-            if abs(dy) < snapDistance && abs(dy) > 0 {
-                resultY = note.positionY
-            }
-
-            let rightEdgeSnap = note.positionX + Float(cardWidth) + 12 - x
-            if abs(rightEdgeSnap) < snapDistance {
-                resultX = note.positionX + Float(cardWidth) + 12
-            }
-
-            let bottomEdgeSnap = note.positionY + Float(cardHeight) + 12 - y
-            if abs(bottomEdgeSnap) < snapDistance {
-                resultY = note.positionY + Float(cardHeight) + 12
-            }
-        }
-
-        return (resultX, resultY)
+    private func recalcCardWidth(totalWidth: CGFloat) {
+        let inner = totalWidth - (gapSpacing * 2)
+        guard inner > 0 else { return }
+        let raw = (inner - CGFloat(targetColumns - 1) * gapSpacing) / CGFloat(targetColumns)
+        let scale = UIScreen.main.scale
+        let rounded = floor(raw * scale) / scale
+        if abs(rounded - computedCardWidth) > 0.5 { computedCardWidth = rounded }
     }
     
     private var pinchGesture: some Gesture {
@@ -455,8 +370,6 @@ private struct GridNoteCard: View {
         .shadow(color: .black.opacity(isDragging ? 0.15 : 0.08), radius: isDragging ? 12 : 8, x: 0, y: isDragging ? 8 : 4)
         .opacity(note.isArchived ? 0.45 : 1.0)
         .saturation(note.isArchived ? 0.4 : 1.0)
-        .parallaxEffect(intensity: 6)
-        .glassShimmer()
         .animation(themeManager.reduceMotion ? nil : .easeInOut(duration: 0.45), value: themeManager.currentTheme)
         .onTapGesture { 
             if selectionMode { 
