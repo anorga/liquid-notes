@@ -19,6 +19,9 @@ struct MainTabView: View {
     @State private var createAndLinkObserver: NSObjectProtocol?
     @State private var quickTaskObserver: NSObjectProtocol?
     @State private var openTasksObserver: NSObjectProtocol?
+    @State private var intentOpenNoteObserver: NSObjectProtocol?
+    @State private var intentSearchObserver: NSObjectProtocol?
+    @State private var intentFavoritesObserver: NSObjectProtocol?
     @State private var notesViewModel: NotesViewModel?
     @State private var selectedNote: Note?
     struct NoteRef: Identifiable { let id: UUID }
@@ -40,10 +43,14 @@ struct MainTabView: View {
     .onAppear { registerCreateAndLinkObserver() }
     .onAppear { registerQuickTaskObserver() }
     .onAppear { registerOpenTasksObserver() }
+    .onAppear { registerIntentObservers() }
     .onDisappear { if let obs = openNoteObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = createAndLinkObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = quickTaskObserver { NotificationCenter.default.removeObserver(obs) } }
     .onDisappear { if let obs = openTasksObserver { NotificationCenter.default.removeObserver(obs) } }
+    .onDisappear { if let obs = intentOpenNoteObserver { NotificationCenter.default.removeObserver(obs) } }
+    .onDisappear { if let obs = intentSearchObserver { NotificationCenter.default.removeObserver(obs) } }
+    .onDisappear { if let obs = intentFavoritesObserver { NotificationCenter.default.removeObserver(obs) } }
     // Command system removed
     // Removed reindex trigger (simplification)
         // iPhone: sheet; iPad: sheet (reverted to original size)
@@ -232,6 +239,37 @@ private extension MainTabView {
             if let idStr = notif.object as? String, let uuid = UUID(uuidString: idStr) {
                 NotificationCenter.default.post(name: .focusTask, object: uuid)
             }
+        }
+    }
+
+    func registerIntentObservers() {
+        intentOpenNoteObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("OpenNoteFromIntent"),
+            object: nil,
+            queue: .main
+        ) { notif in
+            guard let idString = notif.userInfo?["noteID"] as? String,
+                  let uuid = UUID(uuidString: idString) else { return }
+            let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == uuid })
+            if let note = try? modelContext.fetch(descriptor).first {
+                selectedNote = note
+            }
+        }
+
+        intentSearchObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SearchNotesFromIntent"),
+            object: nil,
+            queue: .main
+        ) { notif in
+            selectedTab = 2
+        }
+
+        intentFavoritesObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("ShowFavoritesFromIntent"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            selectedTab = 1
         }
     }
 }
