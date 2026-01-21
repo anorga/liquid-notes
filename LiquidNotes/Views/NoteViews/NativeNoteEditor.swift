@@ -1722,10 +1722,6 @@ class InteractiveTextAttachment: NSTextAttachment {
     fileprivate weak var hostingTextView: UITextView?
     fileprivate var gifAccumulated: Double = 0
     
-    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
-        return bounds
-    }
-    
     fileprivate var compositeCache: UIImage?
     fileprivate var compositeCacheSize: CGSize = .zero
     

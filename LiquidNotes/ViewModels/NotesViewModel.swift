@@ -175,11 +175,16 @@ class NotesViewModel {
 
     func updateNoteEmbedding(_ note: Note) {
         let text = "\(note.title) \(note.content)"
-        backgroundQueue.async {
+        let noteID = note.id
+        backgroundQueue.async { [weak self] in
             let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
             DispatchQueue.main.async {
-                ModelMutationScheduler.shared.schedule {
-                    note.contentEmbedding = embedding
+                guard let self = self else { return }
+                let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == noteID })
+                if let fetchedNote = try? self.modelContext.fetch(descriptor).first {
+                    ModelMutationScheduler.shared.schedule {
+                        fetchedNote.contentEmbedding = embedding
+                    }
                 }
             }
         }

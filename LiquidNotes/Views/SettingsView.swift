@@ -21,6 +21,7 @@ struct SettingsView: View {
 
                         VStack(spacing: 24) {
                             themeSection
+                            canvasSection
                             archiveSection
                             productivitySection
                             analyticsSection
@@ -65,8 +66,30 @@ struct SettingsView: View {
     }
 
     private var archiveSection: some View {
-    // Simplified per feedback: removed inline archive visibility / swipe / undo options
-    EmptyView()
+        EmptyView()
+    }
+
+    @AppStorage("spatialMagneticClustering") private var magneticClustering = false
+
+    private var canvasSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Canvas", systemImage: "rectangle.on.rectangle.angled")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 0) {
+                SettingToggle(
+                    title: "Magnetic Clustering",
+                    description: "Notes snap to align with nearby notes",
+                    icon: "magnet",
+                    isOn: $magneticClustering
+                )
+            }
+        }
+        .padding()
+        .background(.clear)
+        .premiumGlassCard()
     }
     
     private var themeSection: some View {
