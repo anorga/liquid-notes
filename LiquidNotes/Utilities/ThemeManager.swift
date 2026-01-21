@@ -78,11 +78,21 @@ class ThemeManager: ObservableObject {
     @Published var themeOverlayPinned: Bool = false
     @Published var dynamicTagCycling: Bool = true
 
-    // New appearance options
-    // Parallax always off per simplification
-    @Published var noteParallax: Bool = false
-    @Published var noteGlassDepth: Double { // 0 = subtle, 1 = vivid
+    @Published var noteParallax: Bool {
+        didSet { UserDefaults.standard.set(noteParallax, forKey: "noteParallax") }
+    }
+    @Published var noteGlassDepth: Double {
         didSet { UserDefaults.standard.set(noteGlassDepth, forKey: "noteGlassDepth") }
+    }
+
+    private var accessibilityObserver: Any?
+    private var thermalObserver: Any?
+
+    var isMotionAllowed: Bool {
+        guard noteParallax else { return false }
+        if UIAccessibility.isReduceMotionEnabled { return false }
+        if ProcessInfo.processInfo.thermalState == .critical || ProcessInfo.processInfo.thermalState == .serious { return false }
+        return true
     }
     // Minimal mode removed; native visuals are always on
     // Solid tag accent option removed; always false (use gradients)
@@ -137,13 +147,45 @@ class ThemeManager: ObservableObject {
     self.animateGradients = true
     self.themeOverlayPinned = false
     self.dynamicTagCycling = true
-    self.noteParallax = false
+    self.noteParallax = UserDefaults.standard.object(forKey: "noteParallax") as? Bool ?? false
     self.noteGlassDepth = UserDefaults.standard.object(forKey: "noteGlassDepth") as? Double ?? 0.75
-    // minimalMode deprecated
     self.tagAccentSolid = false
     self.showAdvancedGlass = UserDefaults.standard.object(forKey: "showAdvancedGlass") as? Bool ?? false
     self.lastDarkThemeRaw = UserDefaults.standard.string(forKey: "lastDarkTheme")
-    // preferNativeGlass deprecated
+
+        setupAccessibilityObserver()
+        setupThermalObserver()
+    }
+
+    private func setupAccessibilityObserver() {
+        accessibilityObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.objectWillChange.send()
+            if UIAccessibility.isReduceMotionEnabled {
+                MotionManager.shared.stopTracking()
+            } else if self?.noteParallax == true {
+                MotionManager.shared.startTracking()
+            }
+        }
+    }
+
+    private func setupThermalObserver() {
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.objectWillChange.send()
+            let state = ProcessInfo.processInfo.thermalState
+            if state == .critical || state == .serious {
+                MotionManager.shared.stopTracking()
+            } else if self?.noteParallax == true && !UIAccessibility.isReduceMotionEnabled {
+                MotionManager.shared.startTracking()
+            }
+        }
     }
     
     func applyTheme(_ theme: GlassTheme) {

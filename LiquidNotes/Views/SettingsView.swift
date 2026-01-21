@@ -125,7 +125,7 @@ struct SettingsView: View {
                     Text("Glass Intensity")
                 }
                 .tint(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
-                
+
                 HStack {
                     Text("Subtle")
                         .font(.caption2)
@@ -135,7 +135,37 @@ struct SettingsView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                // Removed unused spacing from prior setting
+            }
+
+            Divider().padding(.vertical, 8)
+
+            SettingToggle(
+                title: "Motion Parallax",
+                description: "Cards shift subtly with device tilt",
+                icon: "gyroscope",
+                isOn: Binding(
+                    get: { themeManager.noteParallax },
+                    set: { newVal in
+                        themeManager.noteParallax = newVal
+                        if newVal && themeManager.isMotionAllowed {
+                            MotionManager.shared.startTracking()
+                        } else {
+                            MotionManager.shared.stopTracking()
+                        }
+                    }
+                )
+            )
+
+            if themeManager.noteParallax && UIAccessibility.isReduceMotionEnabled {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text("Reduce Motion is enabled in system settings")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 48)
             }
         }
         .padding()
