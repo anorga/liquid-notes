@@ -229,6 +229,7 @@ struct DiscoveryContent: View {
                     SearchTip(text: "Operators: is:fav has:task is:overdue priority:high progress:>50")
                     SearchTip(text: "Filter by tags: #tag, multiple tags require all; add tag:any to match any")
                     SearchTip(text: "Due date: due:2025-09-01 (YYYY-MM-DD)")
+                    SearchTip(text: "Semantic search: ~keyword finds conceptually similar notes")
                 }
             }
             .padding(.horizontal)
