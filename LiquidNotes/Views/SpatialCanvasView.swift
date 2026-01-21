@@ -739,10 +739,7 @@ class GIFAnimator: NSObject {
         }
         
         let displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
-        Task { @MainActor in
-            let optimizer = PerformanceOptimizer.shared
-            displayLink.preferredFramesPerSecond = optimizer.shouldReduceGIFFrameRate ? 5 : 10
-        }
+        displayLink.preferredFramesPerSecond = 5
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
     }
