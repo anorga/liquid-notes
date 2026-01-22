@@ -1995,23 +1995,28 @@ struct NoteAISheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isAnalyzing = false
     @State private var analysisComplete = false
+    @State private var textStats: NoteIntelligenceService.TextStatistics?
+    @State private var keySentences: [String] = []
+    @State private var readabilityScore: (score: Double, level: String)?
+    @State private var spellingIssues: [String] = []
+    @State private var selectedSection: Int = 0
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 16) {
                     headerSection
+                    sectionPicker
 
-                    if !note.suggestedTags.isEmpty {
-                        suggestedTagsSection
-                    } else if isAnalyzing {
-                        analyzingSection
-                    } else if !analysisComplete {
-                        analyzeButton
-                    }
-
-                    if analysisComplete && note.suggestedTags.isEmpty {
-                        noSuggestionsSection
+                    switch selectedSection {
+                    case 0:
+                        tagsSection
+                    case 1:
+                        insightsSection
+                    case 2:
+                        writingToolsSection
+                    default:
+                        tagsSection
                     }
                 }
                 .padding()
@@ -2025,9 +2030,7 @@ struct NoteAISheet: View {
             }
         }
         .onAppear {
-            if note.suggestedTags.isEmpty && note.lastAnalyzedDate == nil {
-                analyzeNote()
-            }
+            runFullAnalysis()
         }
     }
 
@@ -2036,16 +2039,34 @@ struct NoteAISheet: View {
             Image(systemName: "sparkles")
                 .font(.largeTitle)
                 .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
-
             Text("Note Intelligence")
                 .font(.headline)
-
-            Text("AI-powered suggestions based on your note content")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
-        .padding(.vertical)
+        .padding(.vertical, 8)
+    }
+
+    private var sectionPicker: some View {
+        Picker("Section", selection: $selectedSection) {
+            Text("Tags").tag(0)
+            Text("Insights").tag(1)
+            Text("Writing").tag(2)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var tagsSection: some View {
+        if isAnalyzing {
+            analyzingSection
+        } else if !note.suggestedTags.isEmpty {
+            suggestedTagsSection
+        } else if analysisComplete {
+            noTagSuggestionsSection
+        }
+
+        if !note.tags.isEmpty {
+            currentTagsSection
+        }
     }
 
     private var suggestedTagsSection: some View {
@@ -2054,7 +2075,7 @@ struct NoteAISheet: View {
                 .font(.headline)
 
             FlowLayout(spacing: 8) {
-                ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { index, tag in
+                ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { _, tag in
                     HStack(spacing: 6) {
                         Text(tag)
                             .font(.callout)
@@ -2081,32 +2102,221 @@ struct NoteAISheet: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    )
+                    .background(Capsule().fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)))
                     .overlay(Capsule().stroke(Color.purple.opacity(0.3), lineWidth: 0.5))
-                }
-            }
-
-            if !note.tags.isEmpty {
-                Divider().padding(.vertical, 8)
-                Label("Current Tags", systemImage: "tag.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                FlowLayout(spacing: 8) {
-                    ForEach(note.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.callout)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(.blue.opacity(0.15)))
-                    }
                 }
             }
         }
         .padding()
         .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var currentTagsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Current Tags", systemImage: "tag.fill")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            FlowLayout(spacing: 8) {
+                ForEach(note.tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.callout)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(.blue.opacity(0.15)))
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var noTagSuggestionsSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.title2)
+                .foregroundStyle(.green)
+            Text("No tag suggestions")
+                .font(.subheadline)
+            Text("Add more content to get tag suggestions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    @ViewBuilder
+    private var insightsSection: some View {
+        if let stats = textStats {
+            statisticsCard(stats)
+        }
+
+        if let readability = readabilityScore {
+            readabilityCard(readability)
+        }
+
+        if !keySentences.isEmpty {
+            keySentencesCard
+        }
+    }
+
+    private func statisticsCard(_ stats: NoteIntelligenceService.TextStatistics) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Text Statistics", systemImage: "chart.bar")
+                .font(.headline)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                StatItem(icon: "textformat.abc", label: "Words", value: "\(stats.wordCount)")
+                StatItem(icon: "text.alignleft", label: "Sentences", value: "\(stats.sentenceCount)")
+                StatItem(icon: "paragraphsign", label: "Paragraphs", value: "\(stats.paragraphCount)")
+                StatItem(icon: "clock", label: "Read Time", value: stats.readingTimeMinutes < 1 ? "<1 min" : "\(Int(stats.readingTimeMinutes)) min")
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private func readabilityCard(_ readability: (score: Double, level: String)) -> some View {
+        let avgWords = textStats?.averageWordsPerSentence ?? 0
+        let hasLongSentences = avgWords > 25
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Label("Readability", systemImage: "eyeglasses")
+                .font(.headline)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(readability.level)
+                        .font(.title3.bold())
+                        .foregroundStyle(readabilityColor(readability.score))
+                    Text("Flesch Reading Ease: \(Int(readability.score))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 6)
+                    Circle()
+                        .trim(from: 0, to: readability.score / 100)
+                        .stroke(readabilityColor(readability.score), style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(readability.score))")
+                        .font(.caption.bold())
+                }
+                .frame(width: 50, height: 50)
+            }
+
+            if hasLongSentences {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Long sentences detected")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.orange)
+                        Text("Avg \(Int(avgWords)) words/sentence. Consider breaking up sentences for clarity. Use Apple Intelligence to help rewrite.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(.orange.opacity(0.1)))
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var keySentencesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Key Points", systemImage: "lightbulb")
+                .font(.headline)
+
+            ForEach(keySentences.indices, id: \.self) { index in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(index + 1)")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    Text(keySentences[index])
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    @ViewBuilder
+    private var writingToolsSection: some View {
+        spellingCard
+        appleIntelligenceHint
+    }
+
+    private var spellingCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Spelling Check", systemImage: "textformat.abc.dottedunderline")
+                .font(.headline)
+
+            if spellingIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("No misspelled words found")
+                            .font(.subheadline)
+                    }
+                    Text("This only checks spelling. For grammar, punctuation, and style improvements, use Apple Intelligence below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("\(spellingIssues.count) potentially misspelled word\(spellingIssues.count == 1 ? "" : "s"):")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 8) {
+                    ForEach(spellingIssues, id: \.self) { word in
+                        Text(word)
+                            .font(.callout)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(.orange.opacity(0.2)))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text("For grammar and style fixes, use Apple Intelligence below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var appleIntelligenceHint: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Apple Intelligence", systemImage: "apple.intelligence")
+                .font(.headline)
+
+            Text("For AI-powered rewriting, proofreading, and summarization:")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HintRow(number: "1", text: "Select text in your note")
+                HintRow(number: "2", text: "Tap \"Writing Tools\" in the menu")
+                HintRow(number: "3", text: "Choose Rewrite, Proofread, or Summarize")
+            }
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient(colors: [.purple.opacity(0.1), .blue.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LinearGradient(colors: [.purple.opacity(0.3), .blue.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
     }
 
     private var analyzingSection: some View {
@@ -2117,40 +2327,37 @@ struct NoteAISheet: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
     }
 
-    private var analyzeButton: some View {
-        Button {
-            analyzeNote()
-        } label: {
-            Label("Analyze Note", systemImage: "wand.and.stars")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+    private func readabilityColor(_ score: Double) -> Color {
+        switch score {
+        case 70...: return .green
+        case 50..<70: return .orange
+        default: return .red
         }
     }
 
-    private var noSuggestionsSection: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "checkmark.circle")
-                .font(.title)
-                .foregroundStyle(.green)
-            Text("No suggestions needed")
-                .font(.subheadline)
-            Text("Your note is already well-organized")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 20)
-    }
-
-    private func analyzeNote() {
+    private func runFullAnalysis() {
         isAnalyzing = true
+        let plainText = NoteIntelligenceService.shared.extractPlainText(from: note)
         let existingTags = note.tags
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = NoteIntelligenceService.shared.analyzeTextStatistics(plainText)
+            let sentences = NoteIntelligenceService.shared.extractKeySentences(from: plainText)
+            let readability = NoteIntelligenceService.shared.calculateReadabilityScore(plainText)
+            let spelling = NoteIntelligenceService.shared.checkSpelling(plainText)
+
+            DispatchQueue.main.async {
+                self.textStats = stats
+                self.keySentences = sentences
+                self.readabilityScore = readability
+                self.spellingIssues = spelling
+            }
+        }
 
         NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
             let filteredTags = tags.filter { !existingTags.contains($0) }
@@ -2164,11 +2371,52 @@ struct NoteAISheet: View {
         }
 
         if note.contentEmbedding == nil {
-            let text = "\(note.title) \(note.content)"
-            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: plainText)
             ModelMutationScheduler.shared.schedule {
                 note.contentEmbedding = embedding
             }
+        }
+    }
+}
+
+private struct StatItem: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.purple)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.bold())
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.background.opacity(0.5)))
+    }
+}
+
+private struct HintRow: View {
+    let number: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(number)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.purple))
+            Text(text)
+                .font(.subheadline)
         }
     }
 }

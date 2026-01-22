@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
+		83E53CD52F214D9300C7D644 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
+		83E53CD62F214D9300C7D644 /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		83F000012E6B000000000001 /* icon_source.png in Resources */ = {isa = PBXBuildFile; fileRef = 83F000002E6B000000000001 /* icon_source.png */; };
 /* End PBXBuildFile section */
@@ -23,6 +24,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		83E53CD72F214D9300C7D644 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				83E53CD62F214D9300C7D644 /* WidgetKit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		83E626732E52FDAC005994F9 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -95,7 +107,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				83E6265D2E52FDAB005994F9 /* WidgetKit.framework in Frameworks */,
+				83E53CD52F214D9300C7D644 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -168,6 +180,7 @@
 				83E626562E52FDAB005994F9 /* Sources */,
 				83E626572E52FDAB005994F9 /* Frameworks */,
 				83E626582E52FDAB005994F9 /* Resources */,
+				83E53CD72F214D9300C7D644 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -191,7 +204,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					83E626212E528792005994F9 = {
 						CreatedOnToolsVersion = 26.0;
@@ -273,7 +286,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = LiquidNotes/LiquidNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 10005;
 				DEVELOPMENT_TEAM = 3P6M963JAU;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -313,7 +326,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = LiquidNotes/LiquidNotes.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 10005;
 				DEVELOPMENT_TEAM = 3P6M963JAU;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -404,6 +417,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -461,6 +475,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -473,7 +488,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = LiquidNotesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 10005;
 				DEVELOPMENT_TEAM = 3P6M963JAU;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiquidNotesWidget/Info.plist;
@@ -505,7 +520,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = LiquidNotesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 10005;
 				DEVELOPMENT_TEAM = 3P6M963JAU;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = LiquidNotesWidget/Info.plist;
