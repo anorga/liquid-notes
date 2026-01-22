@@ -9,6 +9,11 @@ struct SketchSheet: View {
     @State private var canvasSize: CGSize = .zero
     @State private var toolIsEraser = false
     @State private var strokeIsLight = true
+    @State private var showingEmptyWarning = false
+
+    private var hasContent: Bool {
+        !drawing.bounds.isEmpty && drawing.strokes.count > 0
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,7 +31,14 @@ struct SketchSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Insert") { insertAndDismiss() }.bold()
+                    Button("Insert") {
+                        if hasContent {
+                            insertAndDismiss()
+                        } else {
+                            showingEmptyWarning = true
+                        }
+                    }
+                    .bold()
                 }
                 ToolbarItemGroup(placement: .bottomBar) {
                     Picker("Tool", selection: $toolIsEraser) {
@@ -43,16 +55,32 @@ struct SketchSheet: View {
                     Button("Clear") { drawing = PKDrawing() }
                 }
             }
+            .alert("Empty Sketch", isPresented: $showingEmptyWarning) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Please draw something before inserting.")
+            }
         }
     }
 
     private func insertAndDismiss() {
+        guard hasContent else { return }
         let scale = UIScreen.main.scale
-        let bounds = drawing.bounds.isEmpty ? CGRect(origin: .zero, size: canvasSize == .zero ? CGSize(width: 600, height: 400) : canvasSize) : drawing.bounds
-        let image = drawing.image(from: bounds, scale: scale)
-        // Use PNG to preserve crisp lines
-        if let data = image.pngData() {
-            onInsert(image, data)
+        let bounds = drawing.bounds
+        let paddedBounds = bounds.insetBy(dx: -20, dy: -20)
+        let drawingImage = drawing.image(from: paddedBounds, scale: scale)
+
+        let backgroundColor: UIColor = strokeIsLight ? UIColor.darkGray : UIColor.white
+        let size = drawingImage.size
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let composited = renderer.image { context in
+            backgroundColor.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            drawingImage.draw(at: .zero)
+        }
+
+        if let data = composited.pngData() {
+            onInsert(composited, data)
         }
         dismiss()
     }

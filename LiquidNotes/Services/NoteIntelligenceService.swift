@@ -186,25 +186,27 @@ final class NoteIntelligenceService {
         }
 
         var sentenceCount = 0
-        let sentenceEnders = CharacterSet(charactersIn: ".!?")
-        for char in text.unicodeScalars {
-            if sentenceEnders.contains(char) {
-                sentenceCount += 1
+        if wordCount > 0 {
+            let sentenceEnders = CharacterSet(charactersIn: ".!?")
+            for char in text.unicodeScalars {
+                if sentenceEnders.contains(char) {
+                    sentenceCount += 1
+                }
+            }
+            if sentenceCount == 0 {
+                sentenceCount = 1
             }
         }
-        if sentenceCount == 0 && wordCount > 0 {
-            sentenceCount = 1
-        }
 
-        let paragraphCount = text.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        let paragraphCount = wordCount > 0 ? max(1, text.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count) : 0
         let characterCount = text.filter { !$0.isWhitespace }.count
         let readingTimeMinutes = Double(wordCount) / 200.0
-        let avgWordsPerSentence = sentenceCount > 0 ? Double(wordCount) / Double(sentenceCount) : Double(wordCount)
+        let avgWordsPerSentence = sentenceCount > 0 ? Double(wordCount) / Double(sentenceCount) : 0
 
         return TextStatistics(
             wordCount: wordCount,
-            sentenceCount: max(1, sentenceCount),
-            paragraphCount: max(1, paragraphCount),
+            sentenceCount: sentenceCount,
+            paragraphCount: paragraphCount,
             characterCount: characterCount,
             readingTimeMinutes: readingTimeMinutes,
             averageWordsPerSentence: avgWordsPerSentence
