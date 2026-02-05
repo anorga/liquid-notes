@@ -14,19 +14,25 @@ struct DueDateCalendarPicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 18) {
-                DatePicker(
-                    "Due Date",
-                    selection: $tempDate,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .padding(.horizontal, 12)
+                VStack(alignment: .leading, spacing: 8) {
+                    DatePicker(
+                        "Due Date",
+                        selection: $tempDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .padding(8)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .premiumGlassCard()
+
                 quickChips
                 Spacer(minLength: 0)
             }
             .padding(.top, 12)
             .padding(.bottom, 4)
-            .background(LiquidNotesBackground().ignoresSafeArea())
+            .background(LiquidNotesBackground())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItemGroup(placement: .confirmationAction) {
@@ -51,7 +57,7 @@ struct DueDateCalendarPicker: View {
                 quickChip("Next Week") { tempDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date() }
                 quickChip("Next Month") { tempDate = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date() }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, UI.Space.l)
             .padding(.vertical, 4)
         }
     }
@@ -59,8 +65,8 @@ struct DueDateCalendarPicker: View {
         Button(action: action) {
             Text(label)
                 .font(.caption2)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                .padding(.horizontal, UI.Space.m).padding(.vertical, UI.Space.xs)
+                .nativeGlassChip()
         }
         .buttonStyle(.plain)
     }

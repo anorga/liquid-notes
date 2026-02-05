@@ -4,16 +4,17 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 import Photos
-import ObjectiveC
 import ImageIO
 
 struct NativeNoteEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
-    
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     let note: Note
-    
+
     @State private var textView: UITextView?
     @State private var hasChanges = false
     @State private var isNewNote = false
@@ -23,42 +24,110 @@ struct NativeNoteEditor: View {
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingGifPicker = false
+    @State private var showingSketchSheet = false
     @State private var pendingSaveWorkItem: DispatchWorkItem?
+    @State private var showingAISheet = false
     private let saveDebounceInterval: TimeInterval = 0.6
+    
+    // Reverted: no special iPad width; use full width content.
+    private func optimalWidth(for geometry: GeometryProxy) -> CGFloat? { nil }
     
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
                 ZStack {
-                    // Pure liquid glass background - no borders
+                    // Native-feeling glass background
                     Color.clear
-                        .background(.ultraThinMaterial)
+                        .nativeGlassBarBackground()
                         .ignoresSafeArea()
                     
                     VStack(spacing: 0) {
-                        // Minimal top navigation - native style
                         nativeTopBar
+
+                        if let maxWidth = optimalWidth(for: geometry) {
+                            // iPad: centered wide column that resizes with window
+                            HStack {
+                                Spacer(minLength: 0)
+                                NativeTextCanvas(
+                                    note: note,
+                                    textView: $textView,
+                                    hasChanges: $hasChanges,
+                                    selectedTextStyle: $selectedTextStyle,
+                                    modelContext: modelContext
+                                )
+                                .frame(width: maxWidth, alignment: .topLeading)
+                                Spacer(minLength: 0)
+                            }
+                        } else {
+                            // iPhone or compact iPad - use full width
+                            NativeTextCanvas(
+                                note: note,
+                                textView: $textView,
+                                hasChanges: $hasChanges,
+                                selectedTextStyle: $selectedTextStyle,
+                                modelContext: modelContext
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        }
                         
-                        // Native text editor canvas
-                        NativeTextCanvas(
-                            note: note,
-                            textView: $textView,
-                            hasChanges: $hasChanges,
-                            selectedTextStyle: $selectedTextStyle,
-                            modelContext: modelContext
-                        )
-                        
-                        // Bottom formatting toolbar
-                        formattingToolbar
-                            .padding(.horizontal)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
                     }
                 }
+                // Floating, centered tool picker (iPad + iPhone) constrained within editor bounds.
+                // The pill stays centered and fixed; only the contents scroll when overflowing.
+                .overlay(alignment: .bottom) {
+                    let w = geometry.size.width
+                    let pillWidth = max(240, min(w - 48, 740))
+                    HStack {
+                        Spacer(minLength: 0)
+                        ZStack {
+                            Capsule()
+                                .fill(.thinMaterial)
+                                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.6))
+                                .shadow(color: .black.opacity(0.15), radius: 10, y: 5)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                formattingToolbar
+                                    .padding(.horizontal, 16)
+                            }
+                            .clipShape(Capsule())
+                        }
+                        .frame(width: pillWidth, height: 44)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.bottom, 12)
+                }
             }
+            // Use system-provided glass on iOS 26+, fallback to material on older iOS
+            .modifier(BottomBarCompatStyle())
             .navigationBarHidden(true)
-            .onAppear { setupEditor() }
-            .onDisappear { saveIfNeeded() }
+            .toolbar { // Native keyboard toolbar for quick formatting/media actions
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button { applyTextStyle(.title) } label: { Image(systemName: "textformat.size.larger") }
+                    Button { (textView as? NativeTextView)?.formatBold() } label: { Image(systemName: "bold") }
+                    Button { (textView as? NativeTextView)?.formatItalic() } label: { Image(systemName: "italic") }
+                    Divider()
+                    Button { (textView as? NativeTextView)?.insertBulletList() } label: { Image(systemName: "list.bullet") }
+                    Button { (textView as? NativeTextView)?.insertNumberedList() } label: { Image(systemName: "list.number") }
+                    Divider()
+                    Button { showingPhotoPicker = true } label: { Image(systemName: "photo") }
+                    Button { showingDocumentPicker = true } label: { Image(systemName: "doc") }
+                    Button { showingSketchSheet = true } label: { Image(systemName: "pencil.and.outline") }
+                }
+            }
+            .onAppear { 
+                setupEditor()
+                if let nativeTextView = textView as? NativeTextView {
+                    nativeTextView.resumeGIFAnimations()
+                }
+            }
+            .onDisappear { 
+                saveIfNeeded()
+                if let nativeTextView = textView as? NativeTextView {
+                    nativeTextView.pauseGIFAnimations()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                saveIfNeeded()
+            }
             .sheet(isPresented: $showingShareSheet) {
                 ShareSheet(activityItems: [shareItem])
             }
@@ -76,6 +145,18 @@ struct NativeNoteEditor: View {
                 GiphyPicker(isPresented: $showingGifPicker) { gifData in
                     handleGiphySelection(gifData)
                 }
+            }
+            .sheet(isPresented: $showingSketchSheet) {
+                SketchSheet { image, data in
+                    if let nativeTextView = textView as? NativeTextView {
+                        nativeTextView.insertInlineImage(image, data: data)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAISheet) {
+                NoteAISheet(note: note)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -174,9 +255,9 @@ struct NativeNoteEditor: View {
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
+                    .nativeGlassChip()
                     .foregroundStyle(.primary)
+                    .fixedSize()
             }
             
             Button(action: { 
@@ -187,13 +268,11 @@ struct NativeNoteEditor: View {
                     .foregroundStyle(.primary)
             }
             
-            Button(action: { (textView as? NativeTextView)?.insertLink() }) {
-                Image(systemName: "link")
+            Button(action: { showingSketchSheet = true }) {
+                Image(systemName: "pencil.and.outline")
                     .font(.title2)
                     .foregroundStyle(.primary)
             }
-            
-            Spacer()
         }
     }
     
@@ -204,15 +283,21 @@ struct NativeNoteEditor: View {
             }
             .foregroundStyle(.secondary)
             .font(.body)
-            
+
             Spacer()
-            
+
+            Button(action: { showingAISheet = true }) {
+                Image(systemName: "sparkles")
+                    .font(.title3)
+                    .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+
             Button(action: { shareNote() }) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.title3)
                     .foregroundStyle(.blue)
             }
-            
+
             Button("Done") {
                 saveNote()
                 dismiss()
@@ -220,14 +305,19 @@ struct NativeNoteEditor: View {
             .fontWeight(.semibold)
             .foregroundStyle(.blue)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, UI.Space.xl)
+        .padding(.vertical, UI.Space.m)
+        .nativeGlassBarBackground()
+        .modifier(NavBarCompatStyle())
     }
     
     private func setupEditor() {
         isNewNote = note.title.isEmpty && note.content.isEmpty
         hasChanges = isNewNote
+        // Listen for sketch insert requests from the text selection menu
+        NotificationCenter.default.addObserver(forName: .lnRequestInsertSketch, object: nil, queue: .main) { _ in
+            showingSketchSheet = true
+        }
     }
     
     private func shareNote() {
@@ -288,6 +378,8 @@ struct NativeNoteEditor: View {
             try modelContext.save()
             hasChanges = false
             HapticManager.shared.success()
+            // Refresh widget data after saving note content
+            SharedDataManager.shared.refreshWidgetData(context: modelContext)
         } catch {
             HapticManager.shared.error()
         }
@@ -362,6 +454,39 @@ struct NativeNoteEditor: View {
     }
 }
 
+// MARK: - Bar Styling (iOS compatibility)
+private struct BottomBarCompatStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                content
+                    .toolbarBackground(.automatic, for: .bottomBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .bottomBar)
+            } else {
+                content
+                    .toolbarBackground(.ultraThinMaterial, for: .bottomBar)
+                    .toolbarBackgroundVisibility(.visible, for: .bottomBar)
+            }
+        }
+    }
+}
+
+private struct NavBarCompatStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                content
+                    .toolbarBackground(.automatic, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.automatic, for: .navigationBar)
+            } else {
+                content
+                    .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                    .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            }
+        }
+    }
+}
+
 enum TextStyle {
     case title, heading, subheading, body
     
@@ -409,9 +534,18 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Native iOS text view setup - no borders, larger text
         textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: 20, weight: .regular) // Increased from 17
+        textView.font = .systemFont(ofSize: 20, weight: .regular) // Larger for readability
         textView.textColor = .label // Dynamic color for light/dark mode
-        textView.textContainerInset = UIEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
+        
+        // Responsive insets based on device (original values)
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        let horizontalInset: CGFloat = isIPad ? 40 : 20
+        let verticalInset: CGFloat = isIPad ? 24 : 16
+        textView.textContainerInset = UIEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: horizontalInset)
+        // No additional content inset (original sizing)
+        textView.contentInset = .zero
+        textView.scrollIndicatorInsets = .zero
+        
         textView.isScrollEnabled = true
         textView.keyboardDismissMode = .interactive
         textView.allowsEditingTextAttributes = true
@@ -431,10 +565,10 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         // Load archived rich text if present; fallback to plain text
         if let data = note.richTextData, let archived = RichTextArchiver.unarchive(data) {
-            let containsTokens = archived.string.contains(RichTextArchiver.attachmentTokenPrefix)
+            let containsTokens = archived.string.contains(RichTextArchiver.attachmentTokenPrefix) || archived.string.contains("[[CHECKBOX:")
             let rebuilt = containsTokens ? RichTextArchiver.rebuildFromTokens(note: note, tokenized: archived) : archived
             let mutable = NSMutableAttributedString(attributedString: rebuilt)
-            upgradeAndNormalizeLoadedAttachments(in: mutable, for: note)
+            upgradeAndNormalizeLoadedAttachments(in: mutable, for: note, textView: textView)
             textView.attributedText = mutable
             textView.startGIFAnimations()
         } else {
@@ -502,10 +636,6 @@ struct NativeTextCanvas: UIViewRepresentable {
         
         textView.attributedText = attributedText
         
-        // Format links only
-        if let nativeTextView = textView as? NativeTextView {
-            nativeTextView.formatLinks()
-        }
     }
     
     func makeCoordinator() -> Coordinator {
@@ -516,8 +646,6 @@ struct NativeTextCanvas: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             if let nativeTextView = textView as? NativeTextView {
                 nativeTextView.hasChangesBinding?.wrappedValue = true
-                // Just format links, no title formatting
-                nativeTextView.formatLinks()
                 nativeTextView.scheduleDebouncedSave()
                 nativeTextView.broadcastLivePreviewUpdate()
             }
@@ -525,7 +653,7 @@ struct NativeTextCanvas: UIViewRepresentable {
     }
 
     /// Rehydrate, scale, animate, and ID-bind loaded NSTextAttachments after unarchiving rich text.
-    private func upgradeAndNormalizeLoadedAttachments(in mutable: NSMutableAttributedString, for note: Note) {
+    private func upgradeAndNormalizeLoadedAttachments(in mutable: NSMutableAttributedString, for note: Note, textView: UITextView) {
         let fullRange = NSRange(location: 0, length: mutable.length)
         // First normalize base attributes
         mutable.enumerateAttributes(in: fullRange) { attrs, range, _ in
@@ -533,6 +661,13 @@ struct NativeTextCanvas: UIViewRepresentable {
             if newAttrs[.font] == nil { newAttrs[.font] = UIFont.systemFont(ofSize: 20, weight: .regular) }
             if newAttrs[.foregroundColor] == nil { newAttrs[.foregroundColor] = UIColor.label }
             mutable.setAttributes(newAttrs, range: range)
+        }
+        
+        // Set textView reference for any checkboxes
+        mutable.enumerateAttribute(.attachment, in: fullRange) { value, range, _ in
+            if let checkbox = value as? CheckboxTextAttachment {
+                checkbox.textView = textView
+            }
         }
         // Collect attachment ranges
         var attachmentRanges: [NSRange] = []
@@ -549,47 +684,63 @@ struct NativeTextCanvas: UIViewRepresentable {
         for i in 0..<count {
             let range = attachmentRanges[i]
             guard let old = mutable.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment else { continue }
-            // Load corresponding file data
             let id = note.fileAttachmentIDs[i]
             let type = i < note.fileAttachmentTypes.count ? note.fileAttachmentTypes[i] : "image/jpeg"
             let fileName = i < note.fileAttachmentNames.count ? note.fileAttachmentNames[i] : ""
-            var data: Data? = nil
-            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty {
-                let url = dir.appendingPathComponent(fileName)
-                data = try? Data(contentsOf: url)
-            }
-            // Build interactive attachment
+
+            // Build interactive attachment without blocking for I/O
             let newAttachment = InteractiveTextAttachment()
             newAttachment.note = note
             newAttachment.attachmentID = id
-            if type.hasPrefix("image"), let d = data {
-                // GIF support
-                if type == "image/gif", let animated = animatedImage(fromGIFData: d) {
-                    newAttachment.image = animated
-                } else if let img = UIImage(data: d) {
-                    newAttachment.image = img
-                } else if let img = old.image { // fallback
-                    newAttachment.image = img
-                }
-                newAttachment.imageData = d
-            } else if let img = old.image {
-                newAttachment.image = img
-            }
-            // Determine intrinsic size
-            var size = newAttachment.image?.size ?? old.image?.size ?? CGSize(width: 200, height: 200)
-            // Scale
+
+            // Use any existing image immediately to avoid stalls
+            if let img = old.image { newAttachment.image = img }
+
+            // Set an initial size from available image or a placeholder
+            var size = newAttachment.image?.size ?? CGSize(width: 200, height: 200)
             if size.width > maxWidth || size.height > maxHeight {
                 let scale = min(maxWidth / max(size.width, 1), maxHeight / max(size.height, 1))
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
-            if size.width < minWidth { // upscale very small icons
+            if size.width < minWidth {
                 let scale = minWidth / max(size.width, 1)
                 size = CGSize(width: size.width * scale, height: size.height * scale)
             }
             newAttachment.bounds = CGRect(x: 0, y: -5, width: size.width, height: size.height)
-            // Replace in attributed string
+
+            // Replace inline immediately
             let replacement = NSAttributedString(attachment: newAttachment)
             mutable.replaceCharacters(in: range, with: replacement)
+
+            // Load actual file data off the main thread and update the attachment when ready
+            if let dir = AttachmentFileStore.noteDir(noteID: note.id), !fileName.isEmpty, type.hasPrefix("image") {
+                let url = dir.appendingPathComponent(fileName)
+                DispatchQueue.global(qos: .userInitiated).async { [weak textView] in
+                    autoreleasepool {
+                    guard let data = try? Data(contentsOf: url) else { return }
+                    var nextImage: UIImage? = nil
+                    if type == "image/gif", let animated = animatedImage(fromGIFData: data) { nextImage = animated }
+                    else { nextImage = UIImage(data: data) }
+                    guard let img = nextImage else { return }
+                    // Compute scaled bounds
+                    var scaled = img.size
+                    if scaled.width > maxWidth || scaled.height > maxHeight {
+                        let scale = min(maxWidth / max(scaled.width, 1), maxHeight / max(scaled.height, 1))
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    if scaled.width < minWidth {
+                        let scale = minWidth / max(scaled.width, 1)
+                        scaled = CGSize(width: scaled.width * scale, height: scaled.height * scale)
+                    }
+                    DispatchQueue.main.async {
+                        newAttachment.image = img
+                        newAttachment.imageData = data
+                        newAttachment.bounds = CGRect(x: 0, y: -5, width: scaled.width, height: scaled.height)
+                        textView?.setNeedsDisplay()
+                    }
+                    }
+                }
+            }
         }
     }
 }
@@ -599,12 +750,27 @@ class NativeTextView: UITextView, UITextViewDelegate {
     var hasChangesBinding: Binding<Bool>?
     var modelContext: ModelContext?
     private var debounceInterval: TimeInterval {
-        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { return 1.2 }
-        return 0.6
+        // Slow down autosave shortly after media insertion
+        var base: TimeInterval = 0.6
+        if Date().timeIntervalSince(recentMediaInsertionDate) < 2 { base = 1.5 }
+        // Scale with document length to avoid heavy work during rapid typing on large notes
+        let len = attributedText?.length ?? 0
+        if len > 10_000 { base = max(base, 1.4) }
+        else if len > 5_000 { base = max(base, 1.0) }
+        return base
     }
     private var recentMediaInsertionDate: Date = .distantPast
     private var lastScheduledItemKey = "LNTextSaveWorkItem"
     private static var workItems: [String: DispatchWorkItem] = [:]
+    // Save rate limiting
+    private let minimumSaveSpacing: TimeInterval = 2.0
+    private var lastSavedAt: CFTimeInterval = 0
+    // Attachment change gating for preview broadcasts
+    fileprivate var attachmentsMutated: Bool = false
+    
+    @objc func requestInsertSketch() {
+        NotificationCenter.default.post(name: .lnRequestInsertSketch, object: nil)
+    }
     
     override func awakeFromNib() {
         super.awakeFromNib()
@@ -625,6 +791,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         tapGesture.delegate = self
         addGestureRecognizer(tapGesture)
+        // Add iOS 16+ edit menu interaction for Sketch action
+        if #available(iOS 16.0, *) {
+            let interaction = UIEditMenuInteraction(delegate: self)
+            addInteraction(interaction)
+        }
     }
     
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -634,6 +805,31 @@ class NativeTextView: UITextView, UITextViewDelegate {
         let characterIndex = layoutManager.characterIndex(for: location, in: textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
         
         if characterIndex < attributedText.length {
+            // Check for checkbox first
+            if let checkbox = attributedText.attribute(.attachment, at: characterIndex, effectiveRange: nil) as? CheckboxTextAttachment {
+                checkbox.toggle()
+                
+                // Force refresh by rebuilding the attributed string to ensure visual update
+                let mutableText = NSMutableAttributedString(attributedString: attributedText)
+                
+                // Find the checkbox and replace it with updated version
+                mutableText.enumerateAttribute(.attachment, in: NSRange(location: characterIndex, length: 1), options: []) { value, range, stop in
+                    if let cb = value as? CheckboxTextAttachment, cb === checkbox {
+                        // Create new attachment string with updated checkbox
+                        let newCheckboxString = NSAttributedString(attachment: checkbox)
+                        mutableText.replaceCharacters(in: range, with: newCheckboxString)
+                        stop.pointee = true
+                    }
+                }
+                
+                // Apply the changes
+                let currentSelection = selectedRange
+                attributedText = mutableText
+                selectedRange = currentSelection
+                
+                return
+            }
+            
             if let attachment = attributedText.attribute(.attachment, at: characterIndex, effectiveRange: nil) as? InteractiveTextAttachment {
                 // Convert location to attachment-relative coordinates
                 let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: characterIndex, length: 1), actualCharacterRange: nil)
@@ -647,11 +843,6 @@ class NativeTextView: UITextView, UITextViewDelegate {
                 // Don't return here - let normal text editing continue
             }
             
-            // Check if tap is on a link
-            if let link = attributedText.attribute(.link, at: characterIndex, effectiveRange: nil) as? String {
-                showLinkPreview(for: link, at: NSRange(location: characterIndex, length: 1))
-                return
-            }
         }
         
         // Allow normal UITextView tap handling for cursor positioning
@@ -659,6 +850,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
     }
 
     // Prune file-based attachments that were removed from the text (image runs deleted)
+    @MainActor
     func reconcileFileAttachments() {
         guard let note else { return }
         // Collect IDs present in current attributed text
@@ -668,9 +860,12 @@ class NativeTextView: UITextView, UITextViewDelegate {
         }
         // Remove any fileAttachmentIDs not present
         let existing = note.fileAttachmentIDs
+        var removed = false
         for id in existing where !presentIDs.contains(id) {
             note.removeFileAttachment(id: id)
+            removed = true
         }
+        if removed { attachmentsMutated = true }
     }
 
     func scheduleDebouncedSave() {
@@ -680,6 +875,17 @@ class NativeTextView: UITextView, UITextViewDelegate {
         if let existing = NativeTextView.workItems[key] { existing.cancel() }
         let item = DispatchWorkItem { [weak self] in
             guard let self, let ctx = self.modelContext else { return }
+            // Enforce minimum spacing between heavy saves
+            let now = CACurrentMediaTime()
+            let delta = now - self.lastSavedAt
+            if delta < self.minimumSaveSpacing {
+                let delay = self.minimumSaveSpacing - delta
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.scheduleDebouncedSave()
+                }
+                return
+            }
+            self.lastSavedAt = now
             let attributed = self.attributedText ?? NSAttributedString(string: self.text ?? "")
             // Extract plain text quickly (skip attachments replaced by newline)
             var plainBuilder = ""
@@ -703,7 +909,11 @@ class NativeTextView: UITextView, UITextViewDelegate {
                     DispatchQueue.main.async {
                         if hash != note.richTextHash { note.richTextData = data; note.richTextHash = hash }
                         try? ctx.save()
-                        NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                        // Only broadcast if attachments changed recently
+                        if self.attachmentsMutated {
+                            NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+                            self.attachmentsMutated = false
+                        }
                     }
                 }
             }
@@ -714,11 +924,20 @@ class NativeTextView: UITextView, UITextViewDelegate {
 
     func broadcastLivePreviewUpdate() {
         guard let note else { return }
+        // Throttle and gate: only broadcast on attachment mutations or after longer idle window
+        let now = CACurrentMediaTime()
+        let minInterval: CFTimeInterval = attachmentsMutated ? 0.5 : 1.5
+        if now - lastBroadcastTime < minInterval { return }
+        lastBroadcastTime = now
         NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: note)
+        attachmentsMutated = false
     }
+
+    private var lastBroadcastTime: CFTimeInterval = 0
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         return super.canPerformAction(action, withSender: sender) || 
+               action == #selector(requestInsertSketch) ||
                action == #selector(formatBold) ||
                action == #selector(formatItalic) ||
                action == #selector(formatUnderline) ||
@@ -782,23 +1001,221 @@ class NativeTextView: UITextView, UITextViewDelegate {
     // MARK: - Lists
     
     @objc func insertBulletList() {
-        insertListItem("• ")
+        toggleListItem("• ")
     }
     
     @objc func insertNumberedList() {
-        insertListItem("1. ")
+        let range = selectedRange
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        if range.length > 0 {
+            // Handle multi-line selection with proper numbering
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all lines already have numbered list format
+            let numberedPattern = "^\\d+\\. "
+            let regex = try? NSRegularExpression(pattern: numberedPattern)
+            var allNumbered = true
+            
+            for lineRange in lineRanges {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedLine.isEmpty {
+                    let matches = regex?.matches(in: lineText, range: NSRange(location: 0, length: lineText.count)) ?? []
+                    if matches.isEmpty {
+                        allNumbered = false
+                        break
+                    }
+                }
+            }
+            
+            // Process lines in reverse order
+            var totalLengthChange = 0
+            var lineNumber = lineRanges.count
+            
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !trimmedLine.isEmpty {
+                    if allNumbered {
+                        // Remove numbering
+                        if let regex = regex {
+                            let matches = regex.matches(in: lineText, range: NSRange(location: 0, length: lineText.count))
+                            if let match = matches.first {
+                                let deleteRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
+                                mutableText.deleteCharacters(in: deleteRange)
+                                totalLengthChange -= match.range.length
+                            }
+                        }
+                    } else {
+                        // Add numbering
+                        let prefix = "\(lineNumber). "
+                        let insertion = NSAttributedString(string: prefix, attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += prefix.count
+                        lineNumber -= 1
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+            hasChangesBinding?.wrappedValue = true
+        } else {
+            // Handle single line - check if it has numbering
+            let line = getCurrentLine()
+            let numberedPattern = "^\\d+\\. "
+            if let regex = try? NSRegularExpression(pattern: numberedPattern) {
+                let matches = regex.matches(in: line, range: NSRange(location: 0, length: line.count))
+                if !matches.isEmpty {
+                    // Remove numbering
+                    let lineStart = getCurrentLineRange().location
+                    let deleteRange = NSRange(location: lineStart, length: matches[0].range.length)
+                    mutableText.deleteCharacters(in: deleteRange)
+                    attributedText = mutableText
+                    selectedRange = NSRange(location: max(0, range.location - matches[0].range.length), length: 0)
+                    hasChangesBinding?.wrappedValue = true
+                    return
+                }
+            }
+            // Add numbering
+            toggleListItem("1. ")
+        }
     }
     
     @objc func insertTaskList() {
-        insertListItem("☐ ")
+        let range = selectedRange
+        let mutableText = NSMutableAttributedString(attributedString: attributedText)
+        
+        if range.length > 0 {
+            // Handle multi-line selection
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all lines already have checkbox
+            var allHaveCheckbox = true
+            for lineRange in lineRanges {
+                var hasCheckbox = false
+                mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, _ in
+                    if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                        hasCheckbox = true
+                    }
+                }
+                let lineText = text.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !lineText.isEmpty && !hasCheckbox {
+                    allHaveCheckbox = false
+                    break
+                }
+            }
+            
+            // Process lines in reverse order
+            var totalLengthChange = 0
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !lineText.isEmpty {
+                    if allHaveCheckbox {
+                        // Remove checkbox
+                        mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, stop in
+                            if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                                // Remove checkbox and space after it
+                                let deleteLength = min(2, lineRange.length) // Checkbox + space
+                                mutableText.deleteCharacters(in: NSRange(location: lineRange.location, length: deleteLength))
+                                totalLengthChange -= deleteLength
+                                stop.pointee = true
+                            }
+                        }
+                    } else {
+                        // Add checkbox
+                        let checkbox = CheckboxTextAttachment()
+                        checkbox.textView = self
+                        let checkboxString = NSAttributedString(attachment: checkbox)
+                        let spaceString = NSAttributedString(string: " ", attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        let insertion = NSMutableAttributedString()
+                        insertion.append(checkboxString)
+                        insertion.append(spaceString)
+                        
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += insertion.length
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+        } else {
+            // Handle single line or cursor position
+            let lineRange = getCurrentLineRange()
+            var hasCheckbox = false
+            
+            // Check if line already has checkbox at start
+            if lineRange.length > 0 {
+                mutableText.enumerateAttribute(.attachment, in: lineRange, options: []) { value, attachmentRange, stop in
+                    if value is CheckboxTextAttachment && attachmentRange.location == lineRange.location {
+                        hasCheckbox = true
+                        stop.pointee = true
+                    }
+                }
+            }
+            
+            if hasCheckbox {
+                // Remove checkbox and space
+                let deleteLength = min(2, lineRange.length)
+                mutableText.deleteCharacters(in: NSRange(location: lineRange.location, length: deleteLength))
+                attributedText = mutableText
+                selectedRange = NSRange(location: max(0, range.location - deleteLength), length: 0)
+            } else {
+                // Add checkbox
+                let line = getCurrentLine()
+                let checkbox = CheckboxTextAttachment()
+                checkbox.textView = self
+                let checkboxString = NSAttributedString(attachment: checkbox)
+                let spaceString = NSAttributedString(string: " ", attributes: [
+                    .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                    .foregroundColor: UIColor.label
+                ])
+                
+                let insertion = NSMutableAttributedString()
+                if !line.isEmpty && range.location != lineRange.location {
+                    insertion.append(NSAttributedString(string: "\n"))
+                }
+                insertion.append(checkboxString)
+                insertion.append(spaceString)
+                
+                let insertLocation = line.isEmpty ? range.location : (range.location == lineRange.location ? lineRange.location : range.location)
+                mutableText.insert(insertion, at: insertLocation)
+                attributedText = mutableText
+                selectedRange = NSRange(location: insertLocation + insertion.length, length: 0)
+            }
+        }
+        
+        hasChangesBinding?.wrappedValue = true
     }
     
     @objc func insertDashedList() {
-        insertListItem("– ")
+        toggleListItem("– ")
     }
     
     @objc func insertBlockQuote() {
-        insertListItem("> ")
+        toggleListItem("> ")
     }
     
     @objc func insertDivider() {
@@ -809,111 +1226,6 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     // Media insertion handled by SwiftUI toolbar, not context menu
     
-    @objc func insertLink() {
-        // Get selected text or prompt for link text
-        let selectedText = getSelectedText()
-        if !selectedText.isEmpty {
-            // Wrap selected text in link format
-            wrapSelectedTextAsLink(selectedText)
-        } else {
-            // Insert link template
-            insertText("[[Link Text]]")
-            // Move cursor inside brackets
-            let newRange = NSRange(location: selectedRange.location - 2, length: 0)
-            selectedRange = newRange
-        }
-    }
-    
-    private func getSelectedText() -> String {
-        guard selectedRange.length > 0 else { return "" }
-        let text = self.text ?? ""
-        guard let range = Range(selectedRange, in: text) else { return "" }
-        return String(text[range])
-    }
-    
-    private func wrapSelectedTextAsLink(_ text: String) {
-        guard selectedRange.length > 0 else { return }
-        
-        let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        
-        // Create link with proper formatting
-        let linkText = NSAttributedString(string: text, attributes: [
-            .font: UIFont.systemFont(ofSize: 20),
-            .foregroundColor: UIColor.systemBlue,
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-            .link: text
-        ])
-        
-        mutableText.replaceCharacters(in: selectedRange, with: linkText)
-        
-        let currentRange = NSRange(location: selectedRange.location + text.count, length: 0)
-        attributedText = mutableText
-        selectedRange = currentRange
-        hasChangesBinding?.wrappedValue = true
-    }
-    
-    // MARK: - Link Handling
-    
-    func formatLinks() {
-        let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        let pattern = "\\[\\[([^\\]]+)\\]\\]"
-        
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-        
-        let matches = regex.matches(in: mutableText.string, range: NSRange(location: 0, length: mutableText.length))
-        
-        // Process matches in reverse to maintain indices
-        for match in matches.reversed() {
-            let linkRange = match.range(at: 1)
-            guard linkRange.location != NSNotFound else { continue }
-            
-            let linkText = mutableText.string.substring(with: linkRange) ?? ""
-            
-            // Replace [[text]] with just the text, but styled as a link
-            let styledLink = NSAttributedString(string: linkText, attributes: [
-                .font: UIFont.systemFont(ofSize: 20),
-                .foregroundColor: UIColor.systemBlue,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .link: linkText
-            ])
-            
-            mutableText.replaceCharacters(in: match.range, with: styledLink)
-        }
-        
-        let currentRange = selectedRange
-        attributedText = mutableText
-        selectedRange = currentRange
-    }
-    
-    // Handle link taps for previews
-    func textView(_ textView: UITextView, shouldInteractWith URL: URL, in characterRange: NSRange) -> Bool {
-        // Show link preview
-        showLinkPreview(for: URL.absoluteString, at: characterRange)
-        return false
-    }
-    
-    private func showLinkPreview(for linkText: String, at range: NSRange) {
-        // Find the linked note
-        let cleanedTitle = linkText.replacingOccurrences(of: "[[", with: "").replacingOccurrences(of: "]]", with: "")
-        
-        // This would integrate with the existing note linking system
-        let alertController = UIAlertController(
-            title: cleanedTitle,
-            message: "Navigate to this note?",
-            preferredStyle: .actionSheet
-        )
-        
-        alertController.addAction(UIAlertAction(title: "Open Note", style: .default) { _ in
-            // Implement note navigation
-            NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
-        })
-        
-        alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        
-        // For now, just post the notification without showing preview
-        // Link navigation will be handled by the app's existing system
-        NotificationCenter.default.post(name: .lnOpenNoteRequested, object: cleanedTitle)
-    }
     
     // MARK: - Attachment Handling
     
@@ -970,16 +1282,18 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
     // Persist into note model - determine type based on data
     let isGIF = data.count > 4 && data.subdata(in: 0..<4) == Data([0x47, 0x49, 0x46, 0x38])
-    let imageType = isGIF ? "image/gif" : "image/jpeg"
+    let isPNG = data.count > 4 && data.subdata(in: 0..<4) == Data([0x89, 0x50, 0x4E, 0x47])
+    let imageType = isGIF ? "image/gif" : (isPNG ? "image/png" : "image/jpeg")
         hasChangesBinding?.wrappedValue = true
         if let modelNote = attachment.note ?? self.note {
-            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: imageType == "image/gif" ? "gif" : "jpg") { id, _, _ in
+            AttachmentFileStore.saveAttachmentAsync(note: modelNote, data: data, type: imageType, preferredExt: (imageType == "image/gif" ? "gif" : (imageType == "image/png" ? "png" : "jpg"))) { id, _, _ in
                 if let id { attachment.attachmentID = id }
                 NotificationCenter.default.post(name: .lnNoteAttachmentsChanged, object: modelNote)
             }
         }
     if isGIF { attachment.configureGIFAnimation(with: data, in: self) }
     recentMediaInsertionDate = Date()
+    attachmentsMutated = true
     }
     
     func insertInlineFile(_ url: URL) {
@@ -1012,6 +1326,7 @@ class NativeTextView: UITextView, UITextViewDelegate {
         
         // Sync with note model
         hasChangesBinding?.wrappedValue = true
+        attachmentsMutated = true
     }
     
     private func createFileIcon(for fileExtension: String) -> UIImage {
@@ -1117,21 +1432,91 @@ class NativeTextView: UITextView, UITextViewDelegate {
         hasChangesBinding?.wrappedValue = true
     }
     
-    private func insertListItem(_ prefix: String) {
+    private func toggleListItem(_ prefix: String) {
         let range = selectedRange
-        let line = getCurrentLine()
-        let insertText = line.isEmpty ? prefix : "\n" + prefix
-        
         let mutableText = NSMutableAttributedString(attributedString: attributedText)
-        let insertion = NSAttributedString(string: insertText, attributes: [
-            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
-            .foregroundColor: UIColor.label
-        ])
         
-        mutableText.insert(insertion, at: range.location)
-        attributedText = mutableText
-        selectedRange = NSRange(location: range.location + insertText.count, length: 0)
+        if range.length > 0 {
+            // Handle multi-line selection
+            let text = mutableText.string as NSString
+            var lineRanges: [NSRange] = []
+            
+            // Enumerate all line ranges that intersect with the selection
+            text.enumerateSubstrings(in: range, options: [.byLines, .localized]) { _, lineRange, _, _ in
+                lineRanges.append(lineRange)
+            }
+            
+            // Check if all non-empty lines already have the prefix
+            var allHavePrefix = true
+            for lineRange in lineRanges {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedLine.isEmpty && !lineText.hasPrefix(prefix) {
+                    allHavePrefix = false
+                    break
+                }
+            }
+            
+            // Process lines in reverse order to maintain indices
+            var totalLengthChange = 0
+            for lineRange in lineRanges.reversed() {
+                let lineText = text.substring(with: lineRange)
+                let trimmedLine = lineText.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if !trimmedLine.isEmpty {
+                    if allHavePrefix && lineText.hasPrefix(prefix) {
+                        // Remove prefix
+                        let newRange = NSRange(location: lineRange.location, length: prefix.count)
+                        mutableText.deleteCharacters(in: newRange)
+                        totalLengthChange -= prefix.count
+                    } else if !lineText.hasPrefix(prefix) {
+                        // Add prefix
+                        let insertion = NSAttributedString(string: prefix, attributes: [
+                            .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                            .foregroundColor: UIColor.label
+                        ])
+                        mutableText.insert(insertion, at: lineRange.location)
+                        totalLengthChange += prefix.count
+                    }
+                }
+            }
+            
+            attributedText = mutableText
+            // Adjust selection to account for changed text
+            let newLength = max(0, range.length + totalLengthChange)
+            selectedRange = NSRange(location: range.location, length: newLength)
+        } else {
+            // Handle single line or cursor position
+            let line = getCurrentLine()
+            if line.hasPrefix(prefix) {
+                // Remove the prefix from current line
+                let lineStart = getCurrentLineRange().location
+                let deleteRange = NSRange(location: lineStart, length: prefix.count)
+                mutableText.deleteCharacters(in: deleteRange)
+                attributedText = mutableText
+                selectedRange = NSRange(location: max(0, range.location - prefix.count), length: 0)
+            } else {
+                // Add prefix
+                let insertText = line.isEmpty ? prefix : "\n" + prefix
+                let insertion = NSAttributedString(string: insertText, attributes: [
+                    .font: UIFont.systemFont(ofSize: 20, weight: .regular),
+                    .foregroundColor: UIColor.label
+                ])
+                mutableText.insert(insertion, at: range.location)
+                attributedText = mutableText
+                selectedRange = NSRange(location: range.location + insertText.count, length: 0)
+            }
+        }
+        
         hasChangesBinding?.wrappedValue = true
+    }
+    
+    private func getCurrentLineRange() -> NSRange {
+        let text = self.text ?? ""
+        let location = selectedRange.location
+        guard location <= text.count else { return NSRange(location: 0, length: 0) }
+        let nsText = text as NSString
+        return nsText.lineRange(for: NSRange(location: location, length: 0))
     }
     
     override func insertText(_ text: String) {
@@ -1171,6 +1556,16 @@ class NativeTextView: UITextView, UITextViewDelegate {
     
     
     
+}
+
+@available(iOS 16.0, *)
+extension NativeTextView: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        let sketch = UIAction(title: "Sketch", image: UIImage(systemName: "pencil.and.outline")) { [weak self] _ in
+            self?.requestInsertSketch()
+        }
+        return UIMenu(children: [sketch] + suggestedActions)
+    }
 }
 
 // MARK: - Extensions
@@ -1215,6 +1610,51 @@ class ColorPickerDelegate: NSObject, UIColorPickerViewControllerDelegate {
     }
 }
 
+// MARK: - Checkbox Text Attachment
+
+class CheckboxTextAttachment: NSTextAttachment {
+    var isChecked: Bool = false
+    weak var textView: UITextView?
+    
+    override init(data contentData: Data?, ofType uti: String?) {
+        super.init(data: contentData, ofType: uti)
+        updateImage()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        updateImage()
+    }
+    
+    func updateImage() {
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        let symbolName = isChecked ? "checkmark.circle.fill" : "circle"
+        let color = isChecked ? UIColor.systemBlue : UIColor.label
+        
+        if let symbolImage = UIImage(systemName: symbolName, withConfiguration: config)?.withTintColor(color, renderingMode: .alwaysOriginal) {
+            self.image = symbolImage
+            self.bounds = CGRect(x: 0, y: -4, width: 22, height: 22)
+        }
+    }
+    
+    func toggle() {
+        isChecked.toggle()
+        updateImage()
+        
+        // Trigger redraw and haptic feedback
+        if let tv = textView {
+            tv.setNeedsDisplay()
+            
+            // Mark as changed
+            if let nativeTextView = tv as? NativeTextView {
+                nativeTextView.hasChangesBinding?.wrappedValue = true
+                // Add haptic feedback for better user experience
+                HapticManager.impact(.light)
+            }
+        }
+    }
+}
+
 // MARK: - Interactive Text Attachment
 
 class InteractiveTextAttachment: NSTextAttachment {
@@ -1233,16 +1673,17 @@ class InteractiveTextAttachment: NSTextAttachment {
     fileprivate weak var hostingTextView: UITextView?
     fileprivate var gifAccumulated: Double = 0
     
-    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
-        return bounds
-    }
+    fileprivate var compositeCache: UIImage?
+    fileprivate var compositeCacheSize: CGSize = .zero
     
     override func image(forBounds imageBounds: CGRect, textContainer: NSTextContainer?, characterIndex charIndex: Int) -> UIImage? {
-        // Add delete button overlay for images
-        if let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) {
-            return addDeleteButton(to: baseImage)
-        }
-        return image
+        // Cache the composited overlay image at the requested size to avoid repeated redraws
+        if let cached = compositeCache, compositeCacheSize.equalTo(imageBounds.size) { return cached }
+        guard let baseImage = super.image(forBounds: imageBounds, textContainer: textContainer, characterIndex: charIndex) else { return image }
+        let composited = addDeleteButton(to: baseImage)
+        compositeCache = composited
+        compositeCacheSize = imageBounds.size
+        return composited
     }
     
     private func addDeleteButton(to baseImage: UIImage) -> UIImage {
@@ -1274,6 +1715,14 @@ class InteractiveTextAttachment: NSTextAttachment {
             context.cgContext.addLine(to: CGPoint(x: buttonFrame.minX + inset, y: buttonFrame.maxY - inset))
             context.cgContext.strokePath()
         }
+    }
+    
+    override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect, glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect {
+        // Invalidate composite cache when size changes
+        if !compositeCacheSize.equalTo(bounds.size) {
+            compositeCache = nil
+        }
+        return bounds
     }
     
     // Handle tap on attachment
@@ -1319,6 +1768,7 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         if let nativeTextView = textView as? NativeTextView {
             nativeTextView.hasChangesBinding?.wrappedValue = true
+            nativeTextView.attachmentsMutated = true
         }
     }
 
@@ -1348,20 +1798,38 @@ class InteractiveTextAttachment: NSTextAttachment {
     private func startGIFIfNeeded() {
         guard gifFrames.count > 1, gifDisplayLink == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(stepGIF(_:)))
+        
+        link.preferredFramesPerSecond = 8
+        
+        if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
+            return
+        }
+        
         gifDisplayLink = link
         link.add(to: .main, forMode: .common)
     }
     
     @objc private func stepGIF(_ link: CADisplayLink) {
         guard gifFrames.count > 1 else { return }
+        
+        if ProcessInfo.processInfo.thermalState == .serious || ProcessInfo.processInfo.thermalState == .critical {
+            gifDisplayLink?.invalidate()
+            gifDisplayLink = nil
+            return
+        }
+        
         gifAccumulated += link.duration
-        // Advance frames while accumulated > current frame duration (handle slow frames)
-        while gifAccumulated > gifDurations[gifCurrentIndex] {
-            gifAccumulated -= gifDurations[gifCurrentIndex]
-            gifCurrentIndex = (gifCurrentIndex + 1) % gifFrames.count
+        let frameSkip = PerformanceOptimizer.shared.shouldReduceGIFFrameRate ? 1 : 1
+        
+        while gifAccumulated > gifDurations[gifCurrentIndex] * Double(frameSkip) {
+            gifAccumulated -= gifDurations[gifCurrentIndex] * Double(frameSkip)
+            gifCurrentIndex = (gifCurrentIndex + frameSkip) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
-            // Trigger redraw for attachment range
-            if let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager?, let full = tv.attributedText {
+            
+            // CADisplayLink runs on main; invalidate display inline to avoid extra dispatch overhead
+            if let tv = self.hostingTextView,
+               let lm = tv.layoutManager as NSLayoutManager?,
+               let full = tv.attributedText {
                 let searchRange = NSRange(location: 0, length: full.length)
                 var targetRange: NSRange?
                 full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
@@ -1370,13 +1838,18 @@ class InteractiveTextAttachment: NSTextAttachment {
                         stop.pointee = true
                     }
                 }
-                if let r = targetRange {
-                    lm.invalidateDisplay(forCharacterRange: r)
-                } else {
-                    lm.invalidateDisplay(forCharacterRange: searchRange)
-                }
+                if let r = targetRange { lm.invalidateDisplay(forCharacterRange: r) }
             }
+            break
         }
+    }
+    
+    func pauseGIF() {
+        gifDisplayLink?.isPaused = true
+    }
+    
+    func resumeGIF() {
+        gifDisplayLink?.isPaused = false
     }
     
     deinit {
@@ -1411,14 +1884,28 @@ private func gifFrameDuration(source: CGImageSource, index: Int) -> Double {
 }
 
 extension NativeTextView {
-    // Enumerate attachments and start GIF animations post-load
     func startGIFAnimations() {
         attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
             if let att = value as? InteractiveTextAttachment, let data = att.imageData, att.gifFrames.isEmpty {
-                // Determine if data is GIF
                 if data.count > 4 && data.subdata(in: 0..<4) == Data([0x47,0x49,0x46,0x38]) {
                     att.configureGIFAnimation(with: data, in: self)
                 }
+            }
+        }
+    }
+    
+    func pauseGIFAnimations() {
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment {
+                att.pauseGIF()
+            }
+        }
+    }
+    
+    func resumeGIFAnimations() {
+        attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: attributedText.length)) { value, _, _ in
+            if let att = value as? InteractiveTextAttachment {
+                att.resumeGIF()
             }
         }
     }
@@ -1503,8 +1990,433 @@ struct DocumentPickerView: UIViewControllerRepresentable {
 
 // GIF picker now uses GiphyPicker from Components
 
-#Preview {
-    let note = Note(title: "Sample", content: "Content")
-    NativeNoteEditor(note: note)
-        .modelContainer(for: [Note.self], inMemory: true)
+struct NoteAISheet: View {
+    let note: Note
+    @Environment(\.dismiss) private var dismiss
+    @State private var isAnalyzing = false
+    @State private var analysisComplete = false
+    @State private var textStats: NoteIntelligenceService.TextStatistics?
+    @State private var keySentences: [String] = []
+    @State private var readabilityScore: (score: Double, level: String)?
+    @State private var spellingIssues: [String] = []
+    @State private var selectedSection: Int = 0
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    headerSection
+                    sectionPicker
+
+                    switch selectedSection {
+                    case 0:
+                        tagsSection
+                    case 1:
+                        insightsSection
+                    case 2:
+                        writingToolsSection
+                    default:
+                        tagsSection
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("AI Assistant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            runFullAnalysis()
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.largeTitle)
+                .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Text("Note Intelligence")
+                .font(.headline)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var sectionPicker: some View {
+        Picker("Section", selection: $selectedSection) {
+            Text("Tags").tag(0)
+            Text("Insights").tag(1)
+            Text("Writing").tag(2)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var tagsSection: some View {
+        if isAnalyzing {
+            analyzingSection
+        } else if !note.suggestedTags.isEmpty {
+            suggestedTagsSection
+        } else if analysisComplete {
+            noTagSuggestionsSection
+        }
+
+        if !note.tags.isEmpty {
+            currentTagsSection
+        }
+    }
+
+    private var suggestedTagsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Suggested Tags", systemImage: "tag")
+                .font(.headline)
+
+            FlowLayout(spacing: 8) {
+                ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { _, tag in
+                    HStack(spacing: 6) {
+                        Text(tag)
+                            .font(.callout)
+
+                        Button {
+                            HapticManager.shared.success()
+                            ModelMutationScheduler.shared.schedule {
+                                note.acceptSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+
+                        Button {
+                            HapticManager.shared.buttonTapped()
+                            ModelMutationScheduler.shared.schedule {
+                                note.dismissSuggestedTag(tag)
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(LinearGradient(colors: [.purple.opacity(0.15), .pink.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .overlay(Capsule().stroke(Color.purple.opacity(0.3), lineWidth: 0.5))
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var currentTagsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Current Tags", systemImage: "tag.fill")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            FlowLayout(spacing: 8) {
+                ForEach(note.tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.callout)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(.blue.opacity(0.15)))
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var noTagSuggestionsSection: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .font(.title2)
+                .foregroundStyle(.green)
+            Text("No tag suggestions")
+                .font(.subheadline)
+            Text("Add more content to get tag suggestions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    @ViewBuilder
+    private var insightsSection: some View {
+        if let stats = textStats {
+            statisticsCard(stats)
+        }
+
+        if let readability = readabilityScore {
+            readabilityCard(readability)
+        }
+
+        if !keySentences.isEmpty {
+            keySentencesCard
+        }
+    }
+
+    private func statisticsCard(_ stats: NoteIntelligenceService.TextStatistics) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Text Statistics", systemImage: "chart.bar")
+                .font(.headline)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                StatItem(icon: "textformat.abc", label: "Words", value: "\(stats.wordCount)")
+                StatItem(icon: "text.alignleft", label: "Sentences", value: "\(stats.sentenceCount)")
+                StatItem(icon: "paragraphsign", label: "Paragraphs", value: "\(stats.paragraphCount)")
+                StatItem(icon: "clock", label: "Read Time", value: stats.readingTimeMinutes < 1 ? "<1 min" : "\(Int(stats.readingTimeMinutes)) min")
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private func readabilityCard(_ readability: (score: Double, level: String)) -> some View {
+        let avgWords = textStats?.averageWordsPerSentence ?? 0
+        let hasLongSentences = avgWords > 25
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Label("Readability", systemImage: "eyeglasses")
+                .font(.headline)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(readability.level)
+                        .font(.title3.bold())
+                        .foregroundStyle(readabilityColor(readability.score))
+                    Text("Flesch Reading Ease: \(Int(readability.score))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 6)
+                    Circle()
+                        .trim(from: 0, to: readability.score / 100)
+                        .stroke(readabilityColor(readability.score), style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int(readability.score))")
+                        .font(.caption.bold())
+                }
+                .frame(width: 50, height: 50)
+            }
+
+            if hasLongSentences {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Long sentences detected")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.orange)
+                        Text("Avg \(Int(avgWords)) words/sentence. Consider breaking up sentences for clarity. Use Apple Intelligence to help rewrite.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(.orange.opacity(0.1)))
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var keySentencesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Key Points", systemImage: "lightbulb")
+                .font(.headline)
+
+            ForEach(keySentences.indices, id: \.self) { index in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(index + 1)")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    Text(keySentences[index])
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    @ViewBuilder
+    private var writingToolsSection: some View {
+        spellingCard
+        appleIntelligenceHint
+    }
+
+    private var spellingCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Spelling Check", systemImage: "textformat.abc.dottedunderline")
+                .font(.headline)
+
+            if spellingIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("No misspelled words found")
+                            .font(.subheadline)
+                    }
+                    Text("This only checks spelling. For grammar, punctuation, and style improvements, use Apple Intelligence below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("\(spellingIssues.count) potentially misspelled word\(spellingIssues.count == 1 ? "" : "s"):")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                FlowLayout(spacing: 8) {
+                    ForEach(spellingIssues, id: \.self) { word in
+                        Text(word)
+                            .font(.callout)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Capsule().fill(.orange.opacity(0.2)))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text("For grammar and style fixes, use Apple Intelligence below.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private var appleIntelligenceHint: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Apple Intelligence", systemImage: "apple.intelligence")
+                .font(.headline)
+
+            Text("For AI-powered rewriting, proofreading, and summarization:")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HintRow(number: "1", text: "Select text in your note")
+                HintRow(number: "2", text: "Tap \"Writing Tools\" in the menu")
+                HintRow(number: "3", text: "Choose Rewrite, Proofread, or Summarize")
+            }
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient(colors: [.purple.opacity(0.1), .blue.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LinearGradient(colors: [.purple.opacity(0.3), .blue.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1))
+    }
+
+    private var analyzingSection: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Analyzing note content...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .background(RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial))
+    }
+
+    private func readabilityColor(_ score: Double) -> Color {
+        switch score {
+        case 70...: return .green
+        case 50..<70: return .orange
+        default: return .red
+        }
+    }
+
+    private func runFullAnalysis() {
+        isAnalyzing = true
+        let plainText = NoteIntelligenceService.shared.extractPlainText(from: note)
+        let existingTags = note.tags
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let stats = NoteIntelligenceService.shared.analyzeTextStatistics(plainText)
+            let sentences = NoteIntelligenceService.shared.extractKeySentences(from: plainText)
+            let readability = NoteIntelligenceService.shared.calculateReadabilityScore(plainText)
+            let spelling = NoteIntelligenceService.shared.checkSpelling(plainText)
+
+            DispatchQueue.main.async {
+                self.textStats = stats
+                self.keySentences = sentences
+                self.readabilityScore = readability
+                self.spellingIssues = spelling
+            }
+        }
+
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            let filteredTags = tags.filter { !existingTags.contains($0) }
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = filteredTags
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+            isAnalyzing = false
+            analysisComplete = true
+        }
+
+        if note.contentEmbedding == nil {
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: plainText)
+            ModelMutationScheduler.shared.schedule {
+                note.contentEmbedding = embedding
+            }
+        }
+    }
+}
+
+private struct StatItem: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.purple)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.subheadline.bold())
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.background.opacity(0.5)))
+    }
+}
+
+private struct HintRow: View {
+    let number: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(number)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.purple))
+            Text(text)
+                .font(.subheadline)
+        }
+    }
 }

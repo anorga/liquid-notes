@@ -25,7 +25,7 @@ final class Note {
     var height: Float = 140
     var isArchived: Bool = false
     var isFavorited: Bool = false
-    // System/internal note not shown in standard lists (e.g., Quick Tasks bucket)
+    // System/internal note not shown in standard lists
     var isSystem: Bool = false
     var tags: [String] = [] // Restored tags support
     var attachments: [Data] = []
@@ -39,25 +39,17 @@ final class Note {
     // Lightweight plain excerpt for fast previews / search (body only, no title)
     var previewExcerpt: String = ""
     // File-based attachment metadata (future: migrate away from in-DB Data arrays)
-    var fileAttachmentIDs: [String] = []          // stable IDs
-    var fileAttachmentTypes: [String] = []        // MIME types
-    var fileAttachmentNames: [String] = []        // stored file names (with extension)
-    var fileAttachmentThumbNames: [String] = []   // thumbnail file names (optional)
-    // One-time flag to prevent repeated legacy attachment migration
+    var fileAttachmentIDs: [String] = []
+    var fileAttachmentTypes: [String] = []
+    var fileAttachmentNames: [String] = []
+    var fileAttachmentThumbNames: [String] = []
     var legacyMigrationDone: Bool = false
-    // Parsed [[link]] titles referenced in content (resolved lazily by title match)
-    var linkedNoteTitles: [String] = []
-    // Historical titles for stable link resolution if a note is renamed
-    var aliasTitles: [String] = []
-    // Resolved linked note UUIDs (stable graph). Maintained by reindexer.
-    var linkedNoteIDs: [UUID] = []
-    // Graph layout (persisted user-adjusted positions)
-    var graphPosX: Double = 0
-    var graphPosY: Double = 0
-    var hasCustomGraphPosition: Bool = false
-    // Link usage metrics (for ranking suggestions)
-    var linkUsageCount: Int = 0
-    var lastLinkedDate: Date? = nil
+
+    var suggestedTags: [String] = []
+    var tagConfidences: [Double] = []
+    var contentEmbedding: Data? = nil
+    var linkedNoteIDs: [String] = []
+    var lastAnalyzedDate: Date? = nil
     
     @Relationship(deleteRule: .cascade, inverse: \TaskItem.note) var tasks: [TaskItem]? // CloudKit requires optional relationships
     var dueDate: Date?
@@ -85,14 +77,6 @@ final class Note {
     self.attachmentTypes = []  
     self.tasks = []
     self.dueDate = nil
-    self.linkedNoteTitles = []
-    self.aliasTitles = []
-    self.linkedNoteIDs = []
-    self.graphPosX = 0
-    self.graphPosY = 0
-    self.hasCustomGraphPosition = false
-    self.linkUsageCount = 0
-    self.lastLinkedDate = nil
     self.previewExcerpt = ""
     self.legacyMigrationDone = false
     }
@@ -181,6 +165,11 @@ final class Note {
     tasks = copy
     updateProgress()
     updateModifiedDate()
+    
+    // Schedule notification if due date is set
+    if let dueDate = dueDate, dueDate > Date() {
+        SharedDataManager.shared.scheduleTaskNotification(for: task, in: self)
+    }
     }
 
     func toggleTask(at index: Int) {
@@ -192,6 +181,8 @@ final class Note {
 
     func removeTask(at index: Int) {
     guard var arr = tasks, index < arr.count else { return }
+    let task = arr[index]
+    SharedDataManager.shared.cancelTaskNotification(for: task.id)
     arr.remove(at: index)
     tasks = arr
     updateProgress()
@@ -215,32 +206,45 @@ final class Note {
         tags.removeAll { $0 == tag }
         updateModifiedDate()
     }
-}
 
-// MARK: - Linking Helpers
-extension Note {
-    /// Extracts [[Linked Note]] style references from the note content and stores the raw titles.
-    /// Call this after mutating `content` (typically during save) before persisting context.
-    func updateLinkedNoteTitles() {
-        let pattern = #"\[\[([^\]]+)\]\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-        let range = NSRange(location: 0, length: (content as NSString).length)
-        let matches = regex.matches(in: content, range: range)
-        let titles = matches.compactMap { match -> String? in
-            guard match.numberOfRanges >= 2 else { return nil }
-            let sub = match.range(at: 1)
-            if let swiftRange = Range(sub, in: content) { return String(content[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines) }
-            return nil
+    func acceptSuggestedTag(_ tag: String) {
+        guard suggestedTags.contains(tag) else { return }
+        if !tags.contains(tag) {
+            tags.append(tag)
         }
-        linkedNoteTitles = Array(Set(titles)).sorted()
+        if let idx = suggestedTags.firstIndex(of: tag) {
+            suggestedTags.remove(at: idx)
+            if idx < tagConfidences.count {
+                tagConfidences.remove(at: idx)
+            }
+        }
+        updateModifiedDate()
     }
 
-    /// Records previous title as alias if changed and non-empty.
-    func recordTitleAlias(previousTitle: String, newTitle: String) {
-        let old = previousTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let new = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !old.isEmpty, !new.isEmpty, old != new else { return }
-        if !aliasTitles.contains(old) { aliasTitles.append(old) }
+    func dismissSuggestedTag(_ tag: String) {
+        if let idx = suggestedTags.firstIndex(of: tag) {
+            suggestedTags.remove(at: idx)
+            if idx < tagConfidences.count {
+                tagConfidences.remove(at: idx)
+            }
+        }
+    }
+
+    func addLinkedNote(_ noteID: UUID) {
+        let idString = noteID.uuidString
+        if !linkedNoteIDs.contains(idString) {
+            linkedNoteIDs.append(idString)
+            updateModifiedDate()
+        }
+    }
+
+    func removeLinkedNote(_ noteID: UUID) {
+        linkedNoteIDs.removeAll { $0 == noteID.uuidString }
+        updateModifiedDate()
+    }
+
+    func isLinkedTo(_ noteID: UUID) -> Bool {
+        linkedNoteIDs.contains(noteID.uuidString)
     }
 }
 
@@ -252,6 +256,12 @@ final class TaskItem {
     var createdDate: Date = Date()
     var dueDate: Date? = nil
     @Relationship var note: Note?
+    var priorityRawValue: String = "normal"
+    
+    var priority: NotePriority {
+        get { NotePriority(rawValue: priorityRawValue) ?? .normal }
+        set { priorityRawValue = newValue.rawValue }
+    }
     
     init(text: String, isCompleted: Bool = false, note: Note? = nil, dueDate: Date? = nil) {
         self.id = UUID()
@@ -262,4 +272,3 @@ final class TaskItem {
         self.dueDate = dueDate
     }
 }
-

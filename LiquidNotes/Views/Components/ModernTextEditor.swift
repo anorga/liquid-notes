@@ -24,8 +24,8 @@ struct ModernTextEditor: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
+                .padding(.horizontal, UI.Space.xl)
+                .padding(.top, UI.Space.xl)
                 .allowsHitTesting(false)
             }
             
@@ -355,4 +355,3 @@ struct TextEditorWrapper: UIViewRepresentable {
         }
     }
 }
-

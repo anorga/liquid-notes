@@ -38,7 +38,12 @@ extension RichTextArchiver {
     static func tokenizedAttributedString(from original: NSAttributedString) -> NSAttributedString {
         let result = NSMutableAttributedString()
         original.enumerateAttributes(in: NSRange(location: 0, length: original.length)) { attrs, range, _ in
-            if let att = attrs[.attachment] as? InteractiveTextAttachment, let id = att.attachmentID {
+            if let checkbox = attrs[.attachment] as? CheckboxTextAttachment {
+                // Store checkbox state as a token
+                let checkState = checkbox.isChecked ? "checked" : "unchecked"
+                let token = "[[CHECKBOX:" + checkState + "]]"
+                result.append(NSAttributedString(string: token, attributes: baseBodyAttributes()))
+            } else if let att = attrs[.attachment] as? InteractiveTextAttachment, let id = att.attachmentID {
                 // Ensure newline separation for layout consistency
                 let token = "\n" + attachmentTokenPrefix + id + attachmentTokenSuffix + "\n"
                 result.append(NSAttributedString(string: token, attributes: baseBodyAttributes()))
@@ -54,9 +59,30 @@ extension RichTextArchiver {
     static func rebuildFromTokens(note: Note, tokenized: NSAttributedString) -> NSAttributedString {
         let mutable = NSMutableAttributedString(attributedString: tokenized)
         let fullRange = NSRange(location: 0, length: mutable.length)
-    let pattern = "\\[\\[ATTACH:([A-Fa-f0-9-]+)\\]\\]" // hyphen at end, no escaping needed
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return tokenized }
-        let matches = regex.matches(in: mutable.string, range: fullRange).reversed() // reverse for safe mutation
+        
+        // First handle checkboxes
+        let checkboxPattern = "\\[\\[CHECKBOX:(checked|unchecked)\\]\\]"
+        if let checkboxRegex = try? NSRegularExpression(pattern: checkboxPattern) {
+            let checkboxMatches = checkboxRegex.matches(in: mutable.string, range: fullRange).reversed()
+            for match in checkboxMatches {
+                guard match.numberOfRanges >= 2 else { continue }
+                let stateRange = match.range(at: 1)
+                guard let swiftRange = Range(stateRange, in: mutable.string) else { continue }
+                let state = String(mutable.string[swiftRange])
+                
+                let checkbox = CheckboxTextAttachment()
+                checkbox.isChecked = (state == "checked")
+                checkbox.updateImage()
+                
+                let replacement = NSAttributedString(attachment: checkbox)
+                mutable.replaceCharacters(in: match.range, with: replacement)
+            }
+        }
+        
+        // Then handle attachments
+        let pattern = "\\[\\[ATTACH:([A-Fa-f0-9-]+)\\]\\]" // hyphen at end, no escaping needed
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return mutable }
+        let matches = regex.matches(in: mutable.string, range: NSRange(location: 0, length: mutable.length)).reversed() // reverse for safe mutation
         for match in matches {
             guard match.numberOfRanges >= 2 else { continue }
             let idRange = match.range(at: 1)

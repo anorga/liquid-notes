@@ -30,8 +30,8 @@ struct TagView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, UI.Space.m)
+        .padding(.vertical, UI.Space.xs)
         .background(
             Capsule()
                 .fill(
@@ -46,12 +46,12 @@ struct TagView: View {
                         lineWidth: themeManager.highContrast ? 0.9 : 0.6
                     )
                     .blendMode(.plusLighter)
-                    .opacity(themeManager.minimalMode ? 0.55 : 0.82)
+                    .opacity(0.82)
                 )
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Tag \(tag)"))
-    .scaleEffect(isPressed ? (themeManager.minimalMode ? 0.98 : 0.95) : 1.0)
+    .scaleEffect(isPressed ? 0.95 : 1.0)
         .onTapGesture {
             withAnimation(.bouncy(duration: 0.2)) {
                 isPressed = true
@@ -82,7 +82,7 @@ private extension TagView {
                 colors: animatedGradient(),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-            ).opacity(themeManager.glassOpacity * (themeManager.minimalMode ? 0.55 : 0.9))
+            ).opacity(themeManager.glassOpacity * 0.9)
         )
     }
 }
@@ -116,8 +116,8 @@ struct TagListView: View {
                     TextField("New tag...", text: $newTagText)
                         .textFieldStyle(.plain)
                         .font(.callout)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                    .padding(.horizontal, UI.Space.l)
+                    .padding(.vertical, UI.Space.m)
                         .background(.clear)
                         .modernGlassCard()
                         .onSubmit { addNewTag(onAdd: onAdd) }
@@ -126,8 +126,8 @@ struct TagListView: View {
                             .font(.callout)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                    .padding(.horizontal, UI.Space.l)
+                    .padding(.vertical, UI.Space.m)
                             .background(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .clipShape(Capsule())
                     }
@@ -152,7 +152,7 @@ struct TagListView: View {
                     .padding(.horizontal, 4)
             }
         }
-        .padding(16)
+        .padding(UI.Space.l)
         .background(.clear)
         .premiumGlassCard()
     }
@@ -166,5 +166,218 @@ private extension TagListView {
             onAdd(trimmed)
             newTagText = ""
         }
+    }
+}
+
+struct SuggestedTagsView: View {
+    let note: Note
+    @State private var isAnalyzing = false
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    var body: some View {
+        if !note.suggestedTags.isEmpty || isAnalyzing {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    Text("Suggested Tags")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if isAnalyzing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    }
+                }
+
+                if !note.suggestedTags.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(zip(note.suggestedTags.indices, note.suggestedTags)), id: \.0) { index, tag in
+                                SuggestedTagChip(
+                                    tag: tag,
+                                    confidence: index < note.tagConfidences.count ? note.tagConfidences[index] : 0.8,
+                                    onAccept: {
+                                        HapticManager.shared.success()
+                                        ModelMutationScheduler.shared.schedule {
+                                            note.acceptSuggestedTag(tag)
+                                        }
+                                    },
+                                    onDismiss: {
+                                        HapticManager.shared.buttonTapped()
+                                        ModelMutationScheduler.shared.schedule {
+                                            note.dismissSuggestedTag(tag)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(UI.Space.m)
+            .nativeGlassSurface(cornerRadius: UI.Corner.m)
+        }
+    }
+
+    func analyzeNote() {
+        guard note.suggestedTags.isEmpty else { return }
+        isAnalyzing = true
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = tags.filter { !note.tags.contains($0) }
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+            isAnalyzing = false
+        }
+    }
+}
+
+struct SuggestedTagChip: View {
+    let tag: String
+    let confidence: Double
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    @State private var isPressed = false
+    @ObservedObject private var themeManager = ThemeManager.shared
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(tag)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+
+            Button(action: onAccept) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, UI.Space.m)
+        .padding(.vertical, UI.Space.xs)
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.purple.opacity(0.2), Color.pink.opacity(0.15)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Capsule().stroke(
+                        LinearGradient(colors: [
+                            .white.opacity(0.45 + themeManager.glassOpacity * 0.15),
+                            .white.opacity(0.02)
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        lineWidth: 0.6
+                    )
+                    .blendMode(.plusLighter)
+                    .opacity(0.82)
+                )
+        )
+        .scaleEffect(isPressed ? 0.95 : 1.0)
+        .animation(.bouncy(duration: 0.2), value: isPressed)
+    }
+}
+
+struct RelatedNotesView: View {
+    let note: Note
+    let allNotes: [Note]
+    let onNoteTap: (Note) -> Void
+
+    @State private var relatedNotes: [Note] = []
+    @State private var isLoading = false
+    @State private var hasSearched = false
+
+    var body: some View {
+        Group {
+            if !relatedNotes.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "link")
+                            .foregroundStyle(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        Text("Related Notes")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if isLoading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                    }
+
+                    VStack(spacing: 8) {
+                        ForEach(relatedNotes, id: \.id) { relatedNote in
+                            Button {
+                                HapticManager.shared.noteSelected()
+                                onNoteTap(relatedNote)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(relatedNote.title.isEmpty ? "Untitled" : relatedNote.title)
+                                            .font(.callout)
+                                            .fontWeight(.medium)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        if !relatedNote.content.isEmpty {
+                                            Text(relatedNote.content)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .nativeGlassSurface(cornerRadius: UI.Corner.s)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(UI.Space.m)
+                .nativeGlassSurface(cornerRadius: UI.Corner.m)
+            } else if isLoading {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Finding related notes...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(UI.Space.m)
+            }
+        }
+        .onAppear {
+            guard !hasSearched else { return }
+            hasSearched = true
+            findRelatedNotes()
+        }
+    }
+
+    private func findRelatedNotes() {
+        guard note.contentEmbedding != nil else { return }
+        isLoading = true
+        let results = NoteIntelligenceService.shared.suggestLinkedNotes(for: note, from: allNotes)
+        relatedNotes = results
+        isLoading = false
     }
 }

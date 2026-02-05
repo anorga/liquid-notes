@@ -45,23 +45,17 @@ struct SpatialCanvasView: View {
     @State private var pinchAnchorPoint: CGPoint = .zero
     @State private var lastSnappedDetent: CGFloat?
     
-    // Equal-spacing adaptive layout configuration
-    // Slightly tighter gaps to give cards more width
     private let gapSpacing: CGFloat = 12
-    private var targetColumns: Int { 
-        // Use size class for adaptive layout instead of device type
-        horizontalSizeClass == .regular ? 4 : 2 
+    private var targetColumns: Int {
+        horizontalSizeClass == .regular ? 4 : 2
     }
     @State private var computedCardWidth: CGFloat = 160
-    private var cardBaseHeight: CGFloat { 
-        // Keep height based on device for consistency, or could also use size class
-        horizontalSizeClass == .regular ? 210 : 190 
+    private var cardBaseHeight: CGFloat {
+        horizontalSizeClass == .regular ? 210 : 190
     }
     private var gridColumns: [GridItem] {
         Array(repeating: GridItem(.flexible(minimum: 60), spacing: gapSpacing, alignment: .topLeading), count: targetColumns)
     }
-    // Removed automatic centering compensation; we now use an explicit top inset passed from parent.
-    // (GridNoteCard moved to file scope below for clarity)
 
     var body: some View {
         ZStack {
@@ -69,7 +63,6 @@ struct SpatialCanvasView: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gapSpacing) {
                         ForEach(notes, id: \.id) { note in
-                            let _ = note.id // Force capture to avoid observation
                             GridNoteCard(
                                 note: note,
                                 selectionMode: selectionMode,
@@ -98,19 +91,14 @@ struct SpatialCanvasView: View {
                                 .preference(key: ContentSizeKey.self, value: proxy.size)
                         }
                     )
-                    .padding(.horizontal, gapSpacing) // outer gap equals inter-item spacing
+                    .padding(.horizontal, gapSpacing)
                     .padding(.top, topContentInset)
                     .padding(.bottom, 12)
                 }
                 .scaleEffect(zoomScale, anchor: .center)
                 .offset(canvasOffset)
                 .gesture(pinchGesture)
-                // Horizontal panning removed; retain vertical scroll only
                 .onTapGesture(count: 2) { resetZoom() }
-                .onTapGesture(count: 1) {
-                    // Dismiss any open action menus when tapping background
-                    // This is handled by individual notes, but adding here as fallback
-                }
                 .onPreferenceChange(ContentSizeKey.self) { size in
                     guard !isPinching else { return }
                     guard size != contentSize else { return }
@@ -125,11 +113,10 @@ struct SpatialCanvasView: View {
                     recalcCardWidth(totalWidth: newSize.width)
                 }
                 .onChange(of: horizontalSizeClass) { _, _ in
-                    // Recalculate card width when size class changes (iPad window resize)
                     recalcCardWidth(totalWidth: geometry.size.width)
                 }
             }
-            
+
             if showZoomIndicator {
                 VStack {
                     HStack {
@@ -146,9 +133,18 @@ struct SpatialCanvasView: View {
                 .allowsHitTesting(false)
             }
         }
-    .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: zoomScale)
+        .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: zoomScale)
         .animation(.default, value: notes.map(\.id))
-    .onDisappear { zoomIndicatorTimer?.invalidate() }
+        .onDisappear { zoomIndicatorTimer?.invalidate() }
+    }
+
+    private func recalcCardWidth(totalWidth: CGFloat) {
+        let inner = totalWidth - (gapSpacing * 2)
+        guard inner > 0 else { return }
+        let raw = (inner - CGFloat(targetColumns - 1) * gapSpacing) / CGFloat(targetColumns)
+        let scale = UIScreen.main.scale
+        let rounded = floor(raw * scale) / scale
+        if abs(rounded - computedCardWidth) > 0.5 { computedCardWidth = rounded }
     }
     
     private var pinchGesture: some Gesture {
@@ -256,17 +252,6 @@ struct SpatialCanvasView: View {
         }
     }
     
-    private func recalcCardWidth(totalWidth: CGFloat) {
-        // Subtract horizontal padding (we used gapSpacing on both sides)
-        let inner = totalWidth - (gapSpacing * 2)
-        guard inner > 0 else { return }
-        // width = (inner - (columns-1)*gap)/columns
-        let raw = (inner - CGFloat(targetColumns - 1) * gapSpacing) / CGFloat(targetColumns)
-        // Floor to pixel grid for crisp rendering
-        let scale = UIScreen.main.scale
-        let rounded = floor(raw * scale) / scale
-        if abs(rounded - computedCardWidth) > 0.5 { computedCardWidth = rounded }
-    }
 }
 
 // MARK: - Backwards-compatible convenience initializer (non-colliding)
@@ -430,21 +415,71 @@ private struct GridNoteCard: View {
 // MARK: Subviews & gestures for GridNoteCard
 private extension GridNoteCard {
     var glassCard: some View {
-        let corner: CGFloat = 26
+        let corner: CGFloat = UI.Corner.l
         let base = RoundedRectangle(cornerRadius: corner, style: .continuous)
-        // Use themedGlass as available in ThemeManager extensions
-        return base
-            .fill(Color.clear)
-            .overlay(
-                AnyView(
-                    EmptyView()
-                        .themedGlassCard()
-                )
+        let isLight = themeManager.currentTheme == .light
+        let isNight = themeManager.currentTheme == .night
+        let isMidnight = themeManager.currentTheme == .midnight
+        // Neutral base tied to theme background fills (subtle, low color)
+        let neutralGradient = LinearGradient(
+            colors: themeManager.currentTheme.backgroundGradient,
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        // Undertone layer brings slight cool hints in Night/Midnight without being too colorful
+        let undertoneGradient: LinearGradient? = {
+            switch themeManager.currentTheme {
+            case .light:
+                return nil
+            case .night:
+                // Cool cyan/blue undertones (no brown cast)
+                return LinearGradient(colors: [
+                    Color.cyan.opacity(0.20),
+                    Color.blue.opacity(0.16)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            case .midnight:
+                // Black-ish undertone (very subtle)
+                return LinearGradient(colors: [
+                    Color.black.opacity(0.18),
+                    Color.black.opacity(0.12)
+                ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }()
+        // Tie strengths to glass intensity so slider affects previews in all themes
+        let t = max(0.0, min(1.0, themeManager.glassIntensity))
+        // Subtle base range + very gentle undertone range
+        let neutralOpacity: Double = {
+            let lightRange: ClosedRange<Double> = 0.08...0.24
+            let nightRange: ClosedRange<Double> = 0.06...0.20
+            let midnightRange: ClosedRange<Double> = 0.06...0.18
+            let range = isLight ? lightRange : (isNight ? nightRange : midnightRange)
+            return range.lowerBound + t * (range.upperBound - range.lowerBound)
+        }()
+        let undertoneOpacity: Double = {
+            guard undertoneGradient != nil else { return 0 }
+            let nightRange: ClosedRange<Double> = 0.03...0.10
+            let midnightRange: ClosedRange<Double> = 0.02...0.08
+            let range = isNight ? nightRange : midnightRange
+            return range.lowerBound + t * (range.upperBound - range.lowerBound)
+        }()
+
+        // Build with material above the gradient: apply glass first, then add gradient as background
+        return Color.clear
+            .frame(width: cardWidth, height: cardHeight)
+            .nativeGlassSurface(cornerRadius: corner)
+            .background(
+                ZStack {
+                    base.fill(neutralGradient).opacity(neutralOpacity)
+                    if let undertone = undertoneGradient {
+                        base.fill(undertone).opacity(undertoneOpacity)
+                    }
+                }
             )
             .clipShape(base)
-            .frame(width: cardWidth, height: cardHeight)
-            .shadow(color: .black.opacity(themeManager.minimalMode ? 0.08 : 0.16), radius: themeManager.minimalMode ? 6 : 12, x: 0, y: themeManager.minimalMode ? 3 : 5)
-            .shadow(color: (ThemeManager.shared.currentTheme.primaryGradient.first ?? .clear).opacity(themeManager.minimalMode ? 0.04 : 0.1), radius: themeManager.minimalMode ? 18 : 32, x: 0, y: themeManager.minimalMode ? 10 : 20)
+            .overlay(
+                base.stroke(Color.white.opacity(isMidnight ? 0.22 : 0.18), lineWidth: 0.6)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: 5)
     }
 
     var dragGesture: some Gesture {
@@ -466,10 +501,11 @@ private extension GridNoteCard {
 
 
     @ViewBuilder var noteHeader: some View {
+    let isMidnight = themeManager.currentTheme == .midnight
     HStack(alignment: .top, spacing: 6) {
             Text(note.title.isEmpty ? "Untitled Note" : note.title)
                 .font(.system(size: isLongTitle ? 15 : 16, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(isMidnight ? Color.white : .primary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
@@ -479,21 +515,47 @@ private extension GridNoteCard {
     }
 
     @ViewBuilder var attachmentPreviewView: some View {
-    if showAttachmentPreview, let previewImage = spatialPreviewImage(for: note) {
+        if showAttachmentPreview, let previewImage = spatialPreviewImage(for: note) {
             ZStack(alignment: .bottom) {
-                Group {
-                    Image(uiImage: previewImage).resizable()
-                }
-                .aspectRatio(contentMode: .fill)
+                // Native glass base behind the preview for edge clarity
+                RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous)
+                    .fill(.thinMaterial)
+                    .frame(height: dynamicAttachmentHeight)
+
+                // Preview image content
+                Image(uiImage: previewImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: dynamicAttachmentHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
+
+                // Native glass reflection highlight (subtle)
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.28),
+                        Color.white.opacity(0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+                .blendMode(.screen)
+                .opacity(0.35)
+                .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
                 .frame(height: dynamicAttachmentHeight)
-                .clipped()
-                .cornerRadius(12)
+
+                // Bottom gradient for text legibility over image
                 if dynamicAttachmentHeight > 0 {
                     LinearGradient(colors: [Color.clear, Color.black.opacity(0.35)], startPoint: .top, endPoint: .bottom)
                         .blendMode(.overlay)
-                        .cornerRadius(12)
+                        .clipShape(RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous))
+                        .frame(height: dynamicAttachmentHeight)
                 }
             }
+            // Hairline native border for visibility against varied backgrounds
+            .overlay(
+                RoundedRectangle(cornerRadius: UI.Corner.s, style: .continuous)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+            )
         }
     }
 
@@ -510,11 +572,12 @@ private extension GridNoteCard {
     }
 
     @ViewBuilder var contentView: some View {
+        let isMidnight = themeManager.currentTheme == .midnight
         if !note.content.isEmpty {
             Text(note.content)
                 .font(.system(size: 14))
                 .fontWeight(.regular)
-                .foregroundStyle(.primary.opacity(0.8))
+                .foregroundStyle(isMidnight ? Color.white.opacity(0.85) : .primary.opacity(0.8))
                 .lineLimit(dynamicContentLineLimit)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(2)
@@ -522,7 +585,7 @@ private extension GridNoteCard {
         } else {
             Text("No content")
                 .font(.system(size: 14))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(isMidnight ? Color.gray.opacity(0.6) : Color.secondary.opacity(0.6))
                 .italic()
         }
     }
@@ -615,7 +678,7 @@ private extension GridNoteCard {
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .nativeGlassChip()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -624,35 +687,103 @@ private extension GridNoteCard {
     
 }
 
-#Preview {
-    struct PreviewHost: View {
-        @State private var selected: Set<UUID> = []
 
-        var body: some View {
-            SpatialCanvasView(
-                notes: [],
-                folders: [],
-                onTap: { _ in },
-                onDelete: { _ in },
-                onFavorite: { _ in },
-                onFolderTap: nil,
-                onFolderDelete: nil,
-                onFolderFavorite: nil,
-                selectionMode: false,
-                selectedNoteIDs: $selected,
-                onToggleSelect: { _ in },
-                topContentInset: 12
-            )
-            .modelContainer(for: [Note.self, Folder.self], inMemory: true)
+class GIFAnimator: NSObject {
+    private var displayLink: CADisplayLink?
+    private var imageSource: CGImageSource?
+    private var frameIndex = 0
+    private var frameCount = 0
+    private var frameDurations: [TimeInterval] = []
+    private var lastFrameTime: TimeInterval = 0
+    private var currentFrameTime: TimeInterval = 0
+    private var onFrameUpdate: ((UIImage?) -> Void)?
+    private var isPaused = false
+    
+    func startAnimation(with data: Data, onFrameUpdate: @escaping (UIImage?) -> Void) {
+        self.onFrameUpdate = onFrameUpdate
+        
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 1 else {
+            onFrameUpdate(UIImage(data: data))
+            return
+        }
+        
+        imageSource = source
+        frameCount = CGImageSourceGetCount(source)
+        frameDurations = (0..<frameCount).compactMap { index in
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any],
+                  let gifProperties = properties[kCGImagePropertyGIFDictionary as String] as? [String: Any] else {
+                return 0.1
+            }
+            
+            let duration = gifProperties[kCGImagePropertyGIFDelayTime as String] as? TimeInterval ?? 0.1
+            return max(duration, 0.05)
+        }
+        
+        if let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            onFrameUpdate(UIImage(cgImage: cgImage))
+        }
+        
+        let displayLink = CADisplayLink(target: self, selector: #selector(updateFrame))
+        displayLink.preferredFramesPerSecond = 5
+        displayLink.add(to: .main, forMode: .common)
+        self.displayLink = displayLink
+    }
+    
+    @objc private func updateFrame() {
+        guard !isPaused,
+              let imageSource = imageSource,
+              frameCount > 0,
+              frameDurations.count == frameCount else { return }
+        
+        let currentTime = CACurrentMediaTime()
+        if lastFrameTime == 0 {
+            lastFrameTime = currentTime
+        }
+        
+        currentFrameTime += (currentTime - lastFrameTime)
+        lastFrameTime = currentTime
+        
+        let frameDuration = frameDurations[frameIndex]
+        
+        if currentFrameTime >= frameDuration {
+            currentFrameTime = 0
+            frameIndex = (frameIndex + 1) % frameCount
+            
+            if let cgImage = CGImageSourceCreateImageAtIndex(imageSource, frameIndex, nil) {
+                onFrameUpdate?(UIImage(cgImage: cgImage))
+            }
         }
     }
-    return PreviewHost()
+    
+    func pauseAnimation() {
+        isPaused = true
+        displayLink?.isPaused = true
+    }
+    
+    func resumeAnimation() {
+        isPaused = false
+        displayLink?.isPaused = false
+    }
+    
+    func stopAnimation() {
+        displayLink?.invalidate()
+        displayLink = nil
+        imageSource = nil
+        frameIndex = 0
+        frameCount = 0
+        frameDurations.removeAll()
+        lastFrameTime = 0
+        currentFrameTime = 0
+        onFrameUpdate = nil
+        isPaused = false
+    }
 }
 
 struct AnimatedGIFView: View {
     let data: Data
     @State private var currentFrame: UIImage?
-    @State private var timer: Timer?
+    @State private var animator = GIFAnimator()
     
     var body: some View {
         Group {
@@ -662,39 +793,17 @@ struct AnimatedGIFView: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 Rectangle()
-                    .fill(.regularMaterial)
+                    .fill(.thinMaterial)
             }
         }
         .onAppear {
-            startAnimation()
+            animator.startAnimation(with: data) { frame in
+                currentFrame = frame
+            }
         }
         .onDisappear {
-            stopAnimation()
+            animator.stopAnimation()
         }
-    }
-    
-    private func startAnimation() {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetCount(source) > 1 else {
-            // Fallback to static image
-            currentFrame = UIImage(data: data)
-            return
-        }
-        
-        var frameIndex = 0
-        let frameCount = CGImageSourceGetCount(source)
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            if let cgImage = CGImageSourceCreateImageAtIndex(source, frameIndex, nil) {
-                currentFrame = UIImage(cgImage: cgImage)
-            }
-            frameIndex = (frameIndex + 1) % frameCount
-        }
-    }
-    
-    private func stopAnimation() {
-        timer?.invalidate()
-        timer = nil
     }
 }
 
@@ -716,8 +825,7 @@ struct ZoomIndicator: View {
         .foregroundStyle(.primary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+        .nativeGlassChip()
         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
     }
 }

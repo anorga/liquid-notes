@@ -10,6 +10,15 @@ struct LiquidNotesBackground: View {
     }
     
     private var ambientColors: [Color] {
+        // Use cool palette for Night and Midnight to avoid warm/brown cast
+        let theme = themeManager.currentTheme
+        if theme == .night || theme == .midnight {
+            return [
+                .blue.opacity(0.06),
+                .cyan.opacity(0.05),
+                .teal.opacity(0.04)
+            ]
+        }
         switch currentHour {
         case 5..<8:
             return [.orange.opacity(0.1), .pink.opacity(0.08), .yellow.opacity(0.05)]
@@ -32,20 +41,29 @@ struct LiquidNotesBackground: View {
         ZStack {
             // Brand base: fused theme gradient + adaptive neutral
             let theme = themeManager.currentTheme
-            let baseNeutral = Color(colorScheme == .dark ? .black : .white)
-            LinearGradient(
-                colors: [
-                    (theme.primaryGradient.first ?? .blue).opacity(colorScheme == .dark ? 0.18 : 0.22),
-                    (theme.primaryGradient.last ?? .purple).opacity(colorScheme == .dark ? 0.14 : 0.18)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .overlay(
-                baseNeutral.opacity(colorScheme == .dark ? 0.55 : 0.75)
-            )
-            .blendMode(.plusLighter)
-            .ignoresSafeArea()
+            let isMidnight = theme == .midnight
+            let isLight = theme == .light
+            let baseNeutral = isMidnight ? Color.black : Color(colorScheme == .dark ? .black : .white)
+            
+            if isMidnight {
+                Color.black.ignoresSafeArea()
+            } else if isLight {
+                Color.white.ignoresSafeArea()
+            } else {
+                LinearGradient(
+                    colors: [
+                        (theme.primaryGradient.first ?? .blue).opacity(colorScheme == .dark ? 0.18 : 0.22),
+                        (theme.primaryGradient.last ?? .purple).opacity(colorScheme == .dark ? 0.14 : 0.18)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay(
+                    baseNeutral.opacity(colorScheme == .dark ? 0.55 : 0.75)
+                )
+                .blendMode(.plusLighter)
+                .ignoresSafeArea()
+            }
             
             ZStack {
                 EllipticalGradient(
@@ -54,7 +72,7 @@ struct LiquidNotesBackground: View {
                     startRadiusFraction: 0,
                     endRadiusFraction: 0.8
                 )
-                .opacity(0.6)
+                .opacity(isMidnight ? 0.1 : 0.6)
                 .blur(radius: 60)
                 
                 EllipticalGradient(
@@ -63,7 +81,7 @@ struct LiquidNotesBackground: View {
                     startRadiusFraction: 0,
                     endRadiusFraction: 0.6
                 )
-                .opacity(0.4)
+                .opacity(isMidnight ? 0.08 : 0.4)
                 .blur(radius: 80)
                 
                 // Brand accent veil using theme gradient
@@ -93,7 +111,7 @@ struct LiquidNotesBackground: View {
                         )
                     )
                     .blendMode(.overlay)
-                    .opacity(themeManager.minimalMode ? 0.3 : 0.5)
+                    .opacity(0.5)
             }
             .ignoresSafeArea()
             .onAppear {

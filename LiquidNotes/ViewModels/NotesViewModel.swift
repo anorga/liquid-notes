@@ -12,9 +12,12 @@ import SwiftData
 @MainActor
 class NotesViewModel {
     private var modelContext: ModelContext
+    private let backgroundQueue = DispatchQueue(label: "NotesViewModel.background", qos: .userInitiated)
+    private var queryCache: [String: [Note]] = [:]
+    private var lastQueryTime: TimeInterval = 0
+    private let queryThrottleInterval: TimeInterval = 0.5
     
     var searchText = ""
-    // Removed selectedThemeID - no longer using themes
     var isEditMode = false
     var syncStatus: SyncStatus = .idle
     
@@ -30,24 +33,25 @@ class NotesViewModel {
     // MARK: - Note Operations
     
     func createNote(title: String = "", content: String = "") -> Note {
+        clearQueryCache()
+        
         let note = Note(title: title, content: content)
         let descriptor = FetchDescriptor<Note>()
         let existingNotes = (try? modelContext.fetch(descriptor)) ?? []
         let maxZIndex = existingNotes.lazy.map(\.zIndex).max() ?? 0
         note.zIndex = maxZIndex + 1
-        // Assign to default folder if one exists (or create it if none present)
+        
         let folderDescriptor = FetchDescriptor<Folder>()
         if let existingFolders = try? modelContext.fetch(folderDescriptor), let first = existingFolders.first {
             note.folder = first
         } else {
-            // Create a default folder named "Folder" and assign
             let defaultFolder = Folder(name: "Folder")
             modelContext.insert(defaultFolder)
             note.folder = defaultFolder
         }
         modelContext.insert(note)
         
-        saveContext()
+        persistChanges()
         return note
     }
 
@@ -72,7 +76,7 @@ class NotesViewModel {
             }
         }
         modelContext.insert(note)
-        saveContext()
+        persistChanges()
         return note
     }
     
@@ -80,31 +84,31 @@ class NotesViewModel {
         note.title = title
         note.content = content
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func deleteNote(_ note: Note) {
         modelContext.delete(note)
-        saveContext()
+        persistChanges()
     }
     
     func toggleNoteFavorite(_ note: Note) {
         note.isFavorited.toggle()
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func archiveNote(_ note: Note) {
         note.isArchived = true
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     func updateNotePosition(_ note: Note, x: Float, y: Float) {
         note.positionX = x
         note.positionY = y
         note.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     // MARK: - Folder Operations
@@ -119,7 +123,7 @@ class NotesViewModel {
         folder.zIndex = maxZIndex + 1
         
         modelContext.insert(folder)
-    saveContext()
+        persistChanges()
         return folder
     }
     
@@ -130,16 +134,14 @@ class NotesViewModel {
             }
         }
         modelContext.delete(folder)
-        saveContext()
-    // After deletion, if there are now zero folders, immediately create a default one
-    // and reassign any orphan notes so they remain organized.
-    ensureDefaultFolderAndReassignOrphans()
+        persistChanges()
+        ensureDefaultFolderAndReassignOrphans()
     }
     
     func toggleFolderFavorite(_ folder: Folder) {
         folder.isFavorited.toggle()
         folder.updateModifiedDate()
-        saveContext()
+        persistChanges()
     }
     
     // Removed updateNoteTheme - no longer using themes
@@ -149,23 +151,77 @@ class NotesViewModel {
     func createCategory(name: String, color: String = "blue") -> NoteCategory {
         let category = NoteCategory(name: name, color: color)
         modelContext.insert(category)
-        saveContext()
+        persistChanges()
         return category
     }
     
     func deleteCategory(_ category: NoteCategory) {
         modelContext.delete(category)
-        saveContext()
+        persistChanges()
     }
     
+    var semanticSearchEnabled = false
+
+    func analyzeNote(_ note: Note) {
+        NoteIntelligenceService.shared.analyzeNote(note) { tags, confidences in
+            ModelMutationScheduler.shared.schedule {
+                note.suggestedTags = tags.filter { !note.tags.contains($0) }
+                note.tagConfidences = confidences
+                note.lastAnalyzedDate = Date()
+            }
+        }
+        updateNoteEmbedding(note)
+    }
+
+    func updateNoteEmbedding(_ note: Note) {
+        let text = "\(note.title) \(note.content)"
+        let noteID = note.id
+        backgroundQueue.async { [weak self] in
+            let embedding = NoteIntelligenceService.shared.generateEmbedding(for: text)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == noteID })
+                if let fetchedNote = try? self.modelContext.fetch(descriptor).first {
+                    ModelMutationScheduler.shared.schedule {
+                        fetchedNote.contentEmbedding = embedding
+                    }
+                }
+            }
+        }
+    }
+
+    func findSimilarNotes(to note: Note, from notes: [Note]) -> [Note] {
+        NoteIntelligenceService.shared.suggestLinkedNotes(for: note, from: notes)
+    }
+
     // MARK: - Search and Filtering
-    
+
     func filteredNotes(from notes: [Note]) -> [Note] {
-        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let currentTime = CACurrentMediaTime()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if query.isEmpty {
             return notes.filter { !$0.isArchived }
         }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Operators: #tag, is:fav, has:task, is:overdue, priority:<level>, due:yyyy-mm-dd, progress:>=NN, tag:any, tag:all
+
+        if let cached = queryCache[query],
+           currentTime - lastQueryTime < queryThrottleInterval {
+            return cached
+        }
+
+        let result = performFiltering(notes: notes, query: query)
+
+        queryCache[query] = result
+        lastQueryTime = currentTime
+
+        if queryCache.count > 50 {
+            queryCache.removeAll()
+        }
+
+        return result
+    }
+    
+    private func performFiltering(notes: [Note], query: String) -> [Note] {
         var requiredTags: [String] = []
         var requireFavorite = false
         var requireHasTask = false
@@ -173,13 +229,18 @@ class NotesViewModel {
         var priorityFilter: NotePriority? = nil
         var minProgress: Double? = nil
         var dueBefore: Date? = nil
-        var tagModeAll = true // tag:any vs tag:all
+        var tagModeAll = true
         var textTerms: [String] = []
+        var semanticTerms: [String] = []
+
         query.split(separator: " ").forEach { tokenSub in
             let token = String(tokenSub)
             if token.hasPrefix("#") {
                 let tag = String(token.dropFirst())
                 if !tag.isEmpty { requiredTags.append(tag.lowercased()) }
+            } else if token.hasPrefix("~") {
+                let term = String(token.dropFirst())
+                if !term.isEmpty { semanticTerms.append(term) }
             } else if token.lowercased() == "is:fav" || token.lowercased() == "is:favorite" { requireFavorite = true }
             else if token.lowercased() == "has:task" || token.lowercased() == "has:tasks" { requireHasTask = true }
             else if token.lowercased() == "is:overdue" { requireOverdue = true }
@@ -197,15 +258,25 @@ class NotesViewModel {
             else if token.lowercased() == "tag:any" { tagModeAll = false }
             else { textTerms.append(token) }
         }
+
+        if semanticSearchEnabled || !semanticTerms.isEmpty {
+            let searchQuery = semanticTerms.isEmpty ? textTerms.joined(separator: " ") : semanticTerms.joined(separator: " ")
+            if !searchQuery.isEmpty {
+                let semanticResults = NoteIntelligenceService.shared.semanticSearch(query: searchQuery, in: notes)
+                return semanticResults.map { $0.0 }.filter { !$0.isArchived && !$0.isSystem }
+            }
+        }
+
         return notes.filter { note in
             if note.isArchived { return false }
+            if note.isSystem { return false }
             if requireFavorite && !note.isFavorited { return false }
             if requireHasTask && (note.tasks?.isEmpty ?? true) { return false }
             if let pf = priorityFilter, note.priority != pf { return false }
             if let mp = minProgress, note.progress < mp { return false }
             if requireOverdue, let due = note.dueDate { if due > Date() { return false } } else if requireOverdue && note.dueDate == nil { return false }
             if let db = dueBefore, let due = note.dueDate { if due > db { return false } } else if dueBefore != nil && note.dueDate == nil { return false }
-            // Tags requirement: every required tag must exist (case-insensitive)
+
             if !requiredTags.isEmpty {
                 let lowered = note.tags.map { $0.lowercased() }
                 if tagModeAll {
@@ -216,7 +287,7 @@ class NotesViewModel {
                     if !matchAny { return false }
                 }
             }
-            // Text terms must each appear in title/content/tags/tasks
+
             if !textTerms.isEmpty {
                 let tagsJoined = note.tags.joined(separator: " ")
                 let tasksJoined = (note.tasks ?? []).map { $0.text }.joined(separator: " ")
@@ -261,7 +332,9 @@ class NotesViewModel {
     // Public wrapper to persist changes without exposing saveContext
     func persistChanges() {
         saveContext()
+        SharedDataManager.shared.refreshWidgetData(context: modelContext)
     }
+    
 
     // Linking reindex removed for simplification.
 
@@ -284,7 +357,12 @@ class NotesViewModel {
                 for orphan in orphans { orphan.folder = target }
             }
         }
-        saveContext()
+        persistChanges()
         return targetFolder
+    }
+    
+    private func clearQueryCache() {
+        queryCache.removeAll()
+        lastQueryTime = 0
     }
 }

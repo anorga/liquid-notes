@@ -9,45 +9,47 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-struct LiquidNotesWidgetControl: ControlWidget {
+struct QuickNoteControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(
-            kind: "FluidLabs.LiquidNotes.LiquidNotesWidget",
-            provider: Provider()
-        ) { value in
-            ControlWidgetToggle(
-                "Start Timer",
-                isOn: value,
-                action: StartTimerIntent()
-            ) { isRunning in
-                Label(isRunning ? "On" : "Off", systemImage: "timer")
+        StaticControlConfiguration(kind: "LiquidNotes.QuickNote") {
+            ControlWidgetButton(action: CreateQuickNoteIntent()) {
+                Image(systemName: "note.text.badge.plus")
+                Text("New Note")
             }
         }
-        .displayName("Timer")
-        .description("A an example control that runs a timer.")
+        .displayName("Quick Note")
+        .description("Quickly create a new note")
     }
 }
 
-extension LiquidNotesWidgetControl {
-    struct Provider: ControlValueProvider {
-        var previewValue: Bool {
-            false
+struct QuickTaskControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "LiquidNotes.QuickTask") {
+            ControlWidgetButton(action: CreateQuickTaskIntent()) {
+                Image(systemName: "checklist")
+                Text("Quick Task")
+            }
         }
-
-        func currentValue() async throws -> Bool {
-            let isRunning = true
-            return isRunning
-        }
+        .displayName("Quick Task")
+        .description("Quickly add a task to your notes")
     }
 }
 
-struct StartTimerIntent: SetValueIntent {
-    static let title: LocalizedStringResource = "Start a timer"
-
-    @Parameter(title: "Timer is running")
-    var value: Bool
-
+struct CreateQuickNoteIntent: AppIntent {
+    static var title: LocalizedStringResource = "Create Quick Note"
+    static var description = IntentDescription("Create a new note in Liquid Notes")
+    
     func perform() async throws -> some IntentResult {
         return .result()
     }
 }
+
+struct CreateQuickTaskIntent: AppIntent {
+    static var title: LocalizedStringResource = "Create Quick Task"
+    static var description = IntentDescription("Add a quick task to your notes")
+    
+    func perform() async throws -> some IntentResult {
+        return .result()
+    }
+}
+
