@@ -1672,6 +1672,7 @@ class InteractiveTextAttachment: NSTextAttachment {
     fileprivate var gifCurrentIndex: Int = 0
     fileprivate weak var hostingTextView: UITextView?
     fileprivate var gifAccumulated: Double = 0
+    fileprivate var cachedCharacterRange: NSRange?
     
     fileprivate var compositeCache: UIImage?
     fileprivate var compositeCacheSize: CGSize = .zero
@@ -1779,7 +1780,7 @@ class InteractiveTextAttachment: NSTextAttachment {
     }
     
     private func extractGIFFrames(data: Data) {
-        gifFrames.removeAll(); gifDurations.removeAll(); gifTotalDuration = 0; gifCurrentIndex = 0; gifAccumulated = 0
+        gifFrames.removeAll(); gifDurations.removeAll(); gifTotalDuration = 0; gifCurrentIndex = 0; gifAccumulated = 0; cachedCharacterRange = nil
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
         let count = CGImageSourceGetCount(source)
         guard count > 0 else { return }
@@ -1819,26 +1820,23 @@ class InteractiveTextAttachment: NSTextAttachment {
         }
         
         gifAccumulated += link.duration
-        let frameSkip = PerformanceOptimizer.shared.shouldReduceGIFFrameRate ? 1 : 1
-        
-        while gifAccumulated > gifDurations[gifCurrentIndex] * Double(frameSkip) {
-            gifAccumulated -= gifDurations[gifCurrentIndex] * Double(frameSkip)
-            gifCurrentIndex = (gifCurrentIndex + frameSkip) % gifFrames.count
+
+        while gifAccumulated > gifDurations[gifCurrentIndex] {
+            gifAccumulated -= gifDurations[gifCurrentIndex]
+            gifCurrentIndex = (gifCurrentIndex + 1) % gifFrames.count
             self.image = gifFrames[gifCurrentIndex]
-            
-            // CADisplayLink runs on main; invalidate display inline to avoid extra dispatch overhead
-            if let tv = self.hostingTextView,
-               let lm = tv.layoutManager as NSLayoutManager?,
-               let full = tv.attributedText {
-                let searchRange = NSRange(location: 0, length: full.length)
-                var targetRange: NSRange?
-                full.enumerateAttribute(.attachment, in: searchRange) { value, range, stop in
+            compositeCache = nil
+
+            if cachedCharacterRange == nil, let tv = hostingTextView, let full = tv.attributedText {
+                full.enumerateAttribute(.attachment, in: NSRange(location: 0, length: full.length)) { value, range, stop in
                     if let att = value as? InteractiveTextAttachment, att === self {
-                        targetRange = range
+                        self.cachedCharacterRange = range
                         stop.pointee = true
                     }
                 }
-                if let r = targetRange { lm.invalidateDisplay(forCharacterRange: r) }
+            }
+            if let r = cachedCharacterRange, let tv = hostingTextView, let lm = tv.layoutManager as NSLayoutManager? {
+                lm.invalidateDisplay(forCharacterRange: r)
             }
             break
         }
