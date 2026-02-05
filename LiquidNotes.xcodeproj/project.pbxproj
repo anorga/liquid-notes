@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		83E53CD52F214D9300C7D644 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; };
-		83E53CD62F214D9300C7D644 /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 83E6265C2E52FDAB005994F9 /* WidgetKit.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		83E6266E2E52FDAC005994F9 /* LiquidNotesWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83E6265A2E52FDAB005994F9 /* LiquidNotesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		83F000012E6B000000000001 /* icon_source.png in Resources */ = {isa = PBXBuildFile; fileRef = 83F000002E6B000000000001 /* icon_source.png */; };
 /* End PBXBuildFile section */
@@ -30,7 +29,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				83E53CD62F214D9300C7D644 /* WidgetKit.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;

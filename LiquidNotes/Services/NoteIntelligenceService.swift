@@ -268,7 +268,6 @@ final class NoteIntelligenceService {
 
     func checkSpelling(_ text: String) -> [String] {
         let checker = UITextChecker()
-        let range = NSRange(location: 0, length: text.utf16.count)
         var misspelled: [String] = []
         var offset = 0
 
